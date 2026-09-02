@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
+from bs4 import BeautifulSoup
 from lxml.etree import XPath
 from playwright.async_api import Page, async_playwright
 from trafilatura import extract, utils, xpaths
@@ -96,6 +97,52 @@ def build_visible_text_fallback(visible_text: str, page_title: str = "") -> Opti
     return text
 
 
+def apply_web_content_rules(
+    html: str,
+    content_selector: str = "",
+    exclude_selectors: str = "",
+) -> tuple[str, bool]:
+    """Select and prune rendered HTML before automatic extraction.
+
+    Selectors use standard CSS syntax. Returning a fragment keeps navigation,
+    sidebars, and other page chrome out of Trafilatura's input while preserving
+    the DOM structure needed for headings, lists, tables, and code blocks.
+    """
+    selector = (content_selector or "").strip()
+    excludes = (exclude_selectors or "").strip()
+    if not selector and not excludes:
+        return html, False
+
+    soup = BeautifulSoup(html, "html.parser")
+    try:
+        if selector:
+            matches = soup.select(selector)
+            if not matches:
+                raise WebParseError(
+                    f"Web content selector matched no elements: {selector}"
+                )
+            # Reparse the selected nodes so mutations do not affect the page
+            # object used for diagnostics or future extraction attempts.
+            fragment = BeautifulSoup(
+                "".join(str(node) for node in matches), "html.parser"
+            )
+        else:
+            fragment = soup
+
+        if excludes:
+            for node in fragment.select(excludes):
+                node.decompose()
+    except WebParseError:
+        raise
+    except Exception as exc:
+        raise WebParseError(f"Invalid web CSS selector: {exc}") from exc
+
+    filtered_html = str(fragment)
+    if not fragment.get_text(" ", strip=True):
+        raise WebParseError("Web content selectors removed all extractable content")
+    return filtered_html, True
+
+
 async def wait_for_rendered_content(page: Page) -> None:
     """Wait for SPA/JS pages beyond the initial HTML shell."""
     try:
@@ -165,6 +212,12 @@ class StdWebParser(BaseParser):
             **kwargs: Additional arguments passed to BaseParser
         """
         self.title = title
+        self.web_content_selector = str(
+            kwargs.pop("web_content_selector", "") or ""
+        ).strip()
+        self.web_exclude_selectors = str(
+            kwargs.pop("web_exclude_selectors", "") or ""
+        ).strip()
         # Get proxy configuration from config if available
         self.proxy = CONFIG.external_https_proxy
         super().__init__(file_name=title, **kwargs)
@@ -269,12 +322,25 @@ class StdWebParser(BaseParser):
             logger.error("Failed to scrape web page %s: %s", url, detail)
             raise WebParseError(f"Failed to scrape web page: {url} ({detail})")
 
-        md_text = extract_markdown_from_html(scrape_result.html)
+        filtered_html, rules_applied = apply_web_content_rules(
+            scrape_result.html,
+            self.web_content_selector,
+            self.web_exclude_selectors,
+        )
+        md_text = extract_markdown_from_html(filtered_html)
         if not md_text:
-            md_text = build_visible_text_fallback(
-                scrape_result.visible_text,
-                scrape_result.page_title,
-            )
+            if rules_applied:
+                filtered_text = BeautifulSoup(filtered_html, "html.parser").get_text(
+                    "\n", strip=True
+                )
+                md_text = build_visible_text_fallback(
+                    filtered_text, scrape_result.page_title
+                )
+            else:
+                md_text = build_visible_text_fallback(
+                    scrape_result.visible_text,
+                    scrape_result.page_title,
+                )
             if md_text:
                 logger.info(
                     "Trafilatura empty; using Playwright visible-text fallback (%d chars)",

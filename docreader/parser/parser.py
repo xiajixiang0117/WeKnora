@@ -93,7 +93,7 @@ class Parser:
         """Parse content from a URL to markdown."""
         logger.info("Parsing URL: %s, title: %s", url, title)
 
-        parser = WebParser(title=title)
+        parser = WebParser(title=title, **(engine_overrides or {}))
         logger.info("Starting to parse URL content")
         result = parser.parse(url.encode())
 

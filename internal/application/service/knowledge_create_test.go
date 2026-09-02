@@ -15,6 +15,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestIsFileURLRoutesHTMLToWebParser(t *testing.T) {
+	tests := []struct {
+		name     string
+		rawURL   string
+		fileName string
+		fileType string
+		want     bool
+	}{
+		{name: "html page", rawURL: "https://docs.example.com/page.html", want: false},
+		{name: "htm page", rawURL: "https://docs.example.com/page.htm?lang=zh", want: false},
+		{name: "pdf file", rawURL: "https://docs.example.com/manual.pdf", want: true},
+		{name: "explicit non-html hint", rawURL: "https://docs.example.com/download.html", fileType: "pdf", want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isFileURL(tt.rawURL, tt.fileName, tt.fileType); got != tt.want {
+				t.Fatalf("isFileURL(%q, %q, %q) = %v, want %v", tt.rawURL, tt.fileName, tt.fileType, got, tt.want)
+			}
+		})
+	}
+}
+
 type createKnowledgeFileRepoStub struct {
 	interfaces.KnowledgeRepository
 

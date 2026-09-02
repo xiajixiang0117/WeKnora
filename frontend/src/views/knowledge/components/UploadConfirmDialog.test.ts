@@ -78,3 +78,14 @@ test('uses section navigation with inline chunking controls and advanced options
   assert.match(dialog, /data-section="multimodal"/)
   assert.doesNotMatch(dialog, /<KBChunkingSettings/)
 })
+
+test('supports per-import web content selectors and persists them in parser overrides', () => {
+  assert.match(dialog, /const hasWebUrls = computed\(\(\) => localUrls\.value\.length > 0/)
+  assert.match(dialog, /v-model="uiState\.webContentSelector"/)
+  assert.match(dialog, /v-model="uiState\.webExcludeSelectors"/)
+  assert.match(dialog, /web_content_selector/)
+  assert.match(dialog, /web_exclude_selectors/)
+  assert.match(dialog, /s\.webContentSelector = o\.parser_engine_overrides\.web_content_selector/)
+  assert.match(dialog, /s\.webExcludeSelectors = o\.parser_engine_overrides\.web_exclude_selectors/)
+  assert.match(dialog, /props\.reparsePreview\?\.sourceType === 'url'/)
+})
