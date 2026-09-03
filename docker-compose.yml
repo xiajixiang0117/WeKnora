@@ -34,6 +34,10 @@ services:
       args:
         - APK_MIRROR_ARG=${APK_MIRROR_ARG:-}
         - WITH_ANYDOC=${WITH_ANYDOC:-1}
+        - VERSION_ARG=${WEKNORA_VERSION:-unknown}
+        - COMMIT_ID_ARG=${WEKNORA_COMMIT_ID:-unknown}
+        - BUILD_TIME_ARG=${WEKNORA_BUILD_TIME:-unknown}
+        - GO_VERSION_ARG=${WEKNORA_GO_VERSION:-unknown}
     container_name: WeKnora-app
     ports:
       - "${APP_PORT:-8080}:8080"

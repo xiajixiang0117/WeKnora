@@ -1,0 +1,77 @@
+name: Manual Source Build and Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Git branch to pull and build on the shared server.
+        required: true
+        default: main
+        type: string
+      version:
+        description: Docker image tag to apply to this server-side build (for example, v1.3.0).
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-weknora-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy on shared server
+    runs-on: [self-hosted, weknora-shared-server]
+    timeout-minutes: 120
+    environment: shared-server
+    steps:
+      - name: Validate source deployment checkout
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          [ -n "$DEPLOY_PATH" ] || {
+            echo "DEPLOY_PATH is not configured for shared-server." >&2
+            exit 1
+          }
+          [ -d "$DEPLOY_PATH/.git" ] || {
+            echo "DEPLOY_PATH must be a Git working tree on the deployment server." >&2
+            exit 1
+          }
+          [ -x "$DEPLOY_PATH/deploy/source-compose-deploy.sh" ] || {
+            echo "The source deployment script is missing or is not executable." >&2
+            exit 1
+          }
+
+      - name: Pull source, build images, and update services
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          REQUESTED_BRANCH: ${{ inputs.branch }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          "$DEPLOY_PATH/deploy/source-compose-deploy.sh" \
+            "$REQUESTED_BRANCH" \
+            "$REQUESTED_VERSION"
+
+      - name: Write deployment summary
+        if: always()
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          REQUESTED_BRANCH: ${{ inputs.branch }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          commit='not deployed'
+          if [ -d "${DEPLOY_PATH:-}/.git" ]; then
+            commit="$(git -C "$DEPLOY_PATH" rev-parse HEAD)"
+          fi
+          {
+            echo '## Shared-server source deployment'
+            echo
+            echo "- Requested branch: \`${REQUESTED_BRANCH}\`"
+            echo "- Requested version: \`${REQUESTED_VERSION}\`"
+            echo "- Checked-out commit: \`${commit}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
