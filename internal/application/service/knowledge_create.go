@@ -280,17 +280,25 @@ func (s *knowledgeService) CreateKnowledgeFromFile(ctx context.Context,
 // CreateKnowledgeFromURL creates a knowledge entry from a URL source
 // tagID is optional - when provided, the knowledge will be assigned to the specified tag/category.
 // isFileURL reports whether the given URL should be treated as a direct file download.
-// Priority: URL path has a known file extension first, then fall back to user-provided fileName/fileType hints.
+// HTML page URLs stay on the web parser path unless an explicit non-HTML file
+// hint is supplied. Other supported extensions continue to use file_url.
 func isFileURL(rawURL, fileName, fileType string) bool {
+	hintExt := normalizeFileExtension(fileType)
+	if hintExt == "" && fileName != "" {
+		hintExt = normalizeFileExtension(getFileType(fileName))
+	}
 	u, err := url.Parse(rawURL)
 	if err == nil {
 		ext := strings.ToLower(strings.TrimPrefix(path.Ext(u.Path), "."))
+		if ext == "html" || ext == "htm" {
+			return hintExt != "" && hintExt != "html" && hintExt != "htm"
+		}
 		if ext != "" && isSupportedImportExtension(ext) {
 			return true
 		}
 	}
 	// Fall back to user-provided hints
-	return fileName != "" || fileType != ""
+	return hintExt != "" && hintExt != "html" && hintExt != "htm"
 }
 
 func (s *knowledgeService) CreateKnowledgeFromURL(ctx context.Context,

@@ -688,6 +688,14 @@ export default {
     asrModelRequired: 'Configure a speech recognition model',
     vlmModelSelectRequired: 'Multimodal is enabled. Please select a VLM model.',
     asrModelSelectRequired: 'Speech recognition is enabled. Please select an ASR model.',
+    webRulesTitle: 'Web content extraction',
+    webRulesDescription: 'Applies only to this URL import; leave blank to use automatic content detection',
+    webContentSelectorLabel: 'Content CSS selector',
+    webContentSelectorPlaceholder: 'e.g. article[role="main"]',
+    webContentSelectorDescription: 'Keep only matching HTML content',
+    webExcludeSelectorsLabel: 'Exclude CSS selectors',
+    webExcludeSelectorsPlaceholder: 'e.g. aside, nav, header, footer',
+    webExcludeSelectorsDescription: 'Remove matching nodes from the selected content',
     pdfForceScanned: {
       label: 'Force scanned PDF parsing',
       description: 'Useful for web-print, scanned, or image-heavy PDFs. Every page will be rendered as an image and processed via OCR/VLM. May increase processing time and model costs.'

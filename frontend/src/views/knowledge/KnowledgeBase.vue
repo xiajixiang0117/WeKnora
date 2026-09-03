@@ -1934,7 +1934,7 @@ const confirmRebuildKnowledge = async (index: number, item: KnowledgeCard) => {
     const result = await uploadConfirmStore.open({
       mode: 'reparse',
       kbInfo: kbInfo.value,
-      reparse: { knowledgeId: item.id, fileName, fileType, processOverrides },
+      reparse: { knowledgeId: item.id, fileName, fileType, sourceType: item.type, processOverrides },
     });
     if (result.mode === 'reparse' && result.reparse) {
       await submitReparse(result.reparse.knowledgeId, result.processConfig);

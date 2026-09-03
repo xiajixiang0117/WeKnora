@@ -197,6 +197,42 @@
                       :parser-engine-rules="uiState.chunkingConfig.parserEngineRules"
                       @update:parser-engine-rules="handleParserEngineRulesUpdate"
                     />
+                    <div v-if="hasWebUrls" class="kb-settings-block">
+                      <div class="section-content">
+                        <div class="section-header">
+                          <h2 class="section-title">{{ t('uploadConfirm.webRulesTitle') }}</h2>
+                          <p class="section-desc">{{ t('uploadConfirm.webRulesDescription') }}</p>
+                        </div>
+                        <div class="settings-group">
+                          <div class="setting-row setting-row-vertical">
+                            <div class="setting-info">
+                              <label>{{ t('uploadConfirm.webContentSelectorLabel') }}</label>
+                              <p class="desc">{{ t('uploadConfirm.webContentSelectorDescription') }}</p>
+                            </div>
+                            <div class="setting-control setting-control-full">
+                              <t-input
+                                v-model="uiState.webContentSelector"
+                                :placeholder="t('uploadConfirm.webContentSelectorPlaceholder')"
+                                clearable
+                              />
+                            </div>
+                          </div>
+                          <div class="setting-row setting-row-vertical">
+                            <div class="setting-info">
+                              <label>{{ t('uploadConfirm.webExcludeSelectorsLabel') }}</label>
+                              <p class="desc">{{ t('uploadConfirm.webExcludeSelectorsDescription') }}</p>
+                            </div>
+                            <div class="setting-control setting-control-full">
+                              <t-input
+                                v-model="uiState.webExcludeSelectors"
+                                :placeholder="t('uploadConfirm.webExcludeSelectorsPlaceholder')"
+                                clearable
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                     <div v-if="hasPdf" class="kb-settings-block">
                       <div class="settings-group">
                         <div class="setting-row">
@@ -612,6 +648,8 @@ interface UploadUIState {
   }
   graphEnabled: boolean
   pdfForceScanned: boolean
+  webContentSelector: string
+  webExcludeSelectors: string
 }
 
 const props = withDefaults(defineProps<{
@@ -737,9 +775,12 @@ function truncateNavText(text: string, max = 18): string {
 
 function hasParserCustomization(): boolean {
   const rules = uiState.value.chunkingConfig.parserEngineRules
-  if (!rules?.length) return false
-  return rules.some(rule => rule.engine && rule.engine !== 'builtin')
-    || rules.some(rule => rule.xlsx_first_row_as_header)
+  return !!uiState.value.webContentSelector.trim()
+    || !!uiState.value.webExcludeSelectors.trim()
+    || (!!rules?.length && (
+      rules.some(rule => rule.engine && rule.engine !== 'builtin')
+      || rules.some(rule => rule.xlsx_first_row_as_header)
+    ))
 }
 
 function getFileExt(file: File): string {
@@ -778,6 +819,8 @@ function inferMediaExtsFromMarkdown(content: string): string[] {
 
 const manualCharCount = computed(() => props.manualPreview?.content?.length ?? 0)
 const batchItemCount = computed(() => localFiles.value.length + localUrls.value.length)
+const hasWebUrls = computed(() => localUrls.value.length > 0
+  || (props.mode === 'reparse' && props.reparsePreview?.sourceType === 'url'))
 
 const dialogTitle = computed(() => {
   if (props.mode === 'manual') return t('uploadConfirm.titleManual')
@@ -1082,6 +1125,8 @@ function createDefaultUIState(): UploadUIState {
     },
     graphEnabled: false,
     pdfForceScanned: false,
+    webContentSelector: '',
+    webExcludeSelectors: '',
   }
 }
 
@@ -1134,6 +1179,8 @@ function initFromKbInfo(kb: any) {
     },
     graphEnabled: kb.indexing_strategy?.graph_enabled ?? false,
     pdfForceScanned: false,
+    webContentSelector: '',
+    webExcludeSelectors: '',
   }
 }
 
@@ -1183,10 +1230,18 @@ function buildProcessOverrides(): KnowledgeProcessOverrides {
     },
   }
 
+  const parserOverrides: Record<string, string> = {}
   if (state.pdfForceScanned) {
-    overrides.parser_engine_overrides = {
-      pdf_force_scanned: 'true',
-    }
+    parserOverrides.pdf_force_scanned = 'true'
+  }
+  if (state.webContentSelector.trim()) {
+    parserOverrides.web_content_selector = state.webContentSelector.trim()
+  }
+  if (state.webExcludeSelectors.trim()) {
+    parserOverrides.web_exclude_selectors = state.webExcludeSelectors.trim()
+  }
+  if (Object.keys(parserOverrides).length > 0) {
+    overrides.parser_engine_overrides = parserOverrides
   }
 
   return overrides
@@ -1243,6 +1298,10 @@ function applyOverridesToState(o?: KnowledgeProcessOverrides | null) {
     s.pdfForceScanned = true
   } else {
     s.pdfForceScanned = false
+  }
+  if (o.parser_engine_overrides) {
+    s.webContentSelector = o.parser_engine_overrides.web_content_selector || ''
+    s.webExcludeSelectors = o.parser_engine_overrides.web_exclude_selectors || ''
   }
 }
 
