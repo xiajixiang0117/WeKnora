@@ -23,13 +23,15 @@ chmod +x deploy/source-compose-deploy.sh
 
 私有仓库需要为该服务器的部署用户配置只读 GitHub Deploy Key，或以其他只读凭据配置 `origin`；凭据不得写入仓库文件。将生产用 `.env`、`docker-compose.override.yml` 和需要保留的数据卷配置在该目录中，但不要提交其中的机密信息。
 
-如果服务器无法访问默认的 Go 模块代理，可在部署目录的 `.env` 中设置构建期代理，例如：
+如果服务器无法访问默认的 Go 模块代理或 Debian 软件源，可在部署目录的 `.env` 中设置构建期镜像，例如：
 
 ```dotenv
 GOPROXY_ARG=https://goproxy.cn,direct
+APK_MIRROR_ARG=mirrors.nju.edu.cn
+APT_MIRROR=http://mirrors.nju.edu.cn
 ```
 
-它仅用于构建 App 镜像。
+这些变量仅用于构建 App 和 Docreader 镜像。
 
 如果现有部署目录不是 Git 工作树，不要在其上强行执行脚本。先备份 `.env`、Compose 覆盖文件和部署配置，再迁移至新的 Git 工作树或由运维人员将现有目录安全地初始化为该仓库。
 
