@@ -1,6 +1,7 @@
 # VCS / CI
 .git/
 .github/
+deploy/
 .gitignore
 .gitattributes
 
