@@ -26,6 +26,7 @@ import (
 type DataSourceService struct {
 	dsRepo            interfaces.DataSourceRepository
 	syncLogRepo       interfaces.SyncLogRepository
+	webCrawlerRepo    interfaces.WebCrawlerRepository
 	knowledgeService  interfaces.KnowledgeService
 	kbService         interfaces.KnowledgeBaseService
 	taskEnqueuer      interfaces.TaskEnqueuer
@@ -49,9 +50,45 @@ func NewDataSourceService(
 	tagService interfaces.KnowledgeTagService,
 	audit interfaces.AuditLogService,
 ) interfaces.DataSourceService {
+	return newDataSourceService(dsRepo, syncLogRepo, knowledgeService, kbService, taskEnqueuer, connectorRegistry, scheduler, tenantRepo, tagService, audit, nil)
+}
+
+// NewDataSourceServiceWithWebCrawler wires the optional reviewable website
+// crawler persistence. The legacy constructor above remains available for
+// embedders and tests that only use the generic connector sync framework.
+func NewDataSourceServiceWithWebCrawler(
+	dsRepo interfaces.DataSourceRepository,
+	syncLogRepo interfaces.SyncLogRepository,
+	knowledgeService interfaces.KnowledgeService,
+	kbService interfaces.KnowledgeBaseService,
+	taskEnqueuer interfaces.TaskEnqueuer,
+	connectorRegistry *datasource.ConnectorRegistry,
+	scheduler *datasource.Scheduler,
+	tenantRepo interfaces.TenantRepository,
+	tagService interfaces.KnowledgeTagService,
+	audit interfaces.AuditLogService,
+	webCrawlerRepo interfaces.WebCrawlerRepository,
+) interfaces.DataSourceService {
+	return newDataSourceService(dsRepo, syncLogRepo, knowledgeService, kbService, taskEnqueuer, connectorRegistry, scheduler, tenantRepo, tagService, audit, webCrawlerRepo)
+}
+
+func newDataSourceService(
+	dsRepo interfaces.DataSourceRepository,
+	syncLogRepo interfaces.SyncLogRepository,
+	knowledgeService interfaces.KnowledgeService,
+	kbService interfaces.KnowledgeBaseService,
+	taskEnqueuer interfaces.TaskEnqueuer,
+	connectorRegistry *datasource.ConnectorRegistry,
+	scheduler *datasource.Scheduler,
+	tenantRepo interfaces.TenantRepository,
+	tagService interfaces.KnowledgeTagService,
+	audit interfaces.AuditLogService,
+	webCrawlerRepo interfaces.WebCrawlerRepository,
+) interfaces.DataSourceService {
 	return &DataSourceService{
 		dsRepo:            dsRepo,
 		syncLogRepo:       syncLogRepo,
+		webCrawlerRepo:    webCrawlerRepo,
 		knowledgeService:  knowledgeService,
 		kbService:         kbService,
 		taskEnqueuer:      taskEnqueuer,
@@ -102,7 +139,7 @@ func (s *DataSourceService) CreateDataSource(ctx context.Context, ds *types.Data
 	}
 
 	// Register cron schedule if configured
-	if ds.SyncSchedule != "" && ds.Status == types.DataSourceStatusActive {
+	if ds.Type != types.ConnectorTypeWebCrawler && ds.SyncSchedule != "" && ds.Status == types.DataSourceStatusActive {
 		if err := s.scheduler.AddOrUpdate(ds); err != nil {
 			logger.Warnf(ctx, "failed to register cron for ds=%s: %v", ds.ID, err)
 		}
@@ -208,7 +245,7 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 		configActuallyChanged = !reflect.DeepEqual(*mergedCfg, *existingParsedCfg)
 	}
 	hasCreds := mergedCfg != nil && mergedCfg.HasConfiguredCredentials(ds.Type)
-	if hasCreds && (ds.Type != existing.Type || configActuallyChanged) {
+	if (ds.Type == types.ConnectorTypeWebCrawler || hasCreds) && (ds.Type != existing.Type || configActuallyChanged) {
 		if err := s.validateDataSourceConfig(ctx, ds); err != nil {
 			return nil, err
 		}
@@ -219,8 +256,12 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 		return nil, err
 	}
 
-	// Update cron schedule
-	if err := s.scheduler.AddOrUpdate(ds); err != nil {
+	// Website crawls are deliberately manual/review-only; never schedule the
+	// generic sync path for them. Remove a stale schedule when a connector is
+	// changed from a scheduled source to a web crawler.
+	if ds.Type == types.ConnectorTypeWebCrawler {
+		s.scheduler.Remove(ds.ID)
+	} else if err := s.scheduler.AddOrUpdate(ds); err != nil {
 		logger.Warnf(ctx, "failed to update cron for ds=%s: %v", ds.ID, err)
 	}
 
@@ -457,6 +498,9 @@ func (s *DataSourceService) ManualSync(ctx context.Context, dsID string) (*types
 	if err != nil {
 		return nil, err
 	}
+	if ds.Type == types.ConnectorTypeWebCrawler {
+		return nil, fmt.Errorf("website data sources use Check updates and review instead of generic sync")
+	}
 
 	if ds.Status != types.DataSourceStatusActive &&
 		ds.Status != types.DataSourceStatusError &&
@@ -553,8 +597,10 @@ func (s *DataSourceService) ResumeDataSource(ctx context.Context, id string) err
 		return err
 	}
 
-	// Re-register cron schedule
-	if err := s.scheduler.AddOrUpdate(ds); err != nil {
+	// Website crawls are manual/review-only and must not be re-scheduled.
+	if ds.Type == types.ConnectorTypeWebCrawler {
+		s.scheduler.Remove(ds.ID)
+	} else if err := s.scheduler.AddOrUpdate(ds); err != nil {
 		logger.Warnf(ctx, "failed to re-register cron for ds=%s: %v", ds.ID, err)
 	}
 

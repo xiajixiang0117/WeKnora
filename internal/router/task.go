@@ -306,6 +306,8 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 
 	// Register data source sync handler
 	mux.HandleFunc(types.TypeDataSourceSync, params.DataSourceService.ProcessSync)
+	mux.HandleFunc(types.TypeWebCrawlScan, params.DataSourceService.ProcessWebCrawlScan)
+	mux.HandleFunc(types.TypeWebCrawlApply, params.DataSourceService.ProcessWebCrawlApply)
 
 	// Register wiki ingest handler + the debounced KB-global finalize handler.
 	// Both route to the same dispatch (WikiIngest.Handle switches on task type)

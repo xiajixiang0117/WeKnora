@@ -716,7 +716,8 @@ export default {
       yuque: '同步语雀知识库中的文档',
       ima: '同步腾讯 IMA 知识库中的文档、笔记与文件（暂不支持 AI 会话与视频解析）',
       rss: '同步 RSS / Atom 订阅源中的文章',
-      gitlab: '同步 GitLab 项目中的文件'
+      gitlab: '同步 GitLab 项目中的文件',
+      web_crawler: '批量抓取文档网站并审核内容差异'
     },
     connector: {
       feishu: '飞书',
@@ -727,7 +728,14 @@ export default {
       yuque: '语雀',
       ima: '腾讯 IMA',
       rss: 'RSS / Atom 订阅',
-      gitlab: 'GitLab'
+      gitlab: 'GitLab',
+      web_crawler: '网站批量抓取'
+    },
+    webCrawler: {
+      scopeTitle: '网站抓取范围', seedUrls: '入口网址', seedPlaceholder: 'https://docs.example.com/guide/index.html', seedHint: '每行一个入口；系统会在同域名和路径范围内分批发现页面。', seedRequired: '请填写至少一个入口网址',
+      allowedHosts: '允许的域名', allowedHostsPlaceholder: '留空则使用入口网址域名（多个用逗号分隔）', pathPrefixes: '路径前缀', pathPrefixesPlaceholder: '/projects/sdk/latest', excludePatterns: '排除规则', excludePlaceholder: '正则表达式，多个用逗号分隔', maxPages: '单次最多页面', respectRobots: '遵守 robots.txt', batchHintTitle: '网站页面将按批次处理', batchHint: '保存后点击“检查更新”，系统先扫描并生成差异，审核通过后以每批 50 页的低优先级任务导入。', reviewTitle: '网站更新审核', checkUpdates: '检查更新', scanStarted: '更新检查已提交', scanFailed: '更新检查失败', loadFailed: '加载扫描结果失败', applyStarted: '批量应用任务已提交', applyFailed: '应用差异失败', retryFailed: '重试失败项', applySelected: '应用选中 ({count})', noChanges: '本次扫描没有发现差异', noScan: '还没有扫描记录', summary: '页面 {total} · 新增 {added} · 更新 {updated} · 缺失 {missing} · 失败 {failed}',
+      change: { added: '新增', updated: '更新', missing: '缺失', failed: '失败' },
+      status: { scanning: '扫描中', review_ready: '待审核', applying: '应用中', completed: '已完成', partial_failed: '部分失败', canceled: '已取消' }
     },
     logDetail: {
       startTime: '开始时间',

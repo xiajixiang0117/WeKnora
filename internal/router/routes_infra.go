@@ -314,6 +314,15 @@ func RegisterDataSourceRoutes(
 		ds.GET("/:id/resources", g.Admin(), handler.ListAvailableResources)
 		ds.POST("/:id/resource-ancestors", g.Admin(), handler.ResolveResourceAncestors)
 
+		// Website crawler review workflow — scans are read-only for viewers;
+		// starting a scan or applying reviewed changes requires Admin+.
+		ds.POST("/:id/web-crawl/scans", g.Admin(), handler.CreateWebCrawlScan)
+		ds.GET("/:id/web-crawl/scans", g.Viewer(), handler.ListWebCrawlScans)
+		ds.GET("/web-crawl/scans/:scan_id/changes", g.Viewer(), handler.ListWebCrawlChanges)
+		ds.POST("/web-crawl/scans/:scan_id/apply", g.Admin(), handler.ApplyWebCrawlChanges)
+		ds.POST("/web-crawl/scans/:scan_id/retry", g.Admin(), handler.RetryWebCrawlChanges)
+		ds.POST("/web-crawl/scans/:scan_id/ignore", g.Admin(), handler.IgnoreWebCrawlChanges)
+
 		// Sync management — Admin+
 		ds.POST("/:id/sync", g.Admin(), handler.ManualSync)
 		ds.POST("/:id/pause", g.Admin(), handler.PauseDataSource)

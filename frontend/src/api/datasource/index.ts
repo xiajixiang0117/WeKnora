@@ -64,6 +64,48 @@ export interface SyncLog {
   result?: SyncResultDetail
 }
 
+export type WebCrawlScanStatus = 'scanning' | 'review_ready' | 'applying' | 'completed' | 'partial_failed' | 'canceled'
+export type WebCrawlChangeType = 'added' | 'updated' | 'missing' | 'failed'
+export type WebCrawlApplyStatus = 'pending' | 'queued' | 'applied' | 'failed'
+
+export interface WebCrawlScan {
+  id: string
+  data_source_id: string
+  tenant_id: number
+  initiator_id?: string
+  status: WebCrawlScanStatus
+  started_at: string
+  finished_at: string | null
+  items_total: number
+  items_added: number
+  items_updated: number
+  items_missing: number
+  items_failed: number
+  items_skipped: number
+  items_applied: number
+  items_ignored: number
+  error_message?: string
+}
+
+export interface WebCrawlChange {
+  id: string
+  scan_id: string
+  page_id?: string
+  canonical_url: string
+  title: string
+  change_type: WebCrawlChangeType
+  old_hash: string
+  new_hash: string
+  summary: string
+  source_status: number
+  error_message?: string
+  decision: 'pending' | 'apply' | 'ignore'
+  action?: 'keep' | 'disable' | 'delete' | string
+  apply_status: WebCrawlApplyStatus
+  previous_content?: string
+  new_content?: string
+}
+
 export interface ConnectorMeta {
   type: string
   name: string
@@ -148,6 +190,36 @@ export function resumeDataSource(id: string) {
 
 export function getSyncLogs(id: string, limit = 20, offset = 0) {
   return get(`/api/v1/datasource/${id}/logs?limit=${limit}&offset=${offset}`)
+}
+
+export function createWebCrawlScan(id: string) {
+  return post(`/api/v1/datasource/${id}/web-crawl/scans`, {})
+}
+
+export function listWebCrawlScans(id: string, limit = 20, offset = 0) {
+  return get(`/api/v1/datasource/${id}/web-crawl/scans?limit=${limit}&offset=${offset}`)
+}
+
+export function listWebCrawlChanges(scanId: string, params: { changeType?: string; decision?: string; applyStatus?: string; limit?: number; offset?: number } = {}) {
+  const query = new URLSearchParams()
+  if (params.changeType) query.set('change_type', params.changeType)
+  if (params.decision) query.set('decision', params.decision)
+  if (params.applyStatus) query.set('apply_status', params.applyStatus)
+  query.set('limit', String(params.limit ?? 200))
+  query.set('offset', String(params.offset ?? 0))
+  return get(`/api/v1/datasource/web-crawl/scans/${scanId}/changes?${query.toString()}`)
+}
+
+export function applyWebCrawlChanges(scanId: string, changeIds: string[], missingActions: Record<string, string> = {}) {
+  return post(`/api/v1/datasource/web-crawl/scans/${scanId}/apply`, { change_ids: changeIds, missing_actions: missingActions })
+}
+
+export function retryWebCrawlChanges(scanId: string, changeIds: string[]) {
+  return post(`/api/v1/datasource/web-crawl/scans/${scanId}/retry`, { change_ids: changeIds })
+}
+
+export function ignoreWebCrawlChanges(scanId: string, changeIds: string[]) {
+  return post(`/api/v1/datasource/web-crawl/scans/${scanId}/ignore`, { change_ids: changeIds })
 }
 
 // ----------------------------------------------------------------------------

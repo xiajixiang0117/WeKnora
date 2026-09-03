@@ -6102,7 +6102,8 @@ export default {
       yuque: 'Yuque',
       rss: 'RSS / Atom Feed',
       ima: 'Tencent IMA',
-      gitlab: 'GitLab'
+      gitlab: 'GitLab',
+      web_crawler: 'Website crawler'
     },
     connectorDesc: {
       feishu: 'Sync documents, spreadsheets and files from Feishu Wiki',
@@ -6113,7 +6114,11 @@ export default {
       yuque: 'Sync documents from Yuque knowledge bases',
       rss: 'Sync articles from RSS / Atom feeds',
       ima: 'Sync documents, notes and files from Tencent IMA knowledge bases (AI sessions and video parses are not supported)',
-      gitlab: 'Sync files from GitLab projects'
+      gitlab: 'Sync files from GitLab projects',
+      web_crawler: 'Crawl a documentation website and review changes'
+    },
+    webCrawler: {
+      scopeTitle: 'Website crawl scope', seedUrls: 'Seed URLs', seedPlaceholder: 'https://docs.example.com/guide/index.html', seedHint: 'One entry per line. Pages are discovered within the same host and path scope.', seedRequired: 'Enter at least one seed URL', allowedHosts: 'Allowed hosts', allowedHostsPlaceholder: 'Leave empty to use seed hosts (comma separated)', pathPrefixes: 'Path prefixes', pathPrefixesPlaceholder: '/projects/sdk/latest', excludePatterns: 'Exclude patterns', excludePlaceholder: 'Regular expressions, comma separated', maxPages: 'Max pages per scan', respectRobots: 'Respect robots.txt', batchHintTitle: 'Pages are processed in batches', batchHint: 'Save the data source, click “Check updates”, review the diff, then import in low-priority batches of 50 pages.', reviewTitle: 'Website update review', checkUpdates: 'Check updates', scanStarted: 'Update check submitted', scanFailed: 'Update check failed', loadFailed: 'Failed to load scan results', applyStarted: 'Batch apply submitted', applyFailed: 'Failed to apply changes', retryFailed: 'Retry failed items', applySelected: 'Apply selected ({count})', noChanges: 'No changes found in this scan', noScan: 'No scans yet', summary: '{total} pages · {added} added · {updated} updated · {missing} missing · {failed} failed', change: { added: 'Added', updated: 'Updated', missing: 'Missing', failed: 'Failed' }, status: { scanning: 'Scanning', review_ready: 'Review ready', applying: 'Applying', completed: 'Completed', partial_failed: 'Partially failed', canceled: 'Canceled' }
     },
     drive: {
       folderTokenLabel: 'Drive folder token',

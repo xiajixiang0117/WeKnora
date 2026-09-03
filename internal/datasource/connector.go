@@ -247,11 +247,11 @@ var ConnectorMetadataRegistry = map[string]ConnectorMetadata{
 	},
 	types.ConnectorTypeWebCrawler: {
 		Type:         types.ConnectorTypeWebCrawler,
-		Name:         "Web Crawler (Sitemap)",
-		Description:  "Crawl websites via Sitemap.xml",
+		Name:         "Website (批量抓取)",
+		Description:  "按网址范围抓取网站并手动审核差异",
 		Priority:     9,
 		AuthType:     "none",
-		Capabilities: []string{},
+		Capabilities: []string{"incremental", "manual_review", "deletion_sync"},
 	},
 	types.ConnectorTypeSlack: {
 		Type:         types.ConnectorTypeSlack,

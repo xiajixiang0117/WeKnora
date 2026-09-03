@@ -70,6 +70,18 @@ type DataSourceService interface {
 
 	// ProcessSync handles the actual sync operation (called by asynq task)
 	ProcessSync(ctx context.Context, task *asynq.Task) error
+
+	// CreateWebCrawlScan starts a review-only website discovery run.
+	CreateWebCrawlScan(ctx context.Context, dsID, initiatorID string) (*types.WebCrawlScan, error)
+	// ListWebCrawlScans lists reviewable website scans for a data source.
+	ListWebCrawlScans(ctx context.Context, dsID string, limit, offset int) ([]*types.WebCrawlScan, error)
+	GetWebCrawlScan(ctx context.Context, scanID string) (*types.WebCrawlScan, error)
+	ListWebCrawlChanges(ctx context.Context, scanID, changeType, decision, applyStatus string, limit, offset int) ([]*types.WebCrawlChange, error)
+	ApplyWebCrawlChanges(ctx context.Context, scanID string, changeIDs []string, missingActions map[string]string) error
+	IgnoreWebCrawlChanges(ctx context.Context, scanID string, changeIDs []string) error
+	RetryWebCrawlChanges(ctx context.Context, scanID string, changeIDs []string) error
+	ProcessWebCrawlScan(ctx context.Context, task *asynq.Task) error
+	ProcessWebCrawlApply(ctx context.Context, task *asynq.Task) error
 }
 
 // DataSourceRepository defines database access patterns for data sources
@@ -125,4 +137,25 @@ type SyncLogRepository interface {
 
 	// CleanupOldLogs deletes sync logs older than the retention period
 	CleanupOldLogs(ctx context.Context, retentionDays int) error
+}
+
+// WebCrawlerRepository stores website crawl baselines, review batches and
+// immutable change snapshots.
+type WebCrawlerRepository interface {
+	CreatePage(ctx context.Context, page *types.WebCrawlPage) error
+	FindPage(ctx context.Context, dataSourceID, canonicalURL string) (*types.WebCrawlPage, error)
+	ListPages(ctx context.Context, dataSourceID string) ([]*types.WebCrawlPage, error)
+	UpdatePage(ctx context.Context, page *types.WebCrawlPage) error
+
+	CreateScan(ctx context.Context, scan *types.WebCrawlScan) error
+	FindScan(ctx context.Context, id string) (*types.WebCrawlScan, error)
+	ListScans(ctx context.Context, dataSourceID string, limit, offset int) ([]*types.WebCrawlScan, error)
+	HasRunningScan(ctx context.Context, dataSourceID string) (bool, error)
+	UpdateScan(ctx context.Context, scan *types.WebCrawlScan) error
+
+	CreateChange(ctx context.Context, change *types.WebCrawlChange) error
+	FindChange(ctx context.Context, id string) (*types.WebCrawlChange, error)
+	ListChanges(ctx context.Context, scanID, changeType, decision, applyStatus string, limit, offset int) ([]*types.WebCrawlChange, error)
+	ListChangesByIDs(ctx context.Context, scanID string, ids []string) ([]*types.WebCrawlChange, error)
+	UpdateChange(ctx context.Context, change *types.WebCrawlChange) error
 }

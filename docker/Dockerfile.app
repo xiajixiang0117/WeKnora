@@ -50,12 +50,20 @@ ENV GO_VERSION=${GO_VERSION_ARG}
 # engine; pass WITH_ANYDOC=0 to skip the Rust toolchain (~few minutes and
 # ~1 GB of build-stage layers).
 ARG WITH_ANYDOC=1
+ARG RUSTUP_INIT_URL_ARG=https://sh.rustup.rs
+ARG RUSTUP_DIST_SERVER_ARG=https://static.rust-lang.org
+ARG RUSTUP_UPDATE_ROOT_ARG=https://static.rust-lang.org/rustup
+ARG CARGO_REGISTRIES_CRATES_IO_INDEX_ARG=sparse+https://index.crates.io/
 ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo
 ENV PATH=/usr/local/cargo/bin:$PATH
+ENV RUSTUP_DIST_SERVER=${RUSTUP_DIST_SERVER_ARG} \
+    RUSTUP_UPDATE_ROOT=${RUSTUP_UPDATE_ROOT_ARG} \
+    CARGO_REGISTRIES_CRATES_IO_INDEX=${CARGO_REGISTRIES_CRATES_IO_INDEX_ARG} \
+    CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     if [ "$WITH_ANYDOC" = "1" ]; then \
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+        curl --proto '=https' --tlsv1.2 -sSf "$RUSTUP_INIT_URL_ARG" \
             | sh -s -- -y --profile minimal --default-toolchain stable && \
         ./scripts/build-anydoc-lib.sh; \
     fi

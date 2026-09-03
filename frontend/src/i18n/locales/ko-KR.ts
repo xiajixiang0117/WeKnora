@@ -714,7 +714,8 @@ export default {
       yuque: '위큐 지식베이스에서 문서 동기화',
       ima: 'Tencent IMA 지식베이스에서 문서, 노트 및 파일 동기화 (AI 세션과 동영상 분석은 지원되지 않음)',
       rss: 'RSS / Atom 피드에서 글 동기화',
-      gitlab: 'GitLab 프로젝트의 파일 동기화'
+      gitlab: 'GitLab 프로젝트의 파일 동기화',
+      web_crawler: '문서 웹사이트를 크롤링하고 변경 사항 검토'
     },
     connector: {
       feishu: '페이슈 (Feishu)',
@@ -725,7 +726,11 @@ export default {
       yuque: '위큐 (Yuque)',
       ima: 'Tencent IMA',
       rss: 'RSS / Atom 피드',
-      gitlab: 'GitLab'
+      gitlab: 'GitLab',
+      web_crawler: '웹사이트 일괄 크롤링'
+    },
+    webCrawler: {
+      scopeTitle: '웹사이트 크롤링 범위', seedUrls: '시작 URL', seedPlaceholder: 'https://docs.example.com/guide/index.html', seedHint: '한 줄에 하나씩 입력하세요. 같은 호스트와 경로 범위에서 페이지를 발견합니다.', seedRequired: '시작 URL을 하나 이상 입력하세요', allowedHosts: '허용 호스트', allowedHostsPlaceholder: '비워두면 시작 URL 호스트 사용', pathPrefixes: '경로 접두사', pathPrefixesPlaceholder: '/projects/sdk/latest', excludePatterns: '제외 패턴', excludePlaceholder: '정규식(쉼표로 구분)', maxPages: '스캔당 최대 페이지', respectRobots: 'robots.txt 준수', batchHintTitle: '페이지는 배치로 처리됩니다', batchHint: '저장 후 “업데이트 확인”을 클릭하고 차이를 검토한 뒤 50페이지 단위로 가져옵니다.', reviewTitle: '웹사이트 업데이트 검토', checkUpdates: '업데이트 확인', scanStarted: '업데이트 확인이 제출되었습니다', scanFailed: '업데이트 확인 실패', loadFailed: '스캔 결과를 불러오지 못했습니다', applyStarted: '일괄 적용이 제출되었습니다', applyFailed: '변경 사항 적용 실패', retryFailed: '실패 항목 재시도', applySelected: '선택 항목 적용 ({count})', noChanges: '변경 사항이 없습니다', noScan: '스캔 기록이 없습니다', summary: '페이지 {total} · 추가 {added} · 변경 {updated} · 누락 {missing} · 실패 {failed}', change: { added: '추가', updated: '변경', missing: '누락', failed: '실패' }, status: { scanning: '스캔 중', review_ready: '검토 대기', applying: '적용 중', completed: '완료', partial_failed: '부분 실패', canceled: '취소됨' }
     },
     logDetail: {
       startTime: '시작 시간',

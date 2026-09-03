@@ -14,6 +14,7 @@ import { humanizeCron, relativeTime } from '@/utils/cronHumanize'
 import DataSourceEditorDialog from './DataSourceEditorDialog.vue'
 import DataSourceSyncLogs from './DataSourceSyncLogs.vue'
 import DataSourceTypeIcon from './DataSourceTypeIcon.vue'
+import WebCrawlReviewDrawer from './WebCrawlReviewDrawer.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{ kbId: string }>()
@@ -34,6 +35,9 @@ const logsVisible = ref(false)
 const logsDsId = ref('')
 const logsDsName = ref('')
 const pollTimer = ref<number | null>(null)
+const webReviewVisible = ref(false)
+const webReviewDsId = ref('')
+const webReviewDsName = ref('')
 
 function stopPolling() {
   if (pollTimer.value !== null) {
@@ -83,6 +87,12 @@ function openLogs(ds: DataSource) {
   logsDsId.value = ds.id
   logsDsName.value = ds.name
   logsVisible.value = true
+}
+
+function openWebReview(ds: DataSource) {
+  webReviewDsId.value = ds.id
+  webReviewDsName.value = ds.name
+  webReviewVisible.value = true
 }
 
 async function removeDataSource(ds: DataSource) {
@@ -228,12 +238,15 @@ onBeforeUnmount(stopPolling)
                         <t-icon name="edit" /> {{ t('datasource.edit') }}
                       </t-dropdown-item>
                       <t-dropdown-item
-                        v-if="canManageDataSource"
+                        v-if="canManageDataSource && ds.type !== 'web_crawler'"
                         :disabled="isSyncRunning(ds)"
                         @click="handleSync(ds)"
                       >
                         <t-icon name="refresh" :class="{ 'ds-icon-spin': isSyncRunning(ds) }" />
                         {{ isSyncRunning(ds) ? t('datasource.logStatus.running') : t('datasource.syncNow') }}
+                      </t-dropdown-item>
+                      <t-dropdown-item v-if="canManageDataSource && ds.type === 'web_crawler'" @click="openWebReview(ds)">
+                        <t-icon name="search" /> {{ t('datasource.webCrawler.checkUpdates') }}
                       </t-dropdown-item>
                       <t-dropdown-item @click="openLogs(ds)">
                         <t-icon name="root-list" /> {{ t('datasource.logs') }}
@@ -335,6 +348,12 @@ onBeforeUnmount(stopPolling)
       v-model:visible="logsVisible"
       :data-source-id="logsDsId"
       :data-source-name="logsDsName"
+    />
+
+    <WebCrawlReviewDrawer
+      v-model:visible="webReviewVisible"
+      :data-source-id="webReviewDsId"
+      :data-source-name="webReviewDsName"
     />
   </div>
 </template>

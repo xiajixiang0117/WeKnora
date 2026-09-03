@@ -13,6 +13,7 @@ import {
   deleteDataSource,
   putDataSourceCredentials,
   deleteDataSourceCredentials,
+  createWebCrawlScan,
   type DataSource,
   type Resource,
 } from '@/api/datasource'
@@ -147,6 +148,17 @@ function hydrateRssFeedUrlsFromConfig(config: { settings?: Record<string, any>; 
   return { ...settings, feed_urls: ids.join('\n') }
 }
 
+function hydrateWebCrawlerSettings(settings: Record<string, any>) {
+  const asText = (value: any) => Array.isArray(value) ? value.join('\n') : String(value || '')
+  return {
+    ...settings,
+    seed_urls: asText(settings.seed_urls),
+    allowed_hosts: asText(settings.allowed_hosts),
+    path_prefixes: asText(settings.path_prefixes),
+    exclude_patterns: asText(settings.exclude_patterns),
+  }
+}
+
 function addRssAuthHeader() {
   rssAuthHeaders.value.push({ key: '', value: '' })
 }
@@ -207,6 +219,7 @@ const driveFolderTokenError = ref('')
 const driveRootLoaded = ref(false)
 const isDriveConnector = (type: string) => type === 'feishu_drive' || type === 'lark_drive'
 const isGitLabConnector = (type: string) => type === 'gitlab'
+const isWebCrawlerConnector = (type: string) => type === 'web_crawler'
 
 interface GitLabProjectInput { project_id: string; ref: string; pathsText: string }
 const gitlabProjects = ref<GitLabProjectInput[]>([])
@@ -633,6 +646,10 @@ const connectorDefs = computed<ConnectorDef[]>(() => [
       { key: 'access_token', labelKey: 'datasource.gitlab.accessToken', placeholder: '', secret: true },
     ],
   },
+  {
+    type: 'web_crawler', available: true, docUrl: '', permissionDocUrl: '', permissionPageUrl: '', requiredPermissions: [],
+    fields: [],
+  },
 ])
 
 
@@ -686,7 +703,9 @@ watch(visible, async (v) => {
         resource_ids: editConfig.resource_ids || [],
         settings: props.dataSource.type === 'rss'
           ? hydrateRssFeedUrlsFromConfig(editConfig)
-          : (editConfig.settings || {}),
+          : (props.dataSource.type === 'web_crawler'
+            ? hydrateWebCrawlerSettings(editConfig.settings || {})
+            : (editConfig.settings || {})),
       },
       sync_schedule: props.dataSource.sync_schedule,
       sync_mode: props.dataSource.sync_mode,
@@ -776,6 +795,14 @@ function selectType(def: ConnectorDef) {
 async function testConnection() {
   syncRssAuthHeadersToCredentials()
   if (!validateRssFeedUrls()) return
+  if (isWebCrawlerConnector(form.value.type)) {
+    if (!String(form.value.config.settings.seed_urls || '').trim()) {
+      MessagePlugin.warning(t('datasource.webCrawler.seedRequired'))
+      return
+    }
+    testResult.value = 'success'
+    return
+  }
   if (!isEdit.value || !credentialsConfigured.value || replaceCredentialsMode.value) {
     const fields = currentDef.value?.fields || []
     for (const f of fields) {
@@ -1021,6 +1048,7 @@ async function nextStep() {
       return
     }
     if (isGitLabConnector(form.value.type)) return
+    if (isWebCrawlerConnector(form.value.type)) return
     loadResources()
   }
 }
@@ -1040,10 +1068,17 @@ function prevStep() {
 // validator happy.
 function buildConfigPayload(): Record<string, unknown> {
   syncGitLabProjectsToSettings()
+  const settings = { ...form.value.config.settings }
+  if (isWebCrawlerConnector(form.value.type)) {
+    for (const key of ['seed_urls', 'allowed_hosts', 'path_prefixes', 'exclude_patterns']) {
+      settings[key] = String(settings[key] || '').split(/[\n,]/).map(v => v.trim()).filter(Boolean)
+    }
+    if (settings.max_pages !== undefined && settings.max_pages !== '') settings.max_pages = Number(settings.max_pages)
+  }
   return {
     credentials: isEdit.value ? {} : { ...form.value.config.credentials },
     resource_ids: form.value.config.resource_ids,
-    settings: form.value.config.settings,
+    settings,
   }
 }
 
@@ -1108,8 +1143,13 @@ async function handleSubmit() {
       MessagePlugin.warning(t('datasource.updateSuccessSyncHint'))
     } else {
       try {
-        await triggerSync(dataSourceId)
-        MessagePlugin.success(t('datasource.createAndSyncSuccess'))
+        if (isWebCrawlerConnector(form.value.type)) {
+          await createWebCrawlScan(dataSourceId)
+          MessagePlugin.success(t('datasource.webCrawler.scanStarted'))
+        } else {
+          await triggerSync(dataSourceId)
+          MessagePlugin.success(t('datasource.createAndSyncSuccess'))
+        }
       } catch (e: any) {
         MessagePlugin.warning(e?.message || e?.error || t('datasource.createButSyncFailed'))
       }
@@ -1417,6 +1457,32 @@ const drawerConfirmText = computed(() => {
         </div>
       </section>
 
+      <section v-if="isWebCrawlerConnector(form.type)" class="setting-drawer__section">
+        <h4 class="setting-drawer__section-title">{{ t('datasource.webCrawler.scopeTitle') }}</h4>
+        <div class="form-item">
+          <label class="form-label required">{{ t('datasource.webCrawler.seedUrls') }}</label>
+          <t-textarea v-model="form.config.settings.seed_urls" :placeholder="t('datasource.webCrawler.seedPlaceholder')" :autosize="{ minRows: 3, maxRows: 8 }" />
+          <p class="form-desc">{{ t('datasource.webCrawler.seedHint') }}</p>
+        </div>
+        <div class="form-item">
+          <label class="form-label">{{ t('datasource.webCrawler.allowedHosts') }}</label>
+          <t-input v-model="form.config.settings.allowed_hosts" :placeholder="t('datasource.webCrawler.allowedHostsPlaceholder')" />
+        </div>
+        <div class="form-item">
+          <label class="form-label">{{ t('datasource.webCrawler.pathPrefixes') }}</label>
+          <t-input v-model="form.config.settings.path_prefixes" :placeholder="t('datasource.webCrawler.pathPrefixesPlaceholder')" />
+        </div>
+        <div class="form-item">
+          <label class="form-label">{{ t('datasource.webCrawler.excludePatterns') }}</label>
+          <t-input v-model="form.config.settings.exclude_patterns" :placeholder="t('datasource.webCrawler.excludePlaceholder')" />
+        </div>
+        <div class="form-item web-crawler-options">
+          <label class="form-label">{{ t('datasource.webCrawler.maxPages') }}</label>
+          <t-input-number v-model="form.config.settings.max_pages" :min="1" :max="5000" />
+          <t-checkbox v-model="form.config.settings.respect_robots">{{ t('datasource.webCrawler.respectRobots') }}</t-checkbox>
+        </div>
+      </section>
+
       <section class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ t('datasource.credentialsLabel') }}</h4>
 
@@ -1578,7 +1644,7 @@ const drawerConfirmText = computed(() => {
           <t-button variant="outline" @click="addGitLabProject"><template #icon><t-icon name="add" /></template>{{ t('datasource.gitlab.addProject') }}</t-button>
         </div>
       </template>
-      <template v-else>
+      <template v-else-if="!isWebCrawlerConnector(form.type)">
       <h4 class="setting-drawer__section-title">{{ t('datasource.step.resources') }}</h4>
       <p class="ds-resource-hint">{{ t('datasource.resourceHint') }}</p>
 
@@ -1741,11 +1807,15 @@ const drawerConfirmText = computed(() => {
         </div>
       </div>
       </template>
+      <div v-else class="ds-resource-empty">
+        <p class="ds-empty-title">{{ t('datasource.webCrawler.batchHintTitle') }}</p>
+        <p class="ds-empty-desc">{{ t('datasource.webCrawler.batchHint') }}</p>
+      </div>
     </section>
 
     <!-- Step 3: Sync strategy -->
     <template v-if="step === 3">
-      <section class="setting-drawer__section">
+      <section v-if="!isWebCrawlerConnector(form.type)" class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ t('datasource.syncScheduleLabel') }}</h4>
         <t-select v-model="form.sync_schedule">
           <t-option v-for="p in schedulePresets" :key="p.value" :value="p.value" :label="p.label" />

@@ -62,6 +62,7 @@ import (
 	imaConnector "github.com/Tencent/WeKnora/internal/datasource/connector/ima"
 	notionConnector "github.com/Tencent/WeKnora/internal/datasource/connector/notion"
 	rssConnector "github.com/Tencent/WeKnora/internal/datasource/connector/rss"
+	webcrawlerConnector "github.com/Tencent/WeKnora/internal/datasource/connector/webcrawler"
 	yuqueConnector "github.com/Tencent/WeKnora/internal/datasource/connector/yuque"
 	"github.com/Tencent/WeKnora/internal/event"
 	"github.com/Tencent/WeKnora/internal/handler"
@@ -176,6 +177,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	must(container.Provide(service.NewWebSearchStateService))
 	must(container.Provide(repository.NewDataSourceRepository))
 	must(container.Provide(repository.NewSyncLogRepository))
+	must(container.Provide(repository.NewWebCrawlerRepository))
 	must(container.Provide(repository.NewWikiPageRepository))
 	must(container.Provide(repository.NewMemoryRepository))
 	must(container.Provide(repository.NewTaskPendingOpsRepository))
@@ -354,7 +356,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	logger.Debugf(ctx, "[Container] Registering data source sync framework...")
 	must(container.Provide(initConnectorRegistry))
 	must(container.Provide(datasource.NewScheduler))
-	must(container.Provide(service.NewDataSourceService))
+	must(container.Provide(service.NewDataSourceServiceWithWebCrawler))
 	must(container.Invoke(startDataSourceScheduler))
 	logger.Debugf(ctx, "[Container] Data source sync framework registered")
 	must(container.Invoke(startAuditLogRetention))
@@ -1694,6 +1696,9 @@ func initConnectorRegistry() (*datasource.ConnectorRegistry, error) {
 	}
 	if err := registry.Register(gitlabConnector.NewConnector()); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("register gitlab connector: %w", err))
+	}
+	if err := registry.Register(webcrawlerConnector.NewConnector()); err != nil {
+		errs = errors.Join(errs, fmt.Errorf("register web crawler connector: %w", err))
 	}
 
 	// Future connectors will be registered here:

@@ -59,6 +59,27 @@ const (
 	// Conflict resolution strategies
 	ConflictStrategyOverwrite = "overwrite"
 	ConflictStrategySkip      = "skip"
+
+	// Web crawl scan lifecycle.
+	WebCrawlScanStatusScanning      = "scanning"
+	WebCrawlScanStatusReviewReady   = "review_ready"
+	WebCrawlScanStatusApplying      = "applying"
+	WebCrawlScanStatusCompleted     = "completed"
+	WebCrawlScanStatusPartialFailed = "partial_failed"
+	WebCrawlScanStatusCanceled      = "canceled"
+
+	// Web crawl change types and decisions.
+	WebCrawlChangeAdded     = "added"
+	WebCrawlChangeUpdated   = "updated"
+	WebCrawlChangeMissing   = "missing"
+	WebCrawlChangeFailed    = "failed"
+	WebCrawlDecisionPending = "pending"
+	WebCrawlDecisionApply   = "apply"
+	WebCrawlDecisionIgnore  = "ignore"
+	WebCrawlApplyPending    = "pending"
+	WebCrawlApplyQueued     = "queued"
+	WebCrawlApplyApplied    = "applied"
+	WebCrawlApplyFailed     = "failed"
 )
 
 // DataSource represents a configured external data source for synchronization
@@ -190,6 +211,110 @@ type SyncLog struct {
 
 	// Last update timestamp
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// WebCrawlPage stores the last confirmed baseline for one canonical website
+// URL. The baseline is advanced only after a change has been applied
+// successfully, so a scan can be safely reviewed without mutating knowledge.
+type WebCrawlPage struct {
+	ID                 string     `json:"id" gorm:"type:varchar(36);primaryKey"`
+	DataSourceID       string     `json:"data_source_id" gorm:"type:varchar(36);uniqueIndex:uq_web_crawl_page_url"`
+	CanonicalURL       string     `json:"canonical_url" gorm:"type:text;uniqueIndex:uq_web_crawl_page_url"`
+	KnowledgeID        string     `json:"knowledge_id" gorm:"type:varchar(36);index"`
+	Title              string     `json:"title"`
+	LastAppliedHash    string     `json:"last_applied_hash" gorm:"type:varchar(64);index"`
+	LastAppliedContent string     `json:"-" gorm:"type:text"`
+	LastAppliedAt      *time.Time `json:"last_applied_at"`
+	LastSeenScanID     string     `json:"last_seen_scan_id" gorm:"type:varchar(36);index"`
+	LastSeenAt         *time.Time `json:"last_seen_at"`
+	ETag               string     `json:"etag"`
+	LastModified       string     `json:"last_modified"`
+	Status             string     `json:"status" gorm:"type:varchar(32);default:'active';index"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
+}
+
+func (p *WebCrawlPage) TableName() string { return "web_crawl_pages" }
+
+func (p *WebCrawlPage) BeforeCreate(tx *gorm.DB) error {
+	if p.ID == "" {
+		p.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// WebCrawlScan is a reviewable manual discovery run. It deliberately has its
+// own lifecycle instead of overloading SyncLog's running/success states.
+type WebCrawlScan struct {
+	ID           string     `json:"id" gorm:"type:varchar(36);primaryKey"`
+	DataSourceID string     `json:"data_source_id" gorm:"type:varchar(36);index"`
+	TenantID     uint64     `json:"tenant_id" gorm:"index"`
+	InitiatorID  string     `json:"initiator_id" gorm:"type:varchar(36)"`
+	Status       string     `json:"status" gorm:"type:varchar(32);index"`
+	StartedAt    time.Time  `json:"started_at"`
+	FinishedAt   *time.Time `json:"finished_at"`
+	ItemsTotal   int        `json:"items_total"`
+	ItemsAdded   int        `json:"items_added"`
+	ItemsUpdated int        `json:"items_updated"`
+	ItemsMissing int        `json:"items_missing"`
+	ItemsFailed  int        `json:"items_failed"`
+	ItemsSkipped int        `json:"items_skipped"`
+	ItemsApplied int        `json:"items_applied"`
+	ItemsIgnored int        `json:"items_ignored"`
+	ErrorMessage string     `json:"error_message"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+func (s *WebCrawlScan) TableName() string { return "web_crawl_scans" }
+
+func (s *WebCrawlScan) BeforeCreate(tx *gorm.DB) error {
+	if s.ID == "" {
+		s.ID = uuid.New().String()
+	}
+	if s.StartedAt.IsZero() {
+		s.StartedAt = time.Now().UTC()
+	}
+	return nil
+}
+
+// WebCrawlChange is an immutable snapshot of one page's difference for a
+// scan. The new content is captured at scan time and reused at apply time.
+type WebCrawlChange struct {
+	ID              string     `json:"id" gorm:"type:varchar(36);primaryKey"`
+	ScanID          string     `json:"scan_id" gorm:"type:varchar(36);index"`
+	PageID          string     `json:"page_id" gorm:"type:varchar(36);index"`
+	CanonicalURL    string     `json:"canonical_url" gorm:"type:text;index"`
+	Title           string     `json:"title"`
+	ChangeType      string     `json:"change_type" gorm:"type:varchar(32);index"`
+	OldHash         string     `json:"old_hash" gorm:"type:varchar(64)"`
+	NewHash         string     `json:"new_hash" gorm:"type:varchar(64)"`
+	PreviousContent string     `json:"previous_content,omitempty" gorm:"type:text"`
+	NewContent      string     `json:"new_content,omitempty" gorm:"type:text"`
+	Summary         string     `json:"summary"`
+	SourceStatus    int        `json:"source_status"`
+	ErrorMessage    string     `json:"error_message"`
+	Decision        string     `json:"decision" gorm:"type:varchar(32);index"`
+	Action          string     `json:"action,omitempty" gorm:"type:varchar(32)"`
+	ApplyStatus     string     `json:"apply_status" gorm:"type:varchar(32);index"`
+	AppliedAt       *time.Time `json:"applied_at"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+func (c *WebCrawlChange) TableName() string { return "web_crawl_changes" }
+
+func (c *WebCrawlChange) BeforeCreate(tx *gorm.DB) error {
+	if c.ID == "" {
+		c.ID = uuid.New().String()
+	}
+	if c.Decision == "" {
+		c.Decision = WebCrawlDecisionPending
+	}
+	if c.ApplyStatus == "" {
+		c.ApplyStatus = WebCrawlApplyPending
+	}
+	return nil
 }
 
 // TableName specifies the table name for SyncLog
@@ -510,6 +635,25 @@ type DataSourceSyncPayload struct {
 
 	// Maximum number of items to fetch (0 = unlimited)
 	MaxItems int `json:"max_items,omitempty"`
+}
+
+// WebCrawlScanPayload carries a manual, review-only website scan.
+type WebCrawlScanPayload struct {
+	TracingContext
+	TenantID     uint64 `json:"tenant_id"`
+	DataSourceID string `json:"data_source_id"`
+	ScanID       string `json:"scan_id"`
+	InitiatorID  string `json:"initiator_id,omitempty"`
+}
+
+// WebCrawlApplyPayload carries one bounded batch of approved changes.
+type WebCrawlApplyPayload struct {
+	TracingContext
+	TenantID       uint64            `json:"tenant_id"`
+	DataSourceID   string            `json:"data_source_id"`
+	ScanID         string            `json:"scan_id"`
+	ChangeIDs      []string          `json:"change_ids"`
+	MissingActions map[string]string `json:"missing_actions,omitempty"`
 }
 
 // ToJSON converts a DataSourceConfig to the JSON blob stored in

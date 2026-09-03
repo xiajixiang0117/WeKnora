@@ -714,7 +714,8 @@ export default {
       yuque: 'Синхронизация документов из баз знаний Yuque',
       ima: 'Синхронизация документов, заметок и файлов из баз знаний Tencent IMA (ИИ-сессии и разбор видео не поддерживаются)',
       rss: 'Синхронизация статей из лент RSS / Atom',
-      gitlab: 'Синхронизация файлов из проектов GitLab'
+      gitlab: 'Синхронизация файлов из проектов GitLab',
+      web_crawler: 'Сканирование сайта документации и проверка изменений'
     },
     connector: {
       feishu: 'Feishu (Фэйшу)',
@@ -725,7 +726,11 @@ export default {
       yuque: 'Yuque (Юйцюэ)',
       ima: 'Tencent IMA',
       rss: 'RSS / Atom лента',
-      gitlab: 'GitLab'
+      gitlab: 'GitLab',
+      web_crawler: 'Сканирование сайта'
+    },
+    webCrawler: {
+      scopeTitle: 'Область сканирования сайта', seedUrls: 'Начальные URL', seedPlaceholder: 'https://docs.example.com/guide/index.html', seedHint: 'По одному URL в строке; страницы ищутся в пределах хоста и пути.', seedRequired: 'Укажите хотя бы один начальный URL', allowedHosts: 'Разрешённые хосты', allowedHostsPlaceholder: 'Пусто — хосты начальных URL', pathPrefixes: 'Префиксы путей', pathPrefixesPlaceholder: '/projects/sdk/latest', excludePatterns: 'Шаблоны исключений', excludePlaceholder: 'Регулярные выражения через запятую', maxPages: 'Максимум страниц за сканирование', respectRobots: 'Соблюдать robots.txt', batchHintTitle: 'Страницы обрабатываются пакетами', batchHint: 'Сохраните источник, нажмите «Проверить обновления», проверьте различия и импортируйте пакетами по 50 страниц.', reviewTitle: 'Проверка обновлений сайта', checkUpdates: 'Проверить обновления', scanStarted: 'Проверка обновлений запущена', scanFailed: 'Не удалось проверить обновления', loadFailed: 'Не удалось загрузить результаты', applyStarted: 'Пакетное применение запущено', applyFailed: 'Не удалось применить изменения', retryFailed: 'Повторить ошибки', applySelected: 'Применить выбранные ({count})', noChanges: 'Изменений не найдено', noScan: 'Сканирований пока нет', summary: 'Страницы {total} · добавлено {added} · изменено {updated} · пропущено {missing} · ошибок {failed}', change: { added: 'Добавлено', updated: 'Изменено', missing: 'Пропущено', failed: 'Ошибка' }, status: { scanning: 'Сканирование', review_ready: 'Готово к проверке', applying: 'Применение', completed: 'Завершено', partial_failed: 'Частично с ошибками', canceled: 'Отменено' }
     },
     logDetail: {
       startTime: 'Время начала',
