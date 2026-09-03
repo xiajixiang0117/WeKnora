@@ -91,6 +91,8 @@ services:
 
 若拉取、启动或健康检查失败，脚本打印受限诊断（Compose 状态与三个服务的最近日志）并以非零状态退出。它不打印环境变量、不读取 `.env`、也不自动启动回滚。上一个成功 tag 仍保存于服务器，供人工触发的 `rollback` 使用。
 
+GHCR 登录使用本次脚本创建的临时 Docker 配置目录；脚本退出时清除该目录，不覆盖服务器用户已有的 Docker 登录状态或将 token 保留在磁盘上。
+
 ## 安全模型
 
 发布作业使用 `GITHUB_TOKEN`，工作流最小权限为：
@@ -105,9 +107,9 @@ permissions:
 
 | 名称 | 类型 | 用途 |
 | --- | --- | --- |
-| `DEPLOY_HOST` | Secret 或变量 | 服务器地址。 |
-| `DEPLOY_USER` | Secret 或变量 | SSH 用户。 |
-| `DEPLOY_PATH` | Secret 或变量 | Compose 根目录。 |
+| `DEPLOY_HOST` | Secret | 服务器地址。 |
+| `DEPLOY_USER` | Secret | SSH 用户。 |
+| `DEPLOY_PATH` | Secret | Compose 根目录。 |
 | `DEPLOY_KNOWN_HOSTS` | Secret | 固定的 SSH host key 行，用于防止中间人攻击。 |
 | `DEPLOY_SSH_PRIVATE_KEY` | Secret | 专用 Ed25519 部署私钥。 |
 | `GHCR_PULL_USERNAME` | Secret | 拥有只读 token 的 GitHub 用户名。 |

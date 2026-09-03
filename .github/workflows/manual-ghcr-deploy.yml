@@ -1,0 +1,410 @@
+name: Manual Build and Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Build and deploy a branch, or redeploy a previous image.
+        required: true
+        default: deploy
+        type: choice
+        options:
+          - deploy
+          - rollback
+      branch:
+        description: Branch to build and deploy (required for deploy).
+        required: false
+        default: main
+        type: string
+      rollback_tag:
+        description: Image tag to roll back to; leave blank to use the prior successful deployment.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: shared-weknora-deployment
+  cancel-in-progress: false
+
+env:
+  PLATFORM: linux/amd64
+  REGISTRY: ghcr.io
+
+jobs:
+  prepare:
+    name: Resolve deployment version
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.version.outputs.commit }}
+      image_owner: ${{ steps.version.outputs.image_owner }}
+      image_tag: ${{ steps.version.outputs.image_tag }}
+    steps:
+      - name: Check out requested branch
+        if: inputs.operation == 'deploy'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+
+      - name: Resolve immutable image tag
+        id: version
+        env:
+          OPERATION: ${{ inputs.operation }}
+          REQUESTED_BRANCH: ${{ inputs.branch }}
+        run: |
+          set -euo pipefail
+
+          case "$OPERATION" in
+            deploy)
+              [ -n "$REQUESTED_BRANCH" ] || {
+                echo "branch is required when operation is deploy" >&2
+                exit 1
+              }
+              git check-ref-format --branch "$REQUESTED_BRANCH"
+              git ls-remote --exit-code --heads origin "refs/heads/${REQUESTED_BRANCH}" >/dev/null
+              commit="$(git rev-parse HEAD)"
+              ;;
+            rollback)
+              commit="$GITHUB_SHA"
+              ;;
+            *)
+              echo "Unsupported operation: $OPERATION" >&2
+              exit 1
+              ;;
+          esac
+
+          image_owner="$(tr '[:upper:]' '[:lower:]' <<< "$GITHUB_REPOSITORY_OWNER")"
+          case "$image_owner" in
+            '' | *[!a-z0-9._-]*)
+              echo "Repository owner cannot be used as a GHCR image owner." >&2
+              exit 1
+              ;;
+          esac
+
+          image_tag="sha-$(cut -c1-12 <<< "$commit")"
+          printf 'commit=%s\nimage_owner=%s\nimage_tag=%s\n' \
+            "$commit" "$image_owner" "$image_tag" >> "$GITHUB_OUTPUT"
+
+  build-ui:
+    name: Build UI image
+    if: inputs.operation == 'deploy'
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend distribution
+        env:
+          VITE_IS_DOCKER: 'true'
+          VITE_FRONTEND_COMMIT: ${{ needs.prepare.outputs.commit }}
+        run: ./scripts/build_frontend_dist.sh
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push UI image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./frontend
+          file: frontend/Dockerfile
+          platforms: ${{ env.PLATFORM }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_owner }}/weknora-ui:${{ needs.prepare.outputs.image_tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.commit }}
+          cache-from: type=gha,scope=manual-ghcr-ui
+          cache-to: type=gha,scope=manual-ghcr-ui,mode=max
+
+  build-app:
+    name: Build app image
+    if: inputs.operation == 'deploy'
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          fetch-depth: 0
+
+      - name: Resolve app build version
+        id: version
+        run: |
+          set -euo pipefail
+          eval "$(./scripts/get_version.sh env)"
+          printf 'version=%s\ncommit_id=%s\nbuild_time=%s\ngo_version=%s\n' \
+            "$VERSION" "$COMMIT_ID" "$BUILD_TIME" "$GO_VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push app image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile.app
+          platforms: ${{ env.PLATFORM }}
+          push: true
+          build-args: |
+            VERSION_ARG=${{ steps.version.outputs.version }}
+            COMMIT_ID_ARG=${{ steps.version.outputs.commit_id }}
+            BUILD_TIME_ARG=${{ steps.version.outputs.build_time }}
+            GO_VERSION_ARG=${{ steps.version.outputs.go_version }}
+            WITH_ANYDOC=1
+          tags: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_owner }}/weknora-app:${{ needs.prepare.outputs.image_tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.commit }}
+          cache-from: type=gha,scope=manual-ghcr-app
+          cache-to: type=gha,scope=manual-ghcr-app,mode=max
+
+  build-docreader:
+    name: Build docreader image
+    if: inputs.operation == 'deploy'
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push docreader image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile.docreader
+          platforms: ${{ env.PLATFORM }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_owner }}/weknora-docreader:${{ needs.prepare.outputs.image_tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.commit }}
+          cache-from: type=gha,scope=manual-ghcr-docreader
+          cache-to: type=gha,scope=manual-ghcr-docreader,mode=max
+
+  deploy:
+    name: Deploy to shared server
+    needs:
+      - prepare
+      - build-ui
+      - build-app
+      - build-docreader
+    if: >-
+      always() &&
+      (inputs.operation == 'rollback' ||
+      (needs.prepare.result == 'success' &&
+      needs.build-ui.result == 'success' &&
+      needs.build-app.result == 'success' &&
+      needs.build-docreader.result == 'success'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: shared-server
+    permissions:
+      contents: read
+    steps:
+      - name: Check out deployment assets
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+
+      - name: Configure pinned SSH access
+        id: ssh
+        env:
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "$DEPLOY_KNOWN_HOSTS" ] || {
+            echo "DEPLOY_KNOWN_HOSTS is not configured for shared-server." >&2
+            exit 1
+          }
+          [ -n "$DEPLOY_SSH_PRIVATE_KEY" ] || {
+            echo "DEPLOY_SSH_PRIVATE_KEY is not configured for shared-server." >&2
+            exit 1
+          }
+
+          ssh_directory="${RUNNER_TEMP}/shared-server-ssh"
+          install -d -m 700 "$ssh_directory"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$ssh_directory/known_hosts"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$ssh_directory/id_ed25519"
+          chmod 600 "$ssh_directory/id_ed25519"
+          printf 'key=%s\nknown_hosts=%s\n' \
+            "$ssh_directory/id_ed25519" "$ssh_directory/known_hosts" >> "$GITHUB_OUTPUT"
+
+      - name: Copy deployment assets to the server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_KEY: ${{ steps.ssh.outputs.key }}
+          SSH_KNOWN_HOSTS: ${{ steps.ssh.outputs.known_hosts }}
+        run: |
+          set -euo pipefail
+          for variable_name in DEPLOY_HOST DEPLOY_PATH DEPLOY_USER; do
+            [ -n "${!variable_name:-}" ] || {
+              echo "${variable_name} is not configured for shared-server." >&2
+              exit 1
+            }
+          done
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9.:-]+$ ]] || {
+            echo 'DEPLOY_HOST contains unsupported characters.' >&2
+            exit 1
+          }
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || {
+            echo 'DEPLOY_USER contains unsupported characters.' >&2
+            exit 1
+          }
+          [[ "$DEPLOY_PATH" =~ ^/[a-zA-Z0-9._/-]+$ ]] || {
+            echo 'DEPLOY_PATH contains unsupported characters.' >&2
+            exit 1
+          }
+
+          ssh_options=(
+            -i "$SSH_KEY"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="$SSH_KNOWN_HOSTS"
+          )
+          target="${DEPLOY_USER}@${DEPLOY_HOST}"
+          ssh "${ssh_options[@]}" "$target" "install -d -m 700 '${DEPLOY_PATH}/.ci'"
+          scp "${ssh_options[@]}" -p \
+            deploy/docker-compose.ghcr.yml \
+            deploy/ghcr-compose-deploy.sh \
+            "${target}:${DEPLOY_PATH}/.ci/"
+          ssh "${ssh_options[@]}" "$target" "chmod 700 '${DEPLOY_PATH}/.ci/ghcr-compose-deploy.sh'"
+
+      - name: Deploy selected images
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          GHCR_PULL_USERNAME: ${{ secrets.GHCR_PULL_USERNAME }}
+          IMAGE_OWNER: ${{ needs.prepare.outputs.image_owner }}
+          OPERATION: ${{ inputs.operation }}
+          REQUESTED_IMAGE_TAG: ${{ inputs.operation == 'deploy' && needs.prepare.outputs.image_tag || inputs.rollback_tag }}
+          SSH_KEY: ${{ steps.ssh.outputs.key }}
+          SSH_KNOWN_HOSTS: ${{ steps.ssh.outputs.known_hosts }}
+        run: |
+          set -euo pipefail
+          for variable_name in DEPLOY_HOST DEPLOY_PATH DEPLOY_USER GHCR_PULL_TOKEN GHCR_PULL_USERNAME IMAGE_OWNER; do
+            [ -n "${!variable_name:-}" ] || {
+              echo "${variable_name} is not configured for shared-server." >&2
+              exit 1
+            }
+          done
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9.:-]+$ ]] || {
+            echo 'DEPLOY_HOST contains unsupported characters.' >&2
+            exit 1
+          }
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || {
+            echo 'DEPLOY_USER contains unsupported characters.' >&2
+            exit 1
+          }
+          [[ "$DEPLOY_PATH" =~ ^/[a-zA-Z0-9._/-]+$ ]] || {
+            echo 'DEPLOY_PATH contains unsupported characters.' >&2
+            exit 1
+          }
+          [[ "$GHCR_PULL_USERNAME" =~ ^[A-Za-z0-9-]+$ ]] || {
+            echo 'GHCR_PULL_USERNAME contains unsupported characters.' >&2
+            exit 1
+          }
+          [[ "$IMAGE_OWNER" =~ ^[a-z0-9][a-z0-9._-]*$ ]] || {
+            echo 'IMAGE_OWNER contains unsupported characters.' >&2
+            exit 1
+          }
+          case "$OPERATION" in
+            deploy)
+              [[ "$REQUESTED_IMAGE_TAG" =~ ^[a-z0-9][a-z0-9._-]*$ ]] || {
+                echo 'REQUESTED_IMAGE_TAG is required and invalid for deploy.' >&2
+                exit 1
+              }
+              ;;
+            rollback)
+              if [ -n "$REQUESTED_IMAGE_TAG" ] && ! [[ "$REQUESTED_IMAGE_TAG" =~ ^[a-z0-9][a-z0-9._-]*$ ]]; then
+                echo 'REQUESTED_IMAGE_TAG is invalid for rollback.' >&2
+                exit 1
+              fi
+              ;;
+            *)
+              echo 'OPERATION must be deploy or rollback.' >&2
+              exit 1
+              ;;
+          esac
+
+          ssh_options=(
+            -i "$SSH_KEY"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="$SSH_KNOWN_HOSTS"
+          )
+          target="${DEPLOY_USER}@${DEPLOY_HOST}"
+          remote_command="GHCR_PULL_USERNAME='${GHCR_PULL_USERNAME}' WEKNORA_IMAGE_OWNER='${IMAGE_OWNER}' REQUESTED_IMAGE_TAG='${REQUESTED_IMAGE_TAG}' DEPLOY_PATH='${DEPLOY_PATH}' '${DEPLOY_PATH}/.ci/ghcr-compose-deploy.sh' '${OPERATION}'"
+          printf '%s\n' "$GHCR_PULL_TOKEN" | ssh "${ssh_options[@]}" "$target" "$remote_command"
+
+      - name: Write deployment summary
+        if: always()
+        env:
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+          IMAGE_OWNER: ${{ needs.prepare.outputs.image_owner }}
+          OPERATION: ${{ inputs.operation }}
+          REQUESTED_BRANCH: ${{ inputs.branch }}
+          REQUESTED_IMAGE_TAG: ${{ inputs.operation == 'deploy' && needs.prepare.outputs.image_tag || inputs.rollback_tag }}
+        run: |
+          set -euo pipefail
+          {
+            echo '## Shared-server deployment'
+            echo
+            echo "- Operation: \`${OPERATION}\`"
+            echo "- Requested branch: \`${REQUESTED_BRANCH:-not applicable}\`"
+            echo "- Commit: \`${COMMIT}\`"
+            if [ -n "$REQUESTED_IMAGE_TAG" ]; then
+              echo "- Requested image tag: \`${REQUESTED_IMAGE_TAG}\`"
+              echo "- Images: \`ghcr.io/${IMAGE_OWNER}/weknora-{ui,app,docreader}:${REQUESTED_IMAGE_TAG}\`"
+            else
+              echo '- Requested image tag: previous successful deployment on the server'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
