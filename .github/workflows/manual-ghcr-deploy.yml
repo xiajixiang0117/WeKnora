@@ -42,11 +42,10 @@ jobs:
       image_owner: ${{ steps.version.outputs.image_owner }}
       image_tag: ${{ steps.version.outputs.image_tag }}
     steps:
-      - name: Check out requested branch
-        if: inputs.operation == 'deploy'
+      - name: Check out deployment source
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.branch }}
+          ref: ${{ inputs.operation == 'deploy' && inputs.branch || github.sha }}
           fetch-depth: 0
 
       - name: Resolve immutable image tag
@@ -87,6 +86,16 @@ jobs:
           image_tag="sha-$(cut -c1-12 <<< "$commit")"
           printf 'commit=%s\nimage_owner=%s\nimage_tag=%s\n' \
             "$commit" "$image_owner" "$image_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Upload deployment assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: deployment-assets-${{ github.run_id }}
+          path: |
+            deploy/docker-compose.ghcr.yml
+            deploy/ghcr-compose-deploy.sh
+          if-no-files-found: error
+          retention-days: 1
 
   build-ui:
     name: Build UI image
@@ -247,10 +256,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Check out deployment assets
-        uses: actions/checkout@v6
+      - name: Download deployment assets
+        uses: actions/download-artifact@v8
         with:
-          ref: ${{ needs.prepare.outputs.commit }}
+          name: deployment-assets-${{ github.run_id }}
+          path: ${{ runner.temp }}/deployment-assets
 
       - name: Install deployment assets locally
         env:
@@ -266,10 +276,19 @@ jobs:
             exit 1
           }
 
+          assets_directory="${RUNNER_TEMP}/deployment-assets"
+          [[ -f "$assets_directory/docker-compose.ghcr.yml" ]] || {
+            echo 'The deployment Compose overlay was not downloaded.' >&2
+            exit 1
+          }
+          [[ -f "$assets_directory/ghcr-compose-deploy.sh" ]] || {
+            echo 'The deployment script was not downloaded.' >&2
+            exit 1
+          }
           ci_directory="${DEPLOY_PATH}/.ci"
           install -d -m 700 "$ci_directory"
-          install -m 600 deploy/docker-compose.ghcr.yml "$ci_directory/docker-compose.ghcr.yml"
-          install -m 700 deploy/ghcr-compose-deploy.sh "$ci_directory/ghcr-compose-deploy.sh"
+          install -m 600 "$assets_directory/docker-compose.ghcr.yml" "$ci_directory/docker-compose.ghcr.yml"
+          install -m 700 "$assets_directory/ghcr-compose-deploy.sh" "$ci_directory/ghcr-compose-deploy.sh"
 
       - name: Deploy selected images
         env:
