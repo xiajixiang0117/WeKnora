@@ -83,6 +83,8 @@ FROM debian:12.12-slim
 WORKDIR /app
 
 ARG APK_MIRROR_ARG
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
 
 # Create a non-root user first
 RUN useradd -m -s /bin/bash appuser

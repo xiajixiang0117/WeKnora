@@ -36,6 +36,7 @@ services:
         # Override from .env when the deployment host cannot reach the
         # default Go module proxy.
         - GOPROXY_ARG=${GOPROXY_ARG:-https://proxy.golang.org,direct}
+        - PIP_INDEX_URL=${PIP_INDEX_URL:-https://pypi.org/simple}
         - WITH_ANYDOC=${WITH_ANYDOC:-1}
         - VERSION_ARG=${WEKNORA_VERSION:-unknown}
         - COMMIT_ID_ARG=${WEKNORA_COMMIT_ID:-unknown}
