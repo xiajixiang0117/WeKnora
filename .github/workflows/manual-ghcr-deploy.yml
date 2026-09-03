@@ -180,6 +180,10 @@ jobs:
             BUILD_TIME_ARG=${{ steps.version.outputs.build_time }}
             GO_VERSION_ARG=${{ steps.version.outputs.go_version }}
             WITH_ANYDOC=1
+            RUSTUP_INIT_URL_ARG=https://rsproxy.cn/rustup-init.sh
+            RUSTUP_DIST_SERVER_ARG=https://rsproxy.cn
+            RUSTUP_UPDATE_ROOT_ARG=https://rsproxy.cn/rustup
+            CARGO_REGISTRIES_CRATES_IO_INDEX_ARG=sparse+https://rsproxy.cn/index/
           tags: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_owner }}/weknora-app:${{ needs.prepare.outputs.image_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
