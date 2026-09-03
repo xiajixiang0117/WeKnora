@@ -29,6 +29,7 @@ chmod +x deploy/source-compose-deploy.sh
 GOPROXY_ARG=https://goproxy.cn,direct
 APK_MIRROR_ARG=mirrors.nju.edu.cn
 APT_MIRROR=http://mirrors.nju.edu.cn
+PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ```
 
 这些变量仅用于构建 App 和 Docreader 镜像。
