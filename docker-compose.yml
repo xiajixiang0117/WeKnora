@@ -33,6 +33,9 @@ services:
       dockerfile: docker/Dockerfile.app
       args:
         - APK_MIRROR_ARG=${APK_MIRROR_ARG:-}
+        # Override from .env when the deployment host cannot reach the
+        # default Go module proxy.
+        - GOPROXY_ARG=${GOPROXY_ARG:-https://proxy.golang.org,direct}
         - WITH_ANYDOC=${WITH_ANYDOC:-1}
         - VERSION_ARG=${WEKNORA_VERSION:-unknown}
         - COMMIT_ID_ARG=${WEKNORA_COMMIT_ID:-unknown}
