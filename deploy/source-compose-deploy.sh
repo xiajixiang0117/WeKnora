@@ -7,6 +7,7 @@ readonly SERVICES=(frontend app docreader)
 readonly CI_DIRECTORY_NAME=".ci"
 readonly HEALTH_CHECK_ATTEMPTS=48
 readonly HEALTH_CHECK_INTERVAL_SECONDS=5
+readonly FRONTEND_NODE_IMAGE="${FRONTEND_NODE_IMAGE:-node:24-bookworm-slim}"
 
 requested_branch="${1:-}"
 requested_version="${2:-}"
@@ -76,6 +77,27 @@ update_source_branch() {
     fi
 
     git -C "$DEPLOY_PATH" pull --ff-only origin "$requested_branch"
+}
+
+build_frontend_distribution() {
+    local frontend_directory npm_cache_directory
+
+    frontend_directory="${DEPLOY_PATH}/frontend"
+    npm_cache_directory="${DEPLOY_PATH}/${CI_DIRECTORY_NAME}/npm-cache"
+    install -d -m 700 "$npm_cache_directory"
+
+    echo "Building frontend assets with ${FRONTEND_NODE_IMAGE}."
+    docker run --rm \
+        --user "$(id -u):$(id -g)" \
+        --env HOME=/tmp \
+        --env npm_config_cache=/tmp/npm-cache \
+        --env VITE_IS_DOCKER=true \
+        --env VITE_FRONTEND_COMMIT="$deployment_commit" \
+        --volume "${frontend_directory}:/workspace" \
+        --volume "${npm_cache_directory}:/tmp/npm-cache" \
+        --workdir /workspace \
+        "$FRONTEND_NODE_IMAGE" \
+        sh -c 'npm ci && npm run build'
 }
 
 wait_for_service_health() {
@@ -153,8 +175,7 @@ echo "Validating Compose configuration for version ${WEKNORA_VERSION}."
 compose config -q
 
 echo "Building frontend, app, and docreader from ${deployment_commit}."
-VITE_IS_DOCKER=true VITE_FRONTEND_COMMIT="$deployment_commit" \
-    "$DEPLOY_PATH/scripts/build_frontend_dist.sh"
+build_frontend_distribution
 compose build "${SERVICES[@]}"
 
 echo "Updating docreader and app without touching dependencies."

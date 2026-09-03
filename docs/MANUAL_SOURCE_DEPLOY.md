@@ -13,7 +13,7 @@ bash deploy/source-compose-deploy.sh main v1.3.0
 
 ## 一次性配置
 
-部署目录必须是可以拉取 GitHub 源码的 Git 工作树，且部署用户应能运行 Docker：
+部署目录必须是可以拉取 GitHub 源码的 Git 工作树，且部署用户应能运行 Docker。前端由部署脚本在 `node:24-bookworm-slim` 容器内构建，因此服务器不需要安装 Node.js 或 npm；首次部署会拉取该构建镜像：
 
 ```sh
 git clone git@github.com:xiajixiang0117/WeKnora.git /home/ubuntu/WeKnora
