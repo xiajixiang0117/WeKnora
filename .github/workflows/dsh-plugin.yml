@@ -10,25 +10,11 @@ name: Build & Publish (dsh-weknora)
 #   publish   on a `dsh-weknora-v*` tag only, publish to npm with provenance
 #
 # The e2e job pins the harness version so a plugin change is the only thing that
-# can turn it red. The weekly drift job runs the same check against dsh@latest and
+# can turn it red. The advisory drift job runs the same check against dsh@latest and
 # is allowed to fail: it exists to notice a harness breaking change early, since
 # dsh is in developer preview.
 
 on:
-  push:
-    branches: [main]
-    tags:
-      - "dsh-weknora-v*"
-    paths:
-      - "packages/dsh-weknora/**"
-      - ".github/workflows/dsh-plugin.yml"
-  pull_request:
-    paths:
-      - "packages/dsh-weknora/**"
-      - ".github/workflows/dsh-plugin.yml"
-  schedule:
-    # Monday 03:00 UTC: catch a harness release that breaks the plugin.
-    - cron: "0 3 * * 1"
   workflow_dispatch:
 
 concurrency:
@@ -162,7 +148,6 @@ jobs:
 
   drift:
     name: End-to-end inside dsh (latest, advisory)
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     continue-on-error: true

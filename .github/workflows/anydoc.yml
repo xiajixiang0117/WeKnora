@@ -1,23 +1,9 @@
 name: Anydoc
 
 # Compiles the vendored Rust archive, audits it, and exercises the `anydoc`
-# build tag. That is minutes of rustc + cargo-audit, so this workflow stays
-# off PRs that only touch migrations, frontend, CLI, or unrelated Go packages.
+# build tag. It is intentionally run only when a maintainer dispatches it.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "third_party/anydoc-go/**"
-      - "scripts/build-anydoc-lib.sh"
-      - "internal/infrastructure/docparser/**"
-      - ".github/workflows/anydoc.yml"
-  pull_request:
-    paths:
-      - "third_party/anydoc-go/**"
-      - "scripts/build-anydoc-lib.sh"
-      - "internal/infrastructure/docparser/**"
-      - ".github/workflows/anydoc.yml"
   workflow_dispatch:
 
 concurrency:

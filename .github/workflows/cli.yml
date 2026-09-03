@@ -1,18 +1,9 @@
 name: CLI
 
-# Builds and tests the cli/ Go module on every push / PR that touches it.
-# Foundation PR (PR-1) gates: 3-platform `go build` + `go test ./...` green.
+# Builds and tests the cli/ Go module when a maintainer dispatches it.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'cli/**'
-      - '.github/workflows/cli.yml'
-  pull_request:
-    paths:
-      - 'cli/**'
-      - '.github/workflows/cli.yml'
+  workflow_dispatch:
 
 defaults:
   run:

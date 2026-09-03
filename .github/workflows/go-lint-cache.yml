@@ -1,23 +1,8 @@
 name: Go Lint Cache
 
-# Action caches written by a pull request run are scoped to that pull request,
-# so only runs on the default branch produce caches every pull request can
-# restore. Without this workflow each pull request would recompile the whole
-# package graph from scratch (~6 minutes for the root module, versus ~40s warm).
-#
-# This lives apart from go-lint.yml rather than as a conditional job inside it:
-# a job skipped by `if` still surfaces as a check on every pull request, and
-# GitHub renders its name with the matrix expression unexpanded.
+# Warm the lint caches for all Go modules when a maintainer dispatches it.
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "**/*.go"
-      - "**/go.mod"
-      - "**/go.sum"
-      - ".golangci.yml"
-      - ".github/workflows/go-lint-cache.yml"
   workflow_dispatch:
 
 concurrency:
@@ -54,6 +39,6 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           working-directory: ${{ matrix.module }}
           # This workflow exists for its cache side effect only; the backlog of
-          # existing findings must not turn main red. The run still prints the
+          # existing findings must not fail this cache-warming run. It still prints the
           # full report, which makes a manual dispatch a useful backlog view.
           args: --issues-exit-code=0
