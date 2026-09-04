@@ -58,7 +58,7 @@ PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 | `ACR_USERNAME` | ACR 登录用户名。 |
 | `ACR_PASSWORD` | ACR 访问凭据密码。 |
 
-在 `Build and Push Docker Image` 工作流中选择 `acr` 即可，ACR 镜像前缀已固定为 `crpi-4pzouvp8dkxkmnbw.cn-shanghai.personal.cr.aliyuncs.com/crpi-4pzouvp8dkxkmnbw`，无需手工填写。然后运行 `Deploy Pre-built Images`，只需填写同一个镜像版本；部署工作流会先尝试带 `-vpc` 的内网地址，若服务器无法访问则自动切换公网 ACR 地址。服务器只从 ACR 拉取三张应用镜像，不会从 GitHub 拉源码或下载构建依赖。
+在 `Build and Push Docker Image` 工作流中选择 `acr` 即可，ACR 镜像前缀已固定为 `crpi-4pzouvp8dkxkmnbw.cn-shanghai.personal.cr.aliyuncs.com/crpi-4pzouvp8dkxkmnbw`，无需手工填写。然后运行 `Deploy Pre-built Images`，该工作流固定部署 `main` 标签，不需要填写版本或镜像前缀；它会先尝试带 `-vpc` 的内网地址，若服务器无法访问则自动切换公网 ACR 地址。服务器只从 ACR 拉取三张应用镜像，不会从 GitHub 拉源码或下载构建依赖。
 
 现有 self-hosted runner 必须运行在这台服务器，并使用能访问该路径、GitHub `origin` 和 Docker daemon 的账户。此模式不需要 GHCR 推送或拉取凭据，也不需要 SSH 私钥。
 

@@ -2,11 +2,6 @@ name: Deploy Pre-built Images
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: Image tag to pull from Alibaba Cloud Container Registry.
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -15,6 +10,7 @@ env:
   ACR_PUBLIC_REGISTRY: crpi-4pzouvp8dkxkmnbw.cn-shanghai.personal.cr.aliyuncs.com
   ACR_VPC_REGISTRY: crpi-4pzouvp8dkxkmnbw-vpc.cn-shanghai.personal.cr.aliyuncs.com
   ACR_NAMESPACE: crpi-4pzouvp8dkxkmnbw
+  IMAGE_VERSION: main
 
 concurrency:
   group: shared-weknora-deployment
@@ -72,7 +68,7 @@ jobs:
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           IMAGE_PREFIX: ${{ steps.acr-login.outputs.image_prefix }}
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ env.IMAGE_VERSION }}
         run: |
           set -euo pipefail
           WEKNORA_IMAGE_PREFIX="$IMAGE_PREFIX" \
