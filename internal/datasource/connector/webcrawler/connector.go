@@ -340,6 +340,7 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 			}
 		}
 	}
+	resolveImageSources(doc, base)
 	doc.Find("a[href]").Each(func(_ int, selection *goquery.Selection) {
 		href, ok := selection.Attr("href")
 		if !ok || strings.HasPrefix(strings.TrimSpace(href), "#") {
@@ -408,6 +409,42 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 	}
 	hash := sha256.Sum256([]byte(markdown))
 	return Page{CanonicalURL: pageURL, Title: title, Content: markdown, ContentHash: hex.EncodeToString(hash[:])}, links, nil
+}
+
+// resolveImageSources makes image URLs self-contained before HTML is converted
+// to Markdown. Crawled pages commonly use paths such as "../_images/foo.png";
+// those references lose their page context once the Markdown is stored and
+// therefore cannot be downloaded by the remote image resolver later.
+func resolveImageSources(doc *goquery.Document, base *url.URL) {
+	if doc == nil || base == nil {
+		return
+	}
+	doc.Find("img[src]").Each(func(_ int, selection *goquery.Selection) {
+		raw, ok := selection.Attr("src")
+		if !ok {
+			return
+		}
+		src := strings.TrimSpace(raw)
+		if src == "" || strings.HasPrefix(src, "#") {
+			return
+		}
+		parsed, err := url.Parse(src)
+		if err != nil {
+			return
+		}
+		resolved := parsed
+		if !parsed.IsAbs() {
+			resolved = base.ResolveReference(parsed)
+		}
+		if resolved == nil || resolved.Hostname() == "" {
+			return
+		}
+		resolved.Scheme = strings.ToLower(resolved.Scheme)
+		if resolved.Scheme != "http" && resolved.Scheme != "https" {
+			return
+		}
+		selection.SetAttr("src", resolved.String())
+	})
 }
 
 func cleanPageTitle(title string) string {

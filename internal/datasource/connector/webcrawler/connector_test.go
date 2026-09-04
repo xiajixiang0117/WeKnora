@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Tencent/WeKnora/internal/types"
@@ -24,6 +25,28 @@ func TestExtractPageSkipsStaticAssetLinks(t *testing.T) {
 	}
 	if page.Content == "" || len(links) != 1 || links[0] != "https://docs.example.com/docs/guide.html" {
 		t.Fatalf("links = %#v", links)
+	}
+}
+
+func TestExtractPageResolvesRelativeImageSources(t *testing.T) {
+	page, _, err := extractPage([]byte(`<html><body><main><p>Guide</p><img src="../_images/app_folder.png" alt="Application folder"></main></body></html>`), "https://docs.sifli.com/projects/sdk/latest/sf32lb56x/quickstart/index.html", Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "https://docs.sifli.com/projects/sdk/latest/sf32lb56x/_images/app_folder.png"
+	if !strings.Contains(page.Content, want) {
+		t.Fatalf("Content = %q, want absolute image URL %q", page.Content, want)
+	}
+}
+
+func TestExtractPageResolvesImagesRelativeToPrefixSeedDirectory(t *testing.T) {
+	page, _, err := extractPage([]byte(`<html><body><main><p>Docs</p><img src="img.png"></main></body></html>`), "https://docs.example.com/docs", Config{PathPrefixes: []string{"/docs"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "https://docs.example.com/docs/img.png"
+	if !strings.Contains(page.Content, want) {
+		t.Fatalf("Content = %q, want image URL relative to seed directory %q", page.Content, want)
 	}
 }
 
