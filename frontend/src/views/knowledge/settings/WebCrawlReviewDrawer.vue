@@ -22,6 +22,7 @@ const missingActions = ref<Record<string, string>>({})
 const loading = ref(false)
 const submitting = ref(false)
 const activeScan = computed(() => scans.value[0])
+const canApplySelected = computed(() => selected.value.length > 0 && ['review_ready', 'partial_failed'].includes(activeScan.value?.status || ''))
 let timer: number | null = null
 
 function stopPolling() { if (timer !== null) { window.clearTimeout(timer); timer = null } }
@@ -110,7 +111,7 @@ onBeforeUnmount(stopPolling)
     <div v-else class="web-crawl-empty">{{ t('datasource.webCrawler.noScan') }}</div>
     <template #footer>
       <t-button variant="outline" :disabled="!changes.some(c => c.apply_status === 'failed')" :loading="submitting" @click="retryFailed">{{ t('datasource.webCrawler.retryFailed') }}</t-button>
-      <t-button theme="primary" :disabled="!selected.length || activeScan?.status !== 'review_ready'" :loading="submitting" @click="applySelected">{{ t('datasource.webCrawler.applySelected', { count: selected.length }) }}</t-button>
+      <t-button theme="primary" :disabled="!canApplySelected" :loading="submitting" @click="applySelected">{{ t('datasource.webCrawler.applySelected', { count: selected.length }) }}</t-button>
     </template>
   </t-drawer>
 </template>
