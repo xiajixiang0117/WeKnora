@@ -81,6 +81,9 @@ jobs:
           context: ./frontend
           labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ steps.meta.outputs.tags }}
+          # Alibaba Cloud personal ACR does not accept BuildKit OCI attestations.
+          provenance: false
+          sbom: false
           cache-from: type=gha,scope=build-ui
           cache-to: type=gha,scope=build-ui,mode=max
 
@@ -140,6 +143,9 @@ jobs:
           context: .
           labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ steps.meta.outputs.tags }}
+          # Alibaba Cloud personal ACR does not accept BuildKit OCI attestations.
+          provenance: false
+          sbom: false
           cache-from: type=gha,scope=build-docreader
           cache-to: type=gha,scope=build-docreader,mode=max
 
@@ -287,6 +293,9 @@ jobs:
             WITH_ANYDOC=1
           labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ steps.meta.outputs.tags }}
+          # Alibaba Cloud personal ACR does not accept BuildKit OCI attestations.
+          provenance: false
+          sbom: false
           cache-from: type=gha,scope=build-app-${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,scope=build-app-${{ env.PLATFORM_PAIR }},mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
