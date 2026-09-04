@@ -10,11 +10,6 @@ on:
         options:
           - dockerhub
           - acr
-      image_prefix:
-        description: Image namespace or full ACR prefix, without the service suffix.
-        required: true
-        default: wechatopenai
-        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,6 +18,8 @@ concurrency:
 env:
   NODE_VERSION: "24"
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  # Keep registry naming in the workflow so manual runs cannot create invalid tags.
+  IMAGE_PREFIX: ${{ inputs.registry == 'acr' && 'crpi-4pzouvp8dkxkmnbw.cn-shanghai.personal.cr.aliyuncs.com/crpi-4pzouvp8dkxkmnbw' || 'wechatopenai' }}
 
 jobs:
   build-ui:
@@ -73,7 +70,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ inputs.image_prefix }}/weknora-ui
+          images: ${{ env.IMAGE_PREFIX }}/weknora-ui
 
       - name: Build ui Image
         uses: docker/build-push-action@v7
@@ -132,7 +129,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ inputs.image_prefix }}/weknora-docreader
+          images: ${{ env.IMAGE_PREFIX }}/weknora-docreader
 
       - name: Build docreader Image
         uses: docker/build-push-action@v7
@@ -178,7 +175,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ inputs.image_prefix }}/weknora-sandbox
+          images: ${{ env.IMAGE_PREFIX }}/weknora-sandbox
 
       - name: Build sandbox Image
         uses: docker/build-push-action@v7
@@ -199,7 +196,7 @@ jobs:
         id: meta-cube
         uses: docker/metadata-action@v6
         with:
-          images: ${{ inputs.image_prefix }}/weknora-sandbox
+          images: ${{ env.IMAGE_PREFIX }}/weknora-sandbox
           flavor: |
             suffix=-cube,onlatest=true
 
@@ -257,7 +254,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ inputs.image_prefix }}/weknora-app
+          images: ${{ env.IMAGE_PREFIX }}/weknora-app
 
       - name: Prepare version info
         id: version
@@ -343,14 +340,14 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ inputs.image_prefix }}/weknora-app
+          images: ${{ env.IMAGE_PREFIX }}/weknora-app
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ inputs.image_prefix }}/weknora-app@sha256:%s ' *)
+            $(printf '${{ env.IMAGE_PREFIX }}/weknora-app@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ inputs.image_prefix }}/weknora-app:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect ${{ env.IMAGE_PREFIX }}/weknora-app:${{ steps.meta.outputs.version }}

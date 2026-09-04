@@ -7,14 +7,13 @@ on:
         description: Image tag to pull from Alibaba Cloud Container Registry.
         required: true
         type: string
-      image_prefix:
-        description: Full registry namespace without the service suffix.
-        required: true
-        default: crpi-4pzouvp8dkxkmnbw-vpc.cn-shanghai.personal.cr.aliyuncs.com/crpi-4pzouvp8dkxkmnbw
-        type: string
 
 permissions:
   contents: read
+
+env:
+  # This is the VPC namespace used by the shared server. Do not edit per run.
+  IMAGE_PREFIX: crpi-4pzouvp8dkxkmnbw-vpc.cn-shanghai.personal.cr.aliyuncs.com/crpi-4pzouvp8dkxkmnbw
 
 concurrency:
   group: shared-weknora-deployment
@@ -56,7 +55,7 @@ jobs:
       - name: Pull and update services
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          IMAGE_PREFIX: ${{ inputs.image_prefix }}
+          IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
