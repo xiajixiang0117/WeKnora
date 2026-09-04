@@ -327,6 +327,18 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 	}
 	links := make([]string, 0)
 	base, _ := url.Parse(pageURL)
+	// CanonicalURL intentionally removes a trailing slash. When the seed is a
+	// configured path prefix, restore directory semantics for relative links.
+	if base != nil {
+		for _, prefix := range cfg.PathPrefixes {
+			prefix = strings.TrimRight(strings.TrimSpace(prefix), "/")
+			if prefix != "" && strings.TrimRight(base.EscapedPath(), "/") == prefix {
+				base.Path = strings.TrimRight(base.Path, "/") + "/"
+				base.RawPath = ""
+				break
+			}
+		}
+	}
 	doc.Find("a[href]").Each(func(_ int, selection *goquery.Selection) {
 		href, ok := selection.Attr("href")
 		if !ok || strings.HasPrefix(strings.TrimSpace(href), "#") {

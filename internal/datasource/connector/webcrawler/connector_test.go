@@ -17,6 +17,35 @@ func TestCanonicalURL(t *testing.T) {
 	}
 }
 
+func TestCrawlTreatsPrefixSeedAsDirectory(t *testing.T) {
+	t.Setenv("SSRF_WHITELIST", "127.0.0.1,localhost")
+	utils.ResetSSRFWhitelistForTest()
+	t.Cleanup(utils.ResetSSRFWhitelistForTest)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		switch r.URL.Path {
+		case "/robots.txt":
+			_, _ = w.Write([]byte("User-agent: *\n"))
+		case "/docs", "/docs/":
+			_, _ = w.Write([]byte(`<html><body><main><h1>Docs</h1><a href="guide.html">Guide</a></main></body></html>`))
+		case "/docs/guide.html":
+			_, _ = w.Write([]byte(`<html><body><main><h1>Guide</h1><p>Content</p></main></body></html>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	pages, failures, err := NewConnector().Crawl(context.Background(), &types.DataSourceConfig{Settings: map[string]interface{}{
+		"seed_urls": []string{server.URL + "/docs"}, "path_prefixes": []string{"/docs"}, "respect_robots": true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(failures) != 0 || len(pages) != 2 {
+		t.Fatalf("Crawl() pages=%d failures=%d", len(pages), len(failures))
+	}
+}
+
 func TestParseConfigUsesSeedDirectoryAsDefaultScope(t *testing.T) {
 	config, err := ParseConfig(&types.DataSourceConfig{Settings: map[string]interface{}{
 		"seed_urls": []string{"https://docs.sifli.com/projects/sdk/latest/sf32lb52x/quickstart/index.html"},
