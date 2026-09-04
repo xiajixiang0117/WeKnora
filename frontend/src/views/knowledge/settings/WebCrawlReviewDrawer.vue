@@ -19,10 +19,14 @@ const scans = ref<WebCrawlScan[]>([])
 const changes = ref<WebCrawlChange[]>([])
 const selected = ref<string[]>([])
 const missingActions = ref<Record<string, string>>({})
+const activeFilter = ref<'all' | 'added' | 'updated' | 'missing' | 'failed'>('all')
 const loading = ref(false)
 const submitting = ref(false)
 const activeScan = computed(() => scans.value[0])
-const canApplySelected = computed(() => selected.value.length > 0 && ['review_ready', 'partial_failed'].includes(activeScan.value?.status || ''))
+const isScanning = computed(() => activeScan.value?.status === 'scanning')
+const visibleChanges = computed(() => activeFilter.value === 'all' ? changes.value : changes.value.filter(change => change.change_type === activeFilter.value))
+const selectedVisibleIDs = computed(() => selected.value.filter(id => visibleChanges.value.some(change => change.id === id)))
+const canApplySelected = computed(() => selectedVisibleIDs.value.length > 0 && ['review_ready', 'partial_failed'].includes(activeScan.value?.status || ''))
 let timer: number | null = null
 
 function stopPolling() { if (timer !== null) { window.clearTimeout(timer); timer = null } }
@@ -62,7 +66,7 @@ async function applySelected() {
   if (!activeScan.value || selected.value.length === 0) return
   submitting.value = true
   try {
-    await applyWebCrawlChanges(activeScan.value.id, selected.value, missingActions.value)
+    await applyWebCrawlChanges(activeScan.value.id, selectedVisibleIDs.value, missingActions.value)
     MessagePlugin.success(t('datasource.webCrawler.applyStarted'))
     await load()
   } catch (e: any) { MessagePlugin.error(e?.message || t('datasource.webCrawler.applyFailed')) }
@@ -80,6 +84,7 @@ async function retryFailed() {
 function changeLabel(type: string) { return t(`datasource.webCrawler.change.${type}`) }
 function statusLabel(status?: string) { return status ? t(`datasource.webCrawler.status.${status}`) : '--' }
 function toggle(id: string) { selected.value = selected.value.includes(id) ? selected.value.filter(v => v !== id) : [...selected.value, id] }
+function setFilter(filter: typeof activeFilter.value) { activeFilter.value = activeFilter.value === filter && filter !== 'all' ? 'all' : filter }
 watch(visible, v => { if (v) { load() } else stopPolling() })
 onBeforeUnmount(stopPolling)
 </script>
@@ -96,11 +101,18 @@ onBeforeUnmount(stopPolling)
     <template v-else-if="activeScan">
       <div class="web-crawl-summary">
         <t-tag theme="primary" variant="light">{{ statusLabel(activeScan.status) }}</t-tag>
-        <span>{{ t('datasource.webCrawler.summary', { total: activeScan.items_total, added: activeScan.items_added, updated: activeScan.items_updated, missing: activeScan.items_missing, failed: activeScan.items_failed }) }}</span>
+        <div class="web-crawl-filters">
+          <button type="button" :class="{ active: activeFilter === 'all' }" @click="setFilter('all')">{{ t('datasource.webCrawler.summary', { total: activeScan.items_total, added: activeScan.items_added, updated: activeScan.items_updated, missing: activeScan.items_missing, failed: activeScan.items_failed }) }}</button>
+          <button type="button" :class="{ active: activeFilter === 'added' }" @click="setFilter('added')">{{ t('datasource.webCrawler.change.added') }} {{ activeScan.items_added }}</button>
+          <button type="button" :class="{ active: activeFilter === 'updated' }" @click="setFilter('updated')">{{ t('datasource.webCrawler.change.updated') }} {{ activeScan.items_updated }}</button>
+          <button type="button" :class="{ active: activeFilter === 'missing' }" @click="setFilter('missing')">{{ t('datasource.webCrawler.change.missing') }} {{ activeScan.items_missing }}</button>
+          <button type="button" :class="{ active: activeFilter === 'failed' }" @click="setFilter('failed')">{{ t('datasource.webCrawler.change.failed') }} {{ activeScan.items_failed }}</button>
+        </div>
       </div>
-      <div v-if="changes.length === 0" class="web-crawl-empty">{{ t('datasource.webCrawler.noChanges') }}</div>
+      <div v-if="isScanning" class="web-crawl-loading"><t-loading size="36px" /></div>
+      <div v-else-if="visibleChanges.length === 0" class="web-crawl-empty">{{ t('datasource.webCrawler.noChanges') }}</div>
       <div v-else class="web-crawl-changes">
-        <div v-for="change in changes" :key="change.id" class="web-crawl-change">
+        <div v-for="change in visibleChanges" :key="change.id" class="web-crawl-change">
           <input v-if="change.change_type !== 'failed' && change.apply_status === 'pending'" type="checkbox" :checked="selected.includes(change.id)" @change="toggle(change.id)">
           <span class="change-type" :class="`change-type--${change.change_type}`">{{ changeLabel(change.change_type) }}</span>
           <div class="change-main"><strong :title="change.canonical_url">{{ change.title || change.canonical_url }}</strong><small>{{ change.canonical_url }}</small><span>{{ change.summary }}</span><t-select v-if="change.change_type === 'missing'" v-model="missingActions[change.id]" size="small" class="missing-action"><t-option value="keep" :label="t('datasource.webCrawler.change.missing')" /><t-option value="disable" :label="t('datasource.pause')" /><t-option value="delete" :label="t('datasource.delete')" /></t-select><details v-if="change.previous_content || change.new_content" class="change-diff"><summary>{{ t('datasource.logs') }}</summary><div class="diff-columns"><pre>{{ change.previous_content || '∅' }}</pre><pre>{{ change.new_content || '∅' }}</pre></div></details></div>
@@ -111,7 +123,7 @@ onBeforeUnmount(stopPolling)
     <div v-else class="web-crawl-empty">{{ t('datasource.webCrawler.noScan') }}</div>
     <template #footer>
       <t-button variant="outline" :disabled="!changes.some(c => c.apply_status === 'failed')" :loading="submitting" @click="retryFailed">{{ t('datasource.webCrawler.retryFailed') }}</t-button>
-      <t-button theme="primary" :disabled="!canApplySelected" :loading="submitting" @click="applySelected">{{ t('datasource.webCrawler.applySelected', { count: selected.length }) }}</t-button>
+      <t-button theme="primary" :disabled="!canApplySelected" :loading="submitting" @click="applySelected">{{ t('datasource.webCrawler.applySelected', { count: selectedVisibleIDs.length }) }}</t-button>
     </template>
   </t-drawer>
 </template>
@@ -120,6 +132,9 @@ onBeforeUnmount(stopPolling)
 .web-crawl-header { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; }
 .web-crawl-loading { display:flex; justify-content:center; padding:80px 0; }
 .web-crawl-summary { display:flex; align-items:center; gap:10px; padding:12px 14px; margin-bottom:12px; background:var(--td-bg-color-container-hover); border-radius:8px; font-size:13px; color:var(--td-text-color-secondary); }
+.web-crawl-filters { display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
+.web-crawl-filters button { border:0; padding:3px 6px; background:transparent; color:inherit; cursor:pointer; font:inherit; border-radius:4px; }
+.web-crawl-filters button:hover,.web-crawl-filters button.active { background:var(--td-bg-color-container); color:var(--td-brand-color); }
 .web-crawl-empty { padding:70px 0; text-align:center; color:var(--td-text-color-placeholder); }
 .web-crawl-change { display:flex; align-items:flex-start; gap:10px; padding:12px 4px; border-bottom:1px solid var(--td-component-stroke); }
 .web-crawl-change input { margin-top:4px; }
