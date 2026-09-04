@@ -54,11 +54,11 @@ PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 | Secret | 值 |
 | --- | --- |
 | `ACR_REGISTRY` | `crpi-4pzouvp8dkxkmnbw.cn-shanghai.personal.cr.aliyuncs.com`（服务器在同一 VPC 时使用带 `-vpc` 的地址）。 |
-| `ACR_VPC_REGISTRY` | `crpi-4pzouvp8dkxkmnbw-vpc.cn-shanghai.personal.cr.aliyuncs.com`，服务器内网部署工作流优先使用。 |
+| `ACR_VPC_REGISTRY` | 可保留为服务器网络配置记录；部署工作流会自动探测固定的 VPC 地址，不依赖此 Secret。 |
 | `ACR_USERNAME` | ACR 登录用户名。 |
 | `ACR_PASSWORD` | ACR 访问凭据密码。 |
 
-在 `Build and Push Docker Image` 工作流中选择 `acr` 即可，ACR 镜像前缀已固定为 `crpi-4pzouvp8dkxkmnbw.cn-shanghai.personal.cr.aliyuncs.com/crpi-4pzouvp8dkxkmnbw`，无需手工填写。然后运行 `Deploy Pre-built Images`，只需填写同一个镜像版本；部署工作流已固定使用带 `-vpc` 的内网前缀。服务器只从 ACR 内网地址拉取三张应用镜像，不会从 GitHub 拉源码或下载构建依赖。
+在 `Build and Push Docker Image` 工作流中选择 `acr` 即可，ACR 镜像前缀已固定为 `crpi-4pzouvp8dkxkmnbw.cn-shanghai.personal.cr.aliyuncs.com/crpi-4pzouvp8dkxkmnbw`，无需手工填写。然后运行 `Deploy Pre-built Images`，只需填写同一个镜像版本；部署工作流会先尝试带 `-vpc` 的内网地址，若服务器无法访问则自动切换公网 ACR 地址。服务器只从 ACR 拉取三张应用镜像，不会从 GitHub 拉源码或下载构建依赖。
 
 现有 self-hosted runner 必须运行在这台服务器，并使用能访问该路径、GitHub `origin` 和 Docker daemon 的账户。此模式不需要 GHCR 推送或拉取凭据，也不需要 SSH 私钥。
 

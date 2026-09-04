@@ -12,8 +12,9 @@ permissions:
   contents: read
 
 env:
-  # This is the VPC namespace used by the shared server. Do not edit per run.
-  IMAGE_PREFIX: crpi-4pzouvp8dkxkmnbw-vpc.cn-shanghai.personal.cr.aliyuncs.com/crpi-4pzouvp8dkxkmnbw
+  ACR_PUBLIC_REGISTRY: crpi-4pzouvp8dkxkmnbw.cn-shanghai.personal.cr.aliyuncs.com
+  ACR_VPC_REGISTRY: crpi-4pzouvp8dkxkmnbw-vpc.cn-shanghai.personal.cr.aliyuncs.com
+  ACR_NAMESPACE: crpi-4pzouvp8dkxkmnbw
 
 concurrency:
   group: shared-weknora-deployment
@@ -39,23 +40,38 @@ jobs:
           [ -f "$DEPLOY_PATH/.env" ] || { echo "The deployment .env is missing." >&2; exit 1; }
 
       - name: Login to Alibaba Cloud Container Registry
+        id: acr-login
         env:
-          ACR_REGISTRY: ${{ secrets.ACR_VPC_REGISTRY || secrets.ACR_REGISTRY }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
         run: |
           set -euo pipefail
-          [ -n "$ACR_REGISTRY" ] && [ -n "$ACR_USERNAME" ] && [ -n "$ACR_PASSWORD" ] || {
-            echo "ACR_REGISTRY, ACR_USERNAME, and ACR_PASSWORD are required." >&2
+          [ -n "${ACR_USERNAME:-}" ] && [ -n "${ACR_PASSWORD:-}" ] || {
+            echo "ACR_USERNAME and ACR_PASSWORD are required." >&2
             exit 1
           }
-          printf '%s' "$ACR_PASSWORD" | docker login "$ACR_REGISTRY" \
-            --username "$ACR_USERNAME" --password-stdin
+          vpc_registry="${{ env.ACR_VPC_REGISTRY }}"
+          public_registry="${{ env.ACR_PUBLIC_REGISTRY }}"
+          namespace="${{ env.ACR_NAMESPACE }}"
+          registry="$vpc_registry"
+          image_prefix="$vpc_registry/$namespace"
+
+          if ! printf '%s' "$ACR_PASSWORD" | timeout 30s docker login "$vpc_registry" \
+            --username "$ACR_USERNAME" --password-stdin; then
+            echo "VPC ACR is unreachable; falling back to the public ACR endpoint." >&2
+            registry="$public_registry"
+            image_prefix="$public_registry/$namespace"
+            printf '%s' "$ACR_PASSWORD" | docker login "$public_registry" \
+              --username "$ACR_USERNAME" --password-stdin
+          fi
+
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+          echo "image_prefix=$image_prefix" >> "$GITHUB_OUTPUT"
 
       - name: Pull and update services
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
+          IMAGE_PREFIX: ${{ steps.acr-login.outputs.image_prefix }}
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
@@ -65,6 +81,6 @@ jobs:
       - name: Logout from Alibaba Cloud Container Registry
         if: always()
         env:
-          ACR_REGISTRY: ${{ secrets.ACR_VPC_REGISTRY || secrets.ACR_REGISTRY }}
+          ACR_REGISTRY: ${{ steps.acr-login.outputs.registry }}
         run: |
           if [ -n "${ACR_REGISTRY:-}" ]; then docker logout "$ACR_REGISTRY" || true; fi
