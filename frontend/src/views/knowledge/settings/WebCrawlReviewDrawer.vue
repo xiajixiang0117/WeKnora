@@ -56,7 +56,7 @@ async function load() {
       }
       changes.value = allChanges
       missingActions.value = Object.fromEntries(changes.value.filter(c => c.change_type === 'missing').map(c => [c.id, c.action || 'keep']))
-      selected.value = changes.value.filter(c => c.apply_status === 'pending' && c.change_type !== 'failed').map(c => c.id)
+      selected.value = []
     }
     schedulePolling()
   } catch (e: any) {
