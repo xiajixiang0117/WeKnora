@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
-import { MessagePlugin } from 'tdesign-vue-next'
+import { DialogPlugin, MessagePlugin } from 'tdesign-vue-next'
 import { useI18n } from 'vue-i18n'
 import {
   createWebCrawlScan,
@@ -26,6 +26,9 @@ const activeScan = computed(() => scans.value[0])
 const isScanning = computed(() => activeScan.value?.status === 'scanning')
 const visibleChanges = computed(() => activeFilter.value === 'all' ? changes.value : changes.value.filter(change => change.change_type === activeFilter.value))
 const selectedVisibleIDs = computed(() => selected.value.filter(id => visibleChanges.value.some(change => change.id === id)))
+const selectableVisibleChanges = computed(() => visibleChanges.value.filter(change => change.change_type !== 'failed' && change.apply_status === 'pending'))
+const allVisibleSelected = computed(() => selectableVisibleChanges.value.length > 0 && selectableVisibleChanges.value.every(change => selected.value.includes(change.id)))
+const canSelectChanges = computed(() => selectableVisibleChanges.value.length > 0 && ['review_ready', 'partial_failed'].includes(activeScan.value?.status || ''))
 const canApplySelected = computed(() => selectedVisibleIDs.value.length > 0 && ['review_ready', 'partial_failed'].includes(activeScan.value?.status || ''))
 let timer: number | null = null
 
@@ -43,8 +46,15 @@ async function load() {
     const scanRes = await listWebCrawlScans(props.dataSourceId)
     scans.value = scanRes?.data || scanRes || []
     if (activeScan.value) {
-      const changeRes = await listWebCrawlChanges(activeScan.value.id, { limit: 200 })
-      changes.value = changeRes?.data || changeRes || []
+      const pageSize = 200
+      const allChanges: WebCrawlChange[] = []
+      for (let offset = 0; ; offset += pageSize) {
+        const changeRes = await listWebCrawlChanges(activeScan.value.id, { limit: pageSize, offset })
+        const page = changeRes?.data || changeRes || []
+        allChanges.push(...page)
+        if (page.length < pageSize) break
+      }
+      changes.value = allChanges
       missingActions.value = Object.fromEntries(changes.value.filter(c => c.change_type === 'missing').map(c => [c.id, c.action || 'keep']))
       selected.value = changes.value.filter(c => c.apply_status === 'pending' && c.change_type !== 'failed').map(c => c.id)
     }
@@ -63,10 +73,26 @@ async function checkUpdates() {
   finally { submitting.value = false }
 }
 async function applySelected() {
-  if (!activeScan.value || selected.value.length === 0) return
+  const ids = [...selectedVisibleIDs.value]
+  if (!activeScan.value || ids.length === 0 || !canApplySelected.value) return
+  const actions = { ...missingActions.value }
+  const dialog = DialogPlugin.confirm({
+    header: t('common.confirm'),
+    body: t('datasource.webCrawler.applyConfirm', { count: ids.length }),
+    confirmBtn: t('common.confirm'),
+    cancelBtn: t('common.cancel'),
+    onConfirm: async () => {
+      dialog.destroy()
+      await submitSelected(ids, actions)
+    },
+    onCancel: () => dialog.destroy(),
+  })
+}
+async function submitSelected(ids: string[], actions: Record<string, string>) {
+  if (!activeScan.value) return
   submitting.value = true
   try {
-    await applyWebCrawlChanges(activeScan.value.id, selectedVisibleIDs.value, missingActions.value)
+    await applyWebCrawlChanges(activeScan.value.id, ids, actions)
     MessagePlugin.success(t('datasource.webCrawler.applyStarted'))
     await load()
   } catch (e: any) { MessagePlugin.error(e?.message || t('datasource.webCrawler.applyFailed')) }
@@ -84,6 +110,14 @@ async function retryFailed() {
 function changeLabel(type: string) { return t(`datasource.webCrawler.change.${type}`) }
 function statusLabel(status?: string) { return status ? t(`datasource.webCrawler.status.${status}`) : '--' }
 function toggle(id: string) { selected.value = selected.value.includes(id) ? selected.value.filter(v => v !== id) : [...selected.value, id] }
+function toggleSelectAll() {
+  const ids = selectableVisibleChanges.value.map(change => change.id)
+  if (allVisibleSelected.value) {
+    selected.value = selected.value.filter(id => !ids.includes(id))
+  } else {
+    selected.value = Array.from(new Set([...selected.value, ...ids]))
+  }
+}
 function setFilter(filter: typeof activeFilter.value) { activeFilter.value = activeFilter.value === filter && filter !== 'all' ? 'all' : filter }
 watch(visible, v => { if (v) { load() } else stopPolling() })
 onBeforeUnmount(stopPolling)
@@ -122,14 +156,21 @@ onBeforeUnmount(stopPolling)
     </template>
     <div v-else class="web-crawl-empty">{{ t('datasource.webCrawler.noScan') }}</div>
     <template #footer>
-      <t-button variant="outline" :disabled="!changes.some(c => c.apply_status === 'failed')" :loading="submitting" @click="retryFailed">{{ t('datasource.webCrawler.retryFailed') }}</t-button>
-      <t-button theme="primary" :disabled="!canApplySelected" :loading="submitting" @click="applySelected">{{ t('datasource.webCrawler.applySelected', { count: selectedVisibleIDs.length }) }}</t-button>
+      <div class="web-crawl-footer">
+        <t-button variant="outline" :disabled="!canSelectChanges" @click="toggleSelectAll">{{ t(allVisibleSelected ? 'datasource.webCrawler.clearSelection' : 'datasource.webCrawler.selectAll') }}</t-button>
+        <div class="web-crawl-footer-actions">
+          <t-button variant="outline" :disabled="!changes.some(c => c.apply_status === 'failed')" :loading="submitting" @click="retryFailed">{{ t('datasource.webCrawler.retryFailed') }}</t-button>
+          <t-button theme="primary" :disabled="!canApplySelected" :loading="submitting" @click="applySelected">{{ t('datasource.webCrawler.applySelected', { count: selectedVisibleIDs.length }) }}</t-button>
+        </div>
+      </div>
     </template>
   </t-drawer>
 </template>
 
 <style scoped lang="less">
 .web-crawl-header { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; }
+.web-crawl-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; }
+.web-crawl-footer-actions { display:flex; align-items:center; gap:8px; }
 .web-crawl-loading { display:flex; justify-content:center; padding:80px 0; }
 .web-crawl-summary { display:flex; align-items:center; gap:10px; padding:12px 14px; margin-bottom:12px; background:var(--td-bg-color-container-hover); border-radius:8px; font-size:13px; color:var(--td-text-color-secondary); }
 .web-crawl-filters { display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
