@@ -21,6 +21,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/datasource"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/utils"
+	"github.com/andybalholm/cascadia"
 )
 
 const (
@@ -61,12 +62,14 @@ func (e *PageError) Error() string {
 }
 
 type Config struct {
-	SeedURLs        []string
-	AllowedHosts    []string
-	PathPrefixes    []string
-	ExcludePatterns []string
-	MaxPages        int
-	RespectRobots   bool
+	SeedURLs         []string
+	AllowedHosts     []string
+	PathPrefixes     []string
+	ExcludePatterns  []string
+	ContentSelector  string
+	ExcludeSelectors []string
+	MaxPages         int
+	RespectRobots    bool
 }
 
 type Connector struct{}
@@ -152,7 +155,16 @@ func ParseConfig(config *types.DataSourceConfig) (Config, error) {
 		return Config{}, fmt.Errorf("data source config is nil")
 	}
 	s := config.Settings
-	cfg := Config{SeedURLs: stringSlice(s["seed_urls"]), AllowedHosts: stringSlice(s["allowed_hosts"]), PathPrefixes: stringSlice(s["path_prefixes"]), ExcludePatterns: stringSlice(s["exclude_patterns"]), MaxPages: intValue(s["max_pages"], defaultMaxPages), RespectRobots: boolValue(s["respect_robots"], true)}
+	cfg := Config{
+		SeedURLs:         stringSlice(s["seed_urls"]),
+		AllowedHosts:     stringSlice(s["allowed_hosts"]),
+		PathPrefixes:     stringSlice(s["path_prefixes"]),
+		ExcludePatterns:  stringSlice(s["exclude_patterns"]),
+		ContentSelector:  stringValue(s["web_content_selector"]),
+		ExcludeSelectors: stringSlice(s["web_exclude_selectors"]),
+		MaxPages:         intValue(s["max_pages"], defaultMaxPages),
+		RespectRobots:    boolValue(s["respect_robots"], true),
+	}
 	for i, seed := range cfg.SeedURLs {
 		cfg.SeedURLs[i] = CanonicalURL(seed)
 	}
@@ -190,6 +202,16 @@ func ParseConfig(config *types.DataSourceConfig) (Config, error) {
 	for _, pattern := range cfg.ExcludePatterns {
 		if _, err := regexp.Compile(pattern); err != nil {
 			return Config{}, fmt.Errorf("invalid exclude pattern %q: %w", pattern, err)
+		}
+	}
+	if cfg.ContentSelector != "" {
+		if _, err := cascadia.Compile(cfg.ContentSelector); err != nil {
+			return Config{}, fmt.Errorf("invalid content CSS selector %q: %w", cfg.ContentSelector, err)
+		}
+	}
+	for _, selector := range cfg.ExcludeSelectors {
+		if _, err := cascadia.Compile(selector); err != nil {
+			return Config{}, fmt.Errorf("invalid exclude CSS selector %q: %w", selector, err)
 		}
 	}
 	return cfg, nil
@@ -246,7 +268,7 @@ func (c *Connector) Crawl(ctx context.Context, config *types.DataSourceConfig) (
 			failures = append(failures, &PageError{URL: canonical, SourceStatus: status, Err: fetchErr})
 			continue
 		}
-		page, links, extractErr := extractPage(body, canonical)
+		page, links, extractErr := extractPage(body, canonical, cfg)
 		if extractErr != nil {
 			failures = append(failures, &PageError{URL: canonical, SourceStatus: status, Err: extractErr})
 			continue
@@ -298,7 +320,7 @@ func fetchBody(ctx context.Context, client *http.Client, rawURL string, requireH
 	return body, resp.StatusCode, resp.Header, nil
 }
 
-func extractPage(body []byte, pageURL string) (Page, []string, error) {
+func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error) {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
 		return Page{}, nil, err
@@ -325,7 +347,13 @@ func extractPage(body []byte, pageURL string) (Page, []string, error) {
 	if title == "" {
 		title = strings.TrimSpace(doc.Find("title").First().Text())
 	}
-	contentDoc := doc.Find("main").First()
+	contentDoc := doc.Find(cfg.ContentSelector).First()
+	if cfg.ContentSelector != "" && contentDoc.Length() == 0 {
+		return Page{}, links, fmt.Errorf("content CSS selector %q did not match the page", cfg.ContentSelector)
+	}
+	if contentDoc.Length() == 0 {
+		contentDoc = doc.Find("main").First()
+	}
 	if contentDoc.Length() == 0 {
 		contentDoc = doc.Find("article").First()
 	}
@@ -339,6 +367,9 @@ func extractPage(body []byte, pageURL string) (Page, []string, error) {
 		return Page{}, links, fmt.Errorf("page has no readable body")
 	}
 	contentDoc.Find("script,style,noscript,nav,header,footer,aside,form").Remove()
+	for _, selector := range cfg.ExcludeSelectors {
+		contentDoc.Find(selector).Remove()
+	}
 	html, err := contentDoc.Html()
 	if err != nil {
 		return Page{}, links, err
@@ -531,6 +562,13 @@ func stringSlice(value interface{}) []string {
 	default:
 		return nil
 	}
+}
+
+func stringValue(value interface{}) string {
+	if value, ok := value.(string); ok {
+		return strings.TrimSpace(value)
+	}
+	return ""
 }
 
 func intValue(value interface{}, fallback int) int {

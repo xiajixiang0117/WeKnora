@@ -156,6 +156,8 @@ function hydrateWebCrawlerSettings(settings: Record<string, any>) {
     allowed_hosts: asText(settings.allowed_hosts),
     path_prefixes: asText(settings.path_prefixes),
     exclude_patterns: asText(settings.exclude_patterns),
+    web_content_selector: asText(settings.web_content_selector),
+    web_exclude_selectors: asText(settings.web_exclude_selectors),
   }
 }
 
@@ -1086,6 +1088,8 @@ function buildConfigPayload(): Record<string, unknown> {
     for (const key of ['seed_urls', 'allowed_hosts', 'path_prefixes', 'exclude_patterns']) {
       settings[key] = String(settings[key] || '').split(/[\n,]/).map(v => v.trim()).filter(Boolean)
     }
+    settings.web_content_selector = String(settings.web_content_selector || '').trim()
+    settings.web_exclude_selectors = String(settings.web_exclude_selectors || '').split(/[\n,]/).map(v => v.trim()).filter(Boolean)
     if (settings.max_pages !== undefined && settings.max_pages !== '') settings.max_pages = Number(settings.max_pages)
   }
   return {
@@ -1631,6 +1635,16 @@ const drawerConfirmText = computed(() => {
       <div class="form-item">
         <label class="form-label">{{ t('datasource.webCrawler.excludePatterns') }}</label>
         <t-input v-model="form.config.settings.exclude_patterns" :placeholder="t('datasource.webCrawler.excludePlaceholder')" />
+      </div>
+      <div class="form-item">
+        <label class="form-label">{{ t('datasource.webCrawler.contentSelector') }}</label>
+        <t-input v-model="form.config.settings.web_content_selector" :placeholder="t('datasource.webCrawler.contentSelectorPlaceholder')" />
+        <p class="form-desc">{{ t('datasource.webCrawler.contentSelectorHint') }}</p>
+      </div>
+      <div class="form-item">
+        <label class="form-label">{{ t('datasource.webCrawler.excludeSelectors') }}</label>
+        <t-input v-model="form.config.settings.web_exclude_selectors" :placeholder="t('datasource.webCrawler.excludeSelectorsPlaceholder')" />
+        <p class="form-desc">{{ t('datasource.webCrawler.excludeSelectorsHint') }}</p>
       </div>
       <div class="form-item web-crawler-options">
         <label class="form-label">{{ t('datasource.webCrawler.maxPages') }}</label>

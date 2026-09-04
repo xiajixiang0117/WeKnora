@@ -8,4 +8,7 @@ test('website crawler skips the empty credential step and configures scope in it
   assert.match(source, /function hasCredentialStep\(\)[\s\S]*?!isWebCrawlerConnector\(form\.value\.type\)/)
   assert.match(source, /v-if="step === 2 && isWebCrawlerConnector\(form\.type\)"/)
   assert.match(source, /<section v-if="hasCredentialStep\(\)" class="setting-drawer__section">/)
+	assert.match(source, /v-model="form\.config\.settings\.web_content_selector"/)
+	assert.match(source, /v-model="form\.config\.settings\.web_exclude_selectors"/)
+	assert.match(source, /settings\.web_content_selector = String\(settings\.web_content_selector \|\| ''\)\.trim\(\)/)
 })
