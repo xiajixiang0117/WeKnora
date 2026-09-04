@@ -350,7 +350,7 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 		}
 		resolved := base.ResolveReference(parsed)
 		canonical := CanonicalURL(resolved.String())
-		if canonical != "" && (resolved.Scheme == "http" || resolved.Scheme == "https") {
+		if canonical != "" && isCrawlableDocumentURL(resolved) && (resolved.Scheme == "http" || resolved.Scheme == "https") {
 			links = append(links, canonical)
 		}
 	})
@@ -407,6 +407,16 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 	}
 	hash := sha256.Sum256([]byte(markdown))
 	return Page{CanonicalURL: pageURL, Title: title, Content: markdown, ContentHash: hex.EncodeToString(hash[:])}, links, nil
+}
+
+func isCrawlableDocumentURL(u *url.URL) bool {
+	ext := strings.ToLower(path.Ext(u.Path))
+	switch ext {
+	case ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".css", ".js", ".map", ".woff", ".woff2", ".ttf", ".eot", ".pdf", ".zip", ".gz", ".tar", ".mp3", ".mp4", ".webm":
+		return false
+	default:
+		return true
+	}
 }
 
 func CanonicalURL(raw string) string {

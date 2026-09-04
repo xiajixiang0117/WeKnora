@@ -17,6 +17,16 @@ func TestCanonicalURL(t *testing.T) {
 	}
 }
 
+func TestExtractPageSkipsStaticAssetLinks(t *testing.T) {
+	page, links, err := extractPage([]byte(`<html><body><main><p>Docs</p><a href="guide.html">Guide</a><a href="_images/logo.png">Logo</a></main></body></html>`), "https://docs.example.com/docs/", Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Content == "" || len(links) != 1 || links[0] != "https://docs.example.com/docs/guide.html" {
+		t.Fatalf("links = %#v", links)
+	}
+}
+
 func TestCrawlTreatsPrefixSeedAsDirectory(t *testing.T) {
 	t.Setenv("SSRF_WHITELIST", "127.0.0.1,localhost")
 	utils.ResetSSRFWhitelistForTest()
