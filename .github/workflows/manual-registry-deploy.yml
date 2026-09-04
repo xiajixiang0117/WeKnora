@@ -1,0 +1,71 @@
+name: Deploy Pre-built Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Image tag to pull from Alibaba Cloud Container Registry.
+        required: true
+        type: string
+      image_prefix:
+        description: Full registry namespace without the service suffix.
+        required: true
+        default: crpi-4pzouvp8dkxkmnbw-vpc.cn-shanghai.personal.cr.aliyuncs.com/crpi-4pzouvp8dkxkmnbw
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shared-weknora-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Pull and deploy pre-built images
+    runs-on: [self-hosted, weknora-shared-server]
+    timeout-minutes: 30
+    environment: shared-server
+    steps:
+      - name: Validate deployment checkout
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          [ -n "$DEPLOY_PATH" ] || { echo "DEPLOY_PATH is not configured." >&2; exit 1; }
+          [ -x "$DEPLOY_PATH/deploy/registry-compose-deploy.sh" ] || {
+            echo "The registry deployment script is missing or is not executable." >&2
+            exit 1
+          }
+          [ -f "$DEPLOY_PATH/.env" ] || { echo "The deployment .env is missing." >&2; exit 1; }
+
+      - name: Login to Alibaba Cloud Container Registry
+        env:
+          ACR_REGISTRY: ${{ secrets.ACR_VPC_REGISTRY || secrets.ACR_REGISTRY }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [ -n "$ACR_REGISTRY" ] && [ -n "$ACR_USERNAME" ] && [ -n "$ACR_PASSWORD" ] || {
+            echo "ACR_REGISTRY, ACR_USERNAME, and ACR_PASSWORD are required." >&2
+            exit 1
+          }
+          printf '%s' "$ACR_PASSWORD" | docker login "$ACR_REGISTRY" \
+            --username "$ACR_USERNAME" --password-stdin
+
+      - name: Pull and update services
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          IMAGE_PREFIX: ${{ inputs.image_prefix }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          WEKNORA_IMAGE_PREFIX="$IMAGE_PREFIX" \
+            "$DEPLOY_PATH/deploy/registry-compose-deploy.sh" "$VERSION"
+
+      - name: Logout from Alibaba Cloud Container Registry
+        if: always()
+        env:
+          ACR_REGISTRY: ${{ secrets.ACR_VPC_REGISTRY || secrets.ACR_REGISTRY }}
+        run: |
+          if [ -n "${ACR_REGISTRY:-}" ]; then docker logout "$ACR_REGISTRY" || true; fi

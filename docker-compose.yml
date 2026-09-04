@@ -1,6 +1,6 @@
 services:
   frontend:
-    image: wechatopenai/weknora-ui:${WEKNORA_VERSION:-latest}
+    image: ${WEKNORA_IMAGE_PREFIX:-wechatopenai}/weknora-ui:${WEKNORA_VERSION:-latest}
     # Requires frontend/dist — run ./scripts/build_frontend_dist.sh before --build
     build:
       context: ./frontend
@@ -27,7 +27,7 @@ services:
     restart: unless-stopped
 
   app:
-    image: wechatopenai/weknora-app:${WEKNORA_VERSION:-latest}
+    image: ${WEKNORA_IMAGE_PREFIX:-wechatopenai}/weknora-app:${WEKNORA_VERSION:-latest}
     build:
       context: .
       dockerfile: docker/Dockerfile.app
@@ -389,7 +389,7 @@ services:
   # Sandbox 镜像：仅用于 build/pull，非常驻。Docker 沙箱默认关闭，需
   # WEKNORA_SANDBOX_DOCKER_ENABLED=true 并挂载 docker.sock 后，app 才会按会话创建容器。
   sandbox:
-    image: wechatopenai/weknora-sandbox:${WEKNORA_VERSION:-latest}
+    image: ${WEKNORA_IMAGE_PREFIX:-wechatopenai}/weknora-sandbox:${WEKNORA_VERSION:-latest}
     container_name: WeKnora-sandbox
     build:
       context: .
@@ -401,7 +401,7 @@ services:
     restart: "no"
 
   docreader:
-    image: wechatopenai/weknora-docreader:${WEKNORA_VERSION:-latest}
+    image: ${WEKNORA_IMAGE_PREFIX:-wechatopenai}/weknora-docreader:${WEKNORA_VERSION:-latest}
     build:
       context: .
       dockerfile: docker/Dockerfile.docreader

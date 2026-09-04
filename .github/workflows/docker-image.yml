@@ -1,6 +1,20 @@
 name: Build and Push Docker Image
 on:
   workflow_dispatch:
+    inputs:
+      registry:
+        description: Registry target.
+        required: true
+        default: dockerhub
+        type: choice
+        options:
+          - dockerhub
+          - acr
+      image_prefix:
+        description: Image namespace or full ACR prefix, without the service suffix.
+        required: true
+        default: wechatopenai
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,6 +27,7 @@ env:
 jobs:
   build-ui:
     runs-on: ubuntu-latest
+    environment: shared-server
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -40,16 +55,25 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
+        if: inputs.registry == 'dockerhub'
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
+      - name: Login to Alibaba Cloud Container Registry
+        if: inputs.registry == 'acr'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ secrets.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-ui
+          images: ${{ inputs.image_prefix }}/weknora-ui
 
       - name: Build ui Image
         uses: docker/build-push-action@v7
@@ -65,6 +89,7 @@ jobs:
 
   build-docreader:
     runs-on: ubuntu-latest
+    environment: shared-server
     steps:
       - name: Free Disk Space
         uses: jlumbroso/free-disk-space@main
@@ -89,16 +114,25 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
+        if: inputs.registry == 'dockerhub'
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
+      - name: Login to Alibaba Cloud Container Registry
+        if: inputs.registry == 'acr'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ secrets.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-docreader
+          images: ${{ inputs.image_prefix }}/weknora-docreader
 
       - name: Build docreader Image
         uses: docker/build-push-action@v7
@@ -113,7 +147,11 @@ jobs:
           cache-to: type=gha,scope=build-docreader,mode=max
 
   build-sandbox:
+    # The shared-server deployment does not run the optional sandbox service;
+    # keep ACR publishing focused on the three application images.
+    if: inputs.registry == 'dockerhub'
     runs-on: ubuntu-latest
+    environment: shared-server
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -122,16 +160,25 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
+        if: inputs.registry == 'dockerhub'
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
+      - name: Login to Alibaba Cloud Container Registry
+        if: inputs.registry == 'acr'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ secrets.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-sandbox
+          images: ${{ inputs.image_prefix }}/weknora-sandbox
 
       - name: Build sandbox Image
         uses: docker/build-push-action@v7
@@ -152,7 +199,7 @@ jobs:
         id: meta-cube
         uses: docker/metadata-action@v6
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-sandbox
+          images: ${{ inputs.image_prefix }}/weknora-sandbox
           flavor: |
             suffix=-cube,onlatest=true
 
@@ -182,6 +229,7 @@ jobs:
             platform: linux/arm64
             runs: ubuntu-24.04-arm
     runs-on: ${{ matrix.runs }}
+    environment: shared-server
     timeout-minutes: 60
     steps:
       - name: Checkout code
@@ -191,16 +239,25 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
+        if: inputs.registry == 'dockerhub'
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
+      - name: Login to Alibaba Cloud Container Registry
+        if: inputs.registry == 'acr'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ secrets.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-app
+          images: ${{ inputs.image_prefix }}/weknora-app
 
       - name: Prepare version info
         id: version
@@ -232,7 +289,7 @@ jobs:
             ${{ format('GO_VERSION_ARG={0}', steps.version.outputs.go_version) }}
             WITH_ANYDOC=1
           labels: ${{ steps.meta.outputs.labels }}
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-app
+          tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha,scope=build-app-${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,scope=build-app-${{ env.PLATFORM_PAIR }},mode=max
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
@@ -253,6 +310,7 @@ jobs:
 
   merge:
     runs-on: ubuntu-latest
+    environment: shared-server
     needs:
       - build-app
     steps:
@@ -264,10 +322,19 @@ jobs:
           merge-multiple: true
 
       - name: Login to Docker Hub
+        if: inputs.registry == 'dockerhub'
         uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Login to Alibaba Cloud Container Registry
+        if: inputs.registry == 'acr'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ secrets.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -276,14 +343,14 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/weknora-app
+          images: ${{ inputs.image_prefix }}/weknora-app
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ secrets.DOCKERHUB_USERNAME }}/weknora-app@sha256:%s ' *)
+            $(printf '${{ inputs.image_prefix }}/weknora-app@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ secrets.DOCKERHUB_USERNAME }}/weknora-app:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect ${{ inputs.image_prefix }}/weknora-app:${{ steps.meta.outputs.version }}

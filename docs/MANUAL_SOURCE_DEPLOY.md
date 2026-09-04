@@ -9,7 +9,14 @@ cd /home/ubuntu/WeKnora
 bash deploy/source-compose-deploy.sh main v1.3.0
 ```
 
-版本号必须是合法的 Docker image tag，会同时用于 `wechatopenai/weknora-ui`、`wechatopenai/weknora-app` 与 `wechatopenai/weknora-docreader` 的本地镜像标签。脚本会将实际分支、版本、commit 和部署时间记录到 `.ci/current-source-deployment.env`。
+版本号必须是合法的 Docker image tag。源码部署脚本会构建本地镜像；如果镜像已经由 CI 推送到 Registry，推荐改用只拉镜像的脚本：
+
+```sh
+export WEKNORA_IMAGE_PREFIX=crpi-4pzouvp8dkxkmnbw-vpc.cn-shanghai.personal.cr.aliyuncs.com/crpi-4pzouvp8dkxkmnbw
+bash deploy/registry-compose-deploy.sh v1.3.0
+```
+
+该脚本不会访问 GitHub 或执行本机构建，只拉取 `${WEKNORA_IMAGE_PREFIX}/weknora-ui`、`weknora-app`、`weknora-docreader` 的指定版本，并将部署信息记录到 `.ci/current-registry-deployment.env`。在 ACR 的 `crpi-4pzouvp8dkxkmnbw` 命名空间下，需要分别创建仓库 `weknora-ui`、`weknora-app`、`weknora-docreader`；服务器应使用只读 ACR 凭据执行 `docker login`。
 
 ## 一次性配置
 
@@ -41,6 +48,17 @@ PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 | Secret | 值 |
 | --- | --- |
 | `DEPLOY_PATH` | 服务器上的 Git 工作树路径，例如 `/home/ubuntu/WeKnora`。 |
+
+使用 ACR 预构建镜像部署时，还需配置以下 Environment secrets：
+
+| Secret | 值 |
+| --- | --- |
+| `ACR_REGISTRY` | `crpi-4pzouvp8dkxkmnbw.cn-shanghai.personal.cr.aliyuncs.com`（服务器在同一 VPC 时使用带 `-vpc` 的地址）。 |
+| `ACR_VPC_REGISTRY` | `crpi-4pzouvp8dkxkmnbw-vpc.cn-shanghai.personal.cr.aliyuncs.com`，服务器内网部署工作流优先使用。 |
+| `ACR_USERNAME` | ACR 登录用户名。 |
+| `ACR_PASSWORD` | ACR 访问凭据密码。 |
+
+先在 `Build and Push Docker Image` 工作流中选择 `acr`，将 `image_prefix` 填为公网 Registry 加命名空间，例如 `crpi-4pzouvp8dkxkmnbw.cn-shanghai.personal.cr.aliyuncs.com/crpi-4pzouvp8dkxkmnbw`。然后运行 `Deploy Pre-built Images`，使用带 `-vpc` 的前缀和同一个镜像版本。服务器只从 ACR 内网地址拉取三张应用镜像，不会从 GitHub 拉源码或下载构建依赖。
 
 现有 self-hosted runner 必须运行在这台服务器，并使用能访问该路径、GitHub `origin` 和 Docker daemon 的账户。此模式不需要 GHCR 推送或拉取凭据，也不需要 SSH 私钥。
 
