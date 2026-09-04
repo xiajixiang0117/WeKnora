@@ -59,7 +59,9 @@ RUN if [ -z "$TARGETARCH" ]; then \
         rm -f /app/${PROTOC_PACKAGE}; \
     else \
         echo "未发现本地protoc安装包，将进行在线安装"; \
-        curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v3.19.4/${PROTOC_PACKAGE} && \
+        curl --fail --location --retry 5 --retry-all-errors --retry-delay 3 \
+            --continue-at - --output "${PROTOC_PACKAGE}" \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v3.19.4/${PROTOC_PACKAGE}" && \
         unzip -o ${PROTOC_PACKAGE} -d /usr/local && \
         chmod +x /usr/local/bin/protoc && \
         rm -f ${PROTOC_PACKAGE}; \
