@@ -227,7 +227,7 @@ type WebCrawlPage struct {
 	LastAppliedAt      *time.Time `json:"last_applied_at"`
 	LastSeenScanID     string     `json:"last_seen_scan_id" gorm:"type:varchar(36);index"`
 	LastSeenAt         *time.Time `json:"last_seen_at"`
-	ETag               string     `json:"etag"`
+	ETag               string     `json:"etag" gorm:"column:etag"`
 	LastModified       string     `json:"last_modified"`
 	Status             string     `json:"status" gorm:"type:varchar(32);default:'active';index"`
 	CreatedAt          time.Time  `json:"created_at"`

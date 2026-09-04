@@ -197,7 +197,7 @@ func (s *DataSourceService) IgnoreWebCrawlChanges(ctx context.Context, scanID st
 	return nil
 }
 
-func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq.Task) error {
+func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq.Task) (processErr error) {
 	var payload types.WebCrawlScanPayload
 	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 		return err
@@ -206,6 +206,18 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if processErr == nil || scan == nil || scan.Status != types.WebCrawlScanStatusScanning {
+			return
+		}
+		scan.Status = types.WebCrawlScanStatusPartialFailed
+		scan.ErrorMessage = processErr.Error()
+		scan.FinishedAt = timePtr(time.Now().UTC())
+		scan.UpdatedAt = time.Now().UTC()
+		if err := s.webCrawlerRepo.UpdateScan(ctx, scan); err != nil {
+			logger.Errorf(ctx, "failed to mark web crawl scan %s as failed: %v", scan.ID, err)
+		}
+	}()
 	ds, err := s.GetDataSource(ctx, payload.DataSourceID)
 	if err != nil {
 		return err
@@ -216,10 +228,6 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 	}
 	pages, failures, crawlErr := webcrawler.NewConnector().Crawl(ctx, config)
 	if crawlErr != nil {
-		scan.Status = types.WebCrawlScanStatusPartialFailed
-		scan.ErrorMessage = crawlErr.Error()
-		scan.FinishedAt = timePtr(time.Now().UTC())
-		_ = s.webCrawlerRepo.UpdateScan(ctx, scan)
 		return crawlErr
 	}
 	baseline, err := s.webCrawlerRepo.ListPages(ctx, ds.ID)

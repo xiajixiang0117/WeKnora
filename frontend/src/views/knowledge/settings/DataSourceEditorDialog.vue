@@ -220,6 +220,9 @@ const driveRootLoaded = ref(false)
 const isDriveConnector = (type: string) => type === 'feishu_drive' || type === 'lark_drive'
 const isGitLabConnector = (type: string) => type === 'gitlab'
 const isWebCrawlerConnector = (type: string) => type === 'web_crawler'
+function hasCredentialStep() {
+  return !isWebCrawlerConnector(form.value.type)
+}
 
 interface GitLabProjectInput { project_id: string; ref: string; pathsText: string }
 const gitlabProjects = ref<GitLabProjectInput[]>([])
@@ -668,7 +671,9 @@ watch(visible, async (v) => {
     }
     return
   }
-  step.value = isEdit.value ? 1 : 0
+  step.value = isEdit.value
+    ? (props.dataSource?.type === 'web_crawler' ? 2 : 1)
+    : 0
   testResult.value = ''
   testErrorMsg.value = ''
   tempDsId.value = ''
@@ -788,7 +793,7 @@ function selectType(def: ConnectorDef) {
   form.value.config.credentials = {}
   if (isGitLabConnector(def.type)) addGitLabProject()
   rssAuthHeaders.value = []
-  step.value = 1
+  step.value = isWebCrawlerConnector(def.type) ? 2 : 1
 }
 
 // --- Test connection (stateless, no DB write) ---
@@ -1035,6 +1040,12 @@ async function nextStep() {
       return
     }
   }
+  if (step.value === 2 && isWebCrawlerConnector(form.value.type)) {
+    if (!String(form.value.config.settings.seed_urls || '').trim()) {
+      MessagePlugin.warning(t('datasource.webCrawler.seedRequired'))
+      return
+    }
+  }
   step.value++
   if (step.value === 2) {
     // Drive connectors need a user-supplied folder_token before listing.
@@ -1054,7 +1065,9 @@ async function nextStep() {
 }
 
 function prevStep() {
-  step.value--
+  step.value = isWebCrawlerConnector(form.value.type) && step.value === 2
+    ? 0
+    : step.value - 1
 }
 
 // Build the config payload for Create / Update requests.
@@ -1236,18 +1249,20 @@ function resourceRowState(id: string): CheckState {
   return checkStates.value.get(id) || 'unchecked'
 }
 
-const stepTitles = computed(() => [
-  t('datasource.step.selectType'),
-  t('datasource.step.credentials'),
-  t('datasource.step.resources'),
-  t('datasource.step.strategy'),
+const steps = computed(() => [
+  { value: 0, title: t('datasource.step.selectType') },
+  ...(hasCredentialStep() ? [{ value: 1, title: t('datasource.step.credentials') }] : []),
+  { value: 2, title: t('datasource.step.resources') },
+  { value: 3, title: t('datasource.step.strategy') },
 ])
 
 const drawerTitle = computed(() =>
   isEdit.value ? t('datasource.editTitle') : t('datasource.createTitle'),
 )
 
-const drawerDescription = computed(() => stepTitles.value[step.value] ?? '')
+const drawerDescription = computed(() =>
+  steps.value.find(item => item.value === step.value)?.title ?? '',
+)
 
 const drawerConfirmText = computed(() => {
   if (step.value === 3) {
@@ -1321,15 +1336,15 @@ const drawerConfirmText = computed(() => {
     <!-- Step indicator -->
     <div class="ds-steps">
       <div
-        v-for="(title, i) in stepTitles"
-        :key="i"
-        :class="['ds-step', { active: step === i, done: step > i }]"
+        v-for="(item, i) in steps"
+        :key="item.value"
+        :class="['ds-step', { active: step === item.value, done: step > item.value }]"
       >
         <span class="ds-step-num">
-          <t-icon v-if="step > i" name="check" class="ds-step-check" />
+          <t-icon v-if="step > item.value" name="check" class="ds-step-check" />
           <template v-else>{{ i + 1 }}</template>
         </span>
-        <span class="ds-step-title">{{ title }}</span>
+        <span class="ds-step-title">{{ item.title }}</span>
       </div>
     </div>
 
@@ -1457,33 +1472,7 @@ const drawerConfirmText = computed(() => {
         </div>
       </section>
 
-      <section v-if="isWebCrawlerConnector(form.type)" class="setting-drawer__section">
-        <h4 class="setting-drawer__section-title">{{ t('datasource.webCrawler.scopeTitle') }}</h4>
-        <div class="form-item">
-          <label class="form-label required">{{ t('datasource.webCrawler.seedUrls') }}</label>
-          <t-textarea v-model="form.config.settings.seed_urls" :placeholder="t('datasource.webCrawler.seedPlaceholder')" :autosize="{ minRows: 3, maxRows: 8 }" />
-          <p class="form-desc">{{ t('datasource.webCrawler.seedHint') }}</p>
-        </div>
-        <div class="form-item">
-          <label class="form-label">{{ t('datasource.webCrawler.allowedHosts') }}</label>
-          <t-input v-model="form.config.settings.allowed_hosts" :placeholder="t('datasource.webCrawler.allowedHostsPlaceholder')" />
-        </div>
-        <div class="form-item">
-          <label class="form-label">{{ t('datasource.webCrawler.pathPrefixes') }}</label>
-          <t-input v-model="form.config.settings.path_prefixes" :placeholder="t('datasource.webCrawler.pathPrefixesPlaceholder')" />
-        </div>
-        <div class="form-item">
-          <label class="form-label">{{ t('datasource.webCrawler.excludePatterns') }}</label>
-          <t-input v-model="form.config.settings.exclude_patterns" :placeholder="t('datasource.webCrawler.excludePlaceholder')" />
-        </div>
-        <div class="form-item web-crawler-options">
-          <label class="form-label">{{ t('datasource.webCrawler.maxPages') }}</label>
-          <t-input-number v-model="form.config.settings.max_pages" :min="1" :max="5000" />
-          <t-checkbox v-model="form.config.settings.respect_robots">{{ t('datasource.webCrawler.respectRobots') }}</t-checkbox>
-        </div>
-      </section>
-
-      <section class="setting-drawer__section">
+      <section v-if="hasCredentialStep()" class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ t('datasource.credentialsLabel') }}</h4>
 
         <div v-if="isEdit && credentialsConfigured && !replaceCredentialsMode" class="form-item">
@@ -1624,7 +1613,33 @@ const drawerConfirmText = computed(() => {
     </template>
 
     <!-- Step 2: Select resources -->
-    <section v-if="step === 2" class="setting-drawer__section ds-resource-section">
+    <section v-if="step === 2 && isWebCrawlerConnector(form.type)" class="setting-drawer__section ds-resource-section">
+      <h4 class="setting-drawer__section-title">{{ t('datasource.webCrawler.scopeTitle') }}</h4>
+      <div class="form-item">
+        <label class="form-label required">{{ t('datasource.webCrawler.seedUrls') }}</label>
+        <t-textarea v-model="form.config.settings.seed_urls" :placeholder="t('datasource.webCrawler.seedPlaceholder')" :autosize="{ minRows: 3, maxRows: 8 }" />
+        <p class="form-desc">{{ t('datasource.webCrawler.seedHint') }}</p>
+      </div>
+      <div class="form-item">
+        <label class="form-label">{{ t('datasource.webCrawler.allowedHosts') }}</label>
+        <t-input v-model="form.config.settings.allowed_hosts" :placeholder="t('datasource.webCrawler.allowedHostsPlaceholder')" />
+      </div>
+      <div class="form-item">
+        <label class="form-label">{{ t('datasource.webCrawler.pathPrefixes') }}</label>
+        <t-input v-model="form.config.settings.path_prefixes" :placeholder="t('datasource.webCrawler.pathPrefixesPlaceholder')" />
+      </div>
+      <div class="form-item">
+        <label class="form-label">{{ t('datasource.webCrawler.excludePatterns') }}</label>
+        <t-input v-model="form.config.settings.exclude_patterns" :placeholder="t('datasource.webCrawler.excludePlaceholder')" />
+      </div>
+      <div class="form-item web-crawler-options">
+        <label class="form-label">{{ t('datasource.webCrawler.maxPages') }}</label>
+        <t-input-number v-model="form.config.settings.max_pages" :min="1" :max="5000" />
+        <t-checkbox v-model="form.config.settings.respect_robots">{{ t('datasource.webCrawler.respectRobots') }}</t-checkbox>
+      </div>
+    </section>
+
+    <section v-else-if="step === 2" class="setting-drawer__section ds-resource-section">
       <template v-if="isGitLabConnector(form.type)">
         <h4 class="setting-drawer__section-title">{{ t('datasource.gitlab.projects') }}</h4>
         <p class="ds-resource-hint">{{ t('datasource.gitlab.projectsHint') }}</p>
@@ -1644,7 +1659,7 @@ const drawerConfirmText = computed(() => {
           <t-button variant="outline" @click="addGitLabProject"><template #icon><t-icon name="add" /></template>{{ t('datasource.gitlab.addProject') }}</t-button>
         </div>
       </template>
-      <template v-else-if="!isWebCrawlerConnector(form.type)">
+      <template v-else>
       <h4 class="setting-drawer__section-title">{{ t('datasource.step.resources') }}</h4>
       <p class="ds-resource-hint">{{ t('datasource.resourceHint') }}</p>
 
@@ -1807,10 +1822,6 @@ const drawerConfirmText = computed(() => {
         </div>
       </div>
       </template>
-      <div v-else class="ds-resource-empty">
-        <p class="ds-empty-title">{{ t('datasource.webCrawler.batchHintTitle') }}</p>
-        <p class="ds-empty-desc">{{ t('datasource.webCrawler.batchHint') }}</p>
-      </div>
     </section>
 
     <!-- Step 3: Sync strategy -->

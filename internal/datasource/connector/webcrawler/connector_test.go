@@ -17,6 +17,24 @@ func TestCanonicalURL(t *testing.T) {
 	}
 }
 
+func TestParseConfigUsesSeedDirectoryAsDefaultScope(t *testing.T) {
+	config, err := ParseConfig(&types.DataSourceConfig{Settings: map[string]interface{}{
+		"seed_urls": []string{"https://docs.sifli.com/projects/sdk/latest/sf32lb52x/quickstart/index.html"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(config.AllowedHosts) != 1 || config.AllowedHosts[0] != "docs.sifli.com" {
+		t.Fatalf("AllowedHosts = %#v", config.AllowedHosts)
+	}
+	if len(config.PathPrefixes) != 1 || config.PathPrefixes[0] != "/projects/sdk/latest/sf32lb52x/quickstart" {
+		t.Fatalf("PathPrefixes = %#v", config.PathPrefixes)
+	}
+	if config.MaxPages != defaultMaxPages || !config.RespectRobots {
+		t.Fatalf("defaults = max_pages=%d respect_robots=%t", config.MaxPages, config.RespectRobots)
+	}
+}
+
 func TestCrawlDiscoversPagesWithinScope(t *testing.T) {
 	t.Setenv("SSRF_WHITELIST", "127.0.0.1,localhost")
 	utils.ResetSSRFWhitelistForTest()

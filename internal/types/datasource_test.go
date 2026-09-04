@@ -3,10 +3,18 @@ package types
 import (
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"gorm.io/gorm/schema"
 )
+
+func TestWebCrawlPageETagUsesMigrationColumnName(t *testing.T) {
+	parsed, err := schema.Parse(&WebCrawlPage{}, &sync.Map{}, schema.NamingStrategy{})
+	assert.NoError(t, err)
+	assert.Equal(t, "etag", parsed.LookUpField("ETag").DBName)
+}
 
 func TestDataSourceConfig_ToJSON_EncryptsStringCredentials(t *testing.T) {
 	withAESKey(t, testAESKey32)
