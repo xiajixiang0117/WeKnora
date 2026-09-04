@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"codeberg.org/readeck/go-readability/v2"
 	htmltomd "github.com/JohannesKaufmann/html-to-markdown/v2"
@@ -355,9 +356,9 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 		}
 	})
 	links = uniqueSorted(links)
-	title := strings.TrimSpace(doc.Find("h1").First().Text())
+	title := cleanPageTitle(doc.Find("h1").First().Text())
 	if title == "" {
-		title = strings.TrimSpace(doc.Find("title").First().Text())
+		title = cleanPageTitle(doc.Find("title").First().Text())
 	}
 	contentDoc := doc.Find(cfg.ContentSelector).First()
 	if cfg.ContentSelector != "" && contentDoc.Length() == 0 {
@@ -407,6 +408,16 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 	}
 	hash := sha256.Sum256([]byte(markdown))
 	return Page{CanonicalURL: pageURL, Title: title, Content: markdown, ContentHash: hex.EncodeToString(hash[:])}, links, nil
+}
+
+func cleanPageTitle(title string) string {
+	title = strings.Map(func(r rune) rune {
+		if unicode.Is(unicode.Co, r) {
+			return -1
+		}
+		return r
+	}, title)
+	return strings.TrimSpace(title)
 }
 
 func isCrawlableDocumentURL(u *url.URL) bool {

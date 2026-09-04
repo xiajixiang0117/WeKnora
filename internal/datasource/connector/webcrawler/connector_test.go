@@ -27,6 +27,16 @@ func TestExtractPageSkipsStaticAssetLinks(t *testing.T) {
 	}
 }
 
+func TestExtractPageCleansPrivateUseCharactersFromTitle(t *testing.T) {
+	page, _, err := extractPage([]byte(`<html><head><title>Fallback title&#xf0c1;</title></head><body><main><h1>SiFli-SDK编程指南<span>&#xf0c1;</span></h1><p>Content</p></main></body></html>`), "https://docs.example.com/docs/", Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Title != "SiFli-SDK编程指南" {
+		t.Fatalf("Title = %q, want private-use anchor icon removed", page.Title)
+	}
+}
+
 func TestCrawlTreatsPrefixSeedAsDirectory(t *testing.T) {
 	t.Setenv("SSRF_WHITELIST", "127.0.0.1,localhost")
 	utils.ResetSSRFWhitelistForTest()
