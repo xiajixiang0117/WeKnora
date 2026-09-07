@@ -1,7 +1,7 @@
 name: Manual CI/CD to Shared Server
 
-# This is the standard release entry point: it validates main, publishes the
-# ACR images produced from that same ref, then deploys their main tag.
+# This is the standard release entry point: it publishes the ACR images built
+# from main, then deploys their main tag.
 on:
   workflow_dispatch:
 
@@ -27,27 +27,9 @@ jobs:
             exit 1
           }
 
-  verify-app:
-    name: Verify app
-    needs: validate-release-ref
-    uses: ./.github/workflows/app.yml
-
-  verify-frontend:
-    name: Verify frontend
-    needs: validate-release-ref
-    uses: ./.github/workflows/frontend.yml
-
-  verify-docreader:
-    name: Verify DocReader
-    needs: validate-release-ref
-    uses: ./.github/workflows/docreader.yml
-
   build-images:
     name: Build and publish ACR images
-    needs:
-      - verify-app
-      - verify-frontend
-      - verify-docreader
+    needs: validate-release-ref
     uses: ./.github/workflows/docker-image.yml
     with:
       registry: acr

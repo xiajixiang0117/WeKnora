@@ -2,10 +2,9 @@ name: DocReader
 
 on:
   workflow_dispatch:
-  workflow_call:
 
 concurrency:
-  group: weknora-docreader-verification-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
