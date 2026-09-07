@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -112,6 +113,57 @@ func TestProcessWebCrawlScanAdoptsAnAppliedKnowledgeWithoutBaseline(t *testing.T
 	assert.Equal(t, 1, scan.ItemsSkipped)
 }
 
+func TestProcessWebCrawlScanAdoptsExistingURLKnowledgeWithoutDataSourceMetadata(t *testing.T) {
+	t.Setenv("SSRF_WHITELIST", "127.0.0.1,localhost")
+	utils.ResetSSRFWhitelistForTest()
+	t.Cleanup(utils.ResetSSRFWhitelistForTest)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if r.URL.Path != "/root" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`<html><body><main><h1>Guide</h1><p>Content</p></main></body></html>`))
+	}))
+	defer server.Close()
+
+	const (
+		dataSourceID  = "datasource-1"
+		knowledgeID   = "knowledge-1"
+		knowledgeBase = "kb-1"
+	)
+	canonicalURL := server.URL + "/root"
+	ds := &types.DataSource{
+		ID:              dataSourceID,
+		TenantID:        1,
+		KnowledgeBaseID: knowledgeBase,
+		Type:            types.ConnectorTypeWebCrawler,
+		Config:          types.JSON(`{"settings":{"seed_urls":["` + server.URL + `/root/"],"max_pages":1,"respect_robots":false}}`),
+	}
+	scan := &types.WebCrawlScan{ID: "scan-1", DataSourceID: dataSourceID, Status: types.WebCrawlScanStatusScanning}
+	pages := &webCrawlStateRepo{scan: scan, pages: map[string]*types.WebCrawlPage{}}
+	knowledge := &types.Knowledge{ID: knowledgeID, Type: "url", Source: canonicalURL, FolderPath: ""}
+	svc := &DataSourceService{
+		dsRepo:         &webCrawlTestDataSourceRepo{ds: ds},
+		webCrawlerRepo: pages,
+		knowledgeService: &webCrawlBaselineKnowledgeService{repo: &webCrawlBaselineKnowledgeRepo{
+			sourceKnowledge: knowledge,
+		}},
+	}
+
+	payload, err := json.Marshal(types.WebCrawlScanPayload{DataSourceID: dataSourceID, ScanID: scan.ID})
+	require.NoError(t, err)
+	require.NoError(t, svc.ProcessWebCrawlScan(context.Background(), asynq.NewTask(types.TypeWebCrawlScan, payload)))
+
+	assert.Empty(t, pages.changes, "an existing URL knowledge item must not reappear as added")
+	page := pages.pages[canonicalURL]
+	require.NotNil(t, page)
+	assert.Equal(t, knowledgeID, page.KnowledgeID)
+	assert.NotEmpty(t, page.LastAppliedHash)
+	assert.Equal(t, 1, scan.ItemsSkipped)
+}
+
 type webCrawlStateRepo struct {
 	interfaces.WebCrawlerRepository
 	scan    *types.WebCrawlScan
@@ -159,13 +211,20 @@ func (r *webCrawlStateRepo) UpdateScan(context.Context, *types.WebCrawlScan) err
 
 type webCrawlBaselineKnowledgeRepo struct {
 	interfaces.KnowledgeRepository
-	knowledge *types.Knowledge
+	knowledge       *types.Knowledge
+	sourceKnowledge *types.Knowledge
 }
 
 func (r *webCrawlBaselineKnowledgeRepo) FindByDataSourceExternalID(
 	context.Context, uint64, string, string, string,
 ) (*types.Knowledge, error) {
 	return r.knowledge, nil
+}
+
+func (r *webCrawlBaselineKnowledgeRepo) CheckKnowledgeExists(
+	context.Context, uint64, string, *types.KnowledgeCheckParams,
+) (bool, *types.Knowledge, error) {
+	return r.sourceKnowledge != nil, r.sourceKnowledge, nil
 }
 
 type webCrawlBaselineKnowledgeService struct {
@@ -175,4 +234,94 @@ type webCrawlBaselineKnowledgeService struct {
 
 func (s *webCrawlBaselineKnowledgeService) GetRepository() interfaces.KnowledgeRepository {
 	return s.repo
+}
+
+func TestApplyWebCrawlChangeRebuildsLegacyURLKnowledge(t *testing.T) {
+	const (
+		dataSourceID  = "datasource-1"
+		knowledgeBase = "kb-1"
+		canonicalURL  = "https://docs.example.com/guide.html"
+		legacyID      = "knowledge-legacy"
+	)
+	legacy := &types.Knowledge{ID: legacyID, Type: "url", Source: canonicalURL}
+	knowledgeRepo := &webCrawlApplyKnowledgeRepo{live: map[string]*types.Knowledge{legacy.ID: legacy}}
+	knowledgeService := &webCrawlApplyKnowledgeService{repo: knowledgeRepo}
+	page := &types.WebCrawlPage{ID: "page-1", DataSourceID: dataSourceID, CanonicalURL: canonicalURL, KnowledgeID: legacyID}
+	pages := &webCrawlStateRepo{pages: map[string]*types.WebCrawlPage{canonicalURL: page}}
+	svc := &DataSourceService{webCrawlerRepo: pages, knowledgeService: knowledgeService}
+	ds := &types.DataSource{ID: dataSourceID, TenantID: 1, KnowledgeBaseID: knowledgeBase, Type: types.ConnectorTypeWebCrawler}
+	change := &types.WebCrawlChange{
+		CanonicalURL: canonicalURL,
+		ChangeType:   types.WebCrawlChangeUpdated,
+		Title:        "Guide",
+		NewContent:   "# Latest guide",
+		NewHash:      "latest-hash",
+	}
+
+	require.NoError(t, svc.applyWebCrawlChange(context.Background(), ds, change, nil))
+
+	assert.Equal(t, []string{"delete:" + legacyID, "create:Guide.md"}, knowledgeService.events)
+	assert.Equal(t, []string{legacyID}, knowledgeRepo.hardDeleted)
+	require.Len(t, knowledgeRepo.live, 1, "the updated page must replace, not duplicate, the legacy knowledge")
+	assert.NotNil(t, knowledgeRepo.live["knowledge-rebuilt"])
+	assert.Equal(t, "knowledge-rebuilt", page.KnowledgeID)
+	assert.Equal(t, "latest-hash", page.LastAppliedHash)
+}
+
+type webCrawlApplyKnowledgeRepo struct {
+	interfaces.KnowledgeRepository
+	live        map[string]*types.Knowledge
+	hardDeleted []string
+}
+
+func (r *webCrawlApplyKnowledgeRepo) FindByDataSourceExternalID(
+	context.Context, uint64, string, string, string,
+) (*types.Knowledge, error) {
+	return nil, nil
+}
+
+func (r *webCrawlApplyKnowledgeRepo) CheckKnowledgeExists(
+	_ context.Context, _ uint64, _ string, params *types.KnowledgeCheckParams,
+) (bool, *types.Knowledge, error) {
+	for _, knowledge := range r.live {
+		if knowledge.Type == "url" && knowledge.Source == params.URL {
+			return true, knowledge, nil
+		}
+	}
+	return false, nil, nil
+}
+
+func (r *webCrawlApplyKnowledgeRepo) HardDeleteKnowledge(_ context.Context, _ uint64, id string) error {
+	r.hardDeleted = append(r.hardDeleted, id)
+	delete(r.live, id)
+	return nil
+}
+
+func (r *webCrawlApplyKnowledgeRepo) UpdateKnowledge(context.Context, *types.Knowledge) error {
+	return nil
+}
+
+type webCrawlApplyKnowledgeService struct {
+	interfaces.KnowledgeService
+	repo   *webCrawlApplyKnowledgeRepo
+	events []string
+}
+
+func (s *webCrawlApplyKnowledgeService) GetRepository() interfaces.KnowledgeRepository {
+	return s.repo
+}
+
+func (s *webCrawlApplyKnowledgeService) DeleteKnowledge(_ context.Context, id string) error {
+	s.events = append(s.events, "delete:"+id)
+	return nil
+}
+
+func (s *webCrawlApplyKnowledgeService) CreateKnowledgeFromFile(
+	_ context.Context, _ string, _ *multipart.FileHeader, _ map[string]string, _ *bool,
+	customFileName string, _ []string, _ string, _ *types.KnowledgeProcessOverrides,
+) (*types.Knowledge, error) {
+	s.events = append(s.events, "create:"+customFileName)
+	knowledge := &types.Knowledge{ID: "knowledge-rebuilt"}
+	s.repo.live[knowledge.ID] = knowledge
+	return knowledge, nil
 }

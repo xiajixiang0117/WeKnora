@@ -1309,6 +1309,20 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		// external IDs from two data sources cannot collide or overwrite each
 		// other during updates.
 		existing, err := repo.FindByDataSourceExternalID(ctx, ds.TenantID, ds.KnowledgeBaseID, ds.ID, item.ExternalID)
+		// Web crawls may adopt an older URL import which predates crawler
+		// metadata. Its canonical URL is the same identity used by normal URL
+		// imports, so replace it through the standard delete-and-rebuild path.
+		if err == nil && existing == nil && ds.Type == types.ConnectorTypeWebCrawler && item.URL != "" {
+			exists, urlKnowledge, urlErr := repo.CheckKnowledgeExists(ctx, ds.TenantID, ds.KnowledgeBaseID, &types.KnowledgeCheckParams{
+				Type: "url",
+				URL:  item.URL,
+			})
+			if urlErr != nil {
+				logger.Warnf(ctx, "failed to check existing URL knowledge for source=%s: %v", item.URL, urlErr)
+			} else if exists {
+				existing = urlKnowledge
+			}
+		}
 		if err != nil {
 			logger.Warnf(ctx, "failed to check existing knowledge for external_id=%s: %v", item.ExternalID, err)
 			// Non-fatal: proceed with creation (may produce duplicate)

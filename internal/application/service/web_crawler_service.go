@@ -244,9 +244,7 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 		}
 		if existing == nil {
 			existing = &types.WebCrawlPage{DataSourceID: ds.ID, CanonicalURL: page.CanonicalURL, Title: page.Title, Status: "active", LastSeenScanID: scan.ID, LastSeenAt: &now, ETag: page.ETag, LastModified: page.LastModified}
-			knowledge, knowledgeErr := s.knowledgeService.GetRepository().FindByDataSourceExternalID(
-				ctx, ds.TenantID, ds.KnowledgeBaseID, ds.ID, page.CanonicalURL,
-			)
+			knowledge, knowledgeErr := s.findWebCrawlKnowledge(ctx, ds, page.CanonicalURL)
 			if knowledgeErr != nil {
 				return knowledgeErr
 			}
@@ -352,13 +350,30 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 }
 
 func (s *DataSourceService) webCrawlKnowledgeNeedsRefresh(ctx context.Context, ds *types.DataSource, page webcrawler.Page) (bool, error) {
-	knowledge, err := s.knowledgeService.GetRepository().FindByDataSourceExternalID(
-		ctx, ds.TenantID, ds.KnowledgeBaseID, ds.ID, page.CanonicalURL,
-	)
+	knowledge, err := s.findWebCrawlKnowledge(ctx, ds, page.CanonicalURL)
 	if err != nil {
 		return false, err
 	}
 	return webCrawlKnowledgeNeedsRefresh(knowledge, page), nil
+}
+
+// findWebCrawlKnowledge resolves a crawled page to its existing knowledge item.
+// Older URL imports do not have crawler metadata, so fall back to the URL's
+// normal duplicate identity, always scoped to the same tenant and knowledge base.
+func (s *DataSourceService) findWebCrawlKnowledge(ctx context.Context, ds *types.DataSource, canonicalURL string) (*types.Knowledge, error) {
+	repo := s.knowledgeService.GetRepository()
+	knowledge, err := repo.FindByDataSourceExternalID(ctx, ds.TenantID, ds.KnowledgeBaseID, ds.ID, canonicalURL)
+	if err != nil || knowledge != nil {
+		return knowledge, err
+	}
+	exists, knowledge, err := repo.CheckKnowledgeExists(ctx, ds.TenantID, ds.KnowledgeBaseID, &types.KnowledgeCheckParams{
+		Type: "url",
+		URL:  canonicalURL,
+	})
+	if err != nil || !exists {
+		return nil, err
+	}
+	return knowledge, nil
 }
 
 func webCrawlKnowledgeNeedsRefresh(knowledge *types.Knowledge, page webcrawler.Page) bool {
@@ -491,7 +506,7 @@ func (s *DataSourceService) applyWebCrawlChange(ctx context.Context, ds *types.D
 	page.LastAppliedContent = change.NewContent
 	page.LastAppliedAt = timePtr(time.Now().UTC())
 	page.Status = "active"
-	if knowledge, findErr := s.knowledgeService.GetRepository().FindByDataSourceExternalID(ctx, ds.TenantID, ds.KnowledgeBaseID, ds.ID, change.CanonicalURL); findErr == nil && knowledge != nil {
+	if knowledge, findErr := s.findWebCrawlKnowledge(ctx, ds, change.CanonicalURL); findErr == nil && knowledge != nil {
 		page.KnowledgeID = knowledge.ID
 	}
 	page.UpdatedAt = time.Now().UTC()
