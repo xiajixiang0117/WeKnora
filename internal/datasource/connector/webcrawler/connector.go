@@ -597,7 +597,7 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 			return Page{}, links, err
 		}
 	}
-	markdown = strings.TrimSpace(markdown)
+	markdown = strings.TrimSpace(removePrivateUseCharacters(markdown))
 	if markdown == "" {
 		return Page{}, links, fmt.Errorf("page content is empty")
 	}
@@ -659,13 +659,19 @@ func resolveImageSources(doc *goquery.Document, base *url.URL) {
 }
 
 func cleanPageTitle(title string) string {
-	title = strings.Map(func(r rune) rune {
+	return strings.TrimSpace(removePrivateUseCharacters(title))
+}
+
+// removePrivateUseCharacters drops presentation-only glyphs embedded by some
+// documentation themes (for example, Font Awesome's private-use anchor icon).
+// Those glyphs have no textual meaning after HTML is converted to Markdown.
+func removePrivateUseCharacters(text string) string {
+	return strings.Map(func(r rune) rune {
 		if unicode.Is(unicode.Co, r) {
 			return -1
 		}
 		return r
-	}, title)
-	return strings.TrimSpace(title)
+	}, text)
 }
 
 func isCrawlableDocumentURL(u *url.URL) bool {

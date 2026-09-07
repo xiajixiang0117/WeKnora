@@ -103,6 +103,19 @@ func TestExtractPageCleansPrivateUseCharactersFromTitle(t *testing.T) {
 	}
 }
 
+func TestExtractPageCleansPrivateUseCharactersFromContent(t *testing.T) {
+	page, _, err := extractPage([]byte(`<html><body><main><h1>register.h</h1><p>__CM33_REV<span>&#xf0c1;</span></p><p>__SAUREGION_PRESENT<span>&#xf0c1;</span></p></main></body></html>`), "https://docs.example.com/docs/register.html", Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(page.Content, "\uf0c1") {
+		t.Fatalf("Content retained a private-use icon: %q", page.Content)
+	}
+	if !strings.Contains(page.Content, "CM33") || !strings.Contains(page.Content, "SAUREGION") {
+		t.Fatalf("Content lost document text: %q", page.Content)
+	}
+}
+
 func TestExtractPageRemovesHeadingAnchorLinksFromMarkdown(t *testing.T) {
 	page, _, err := extractPage([]byte(`<html><body><main><h1>SiFli-SDK编程指南<a class="headerlink" href="#sifli-sdk" title="Link to this heading">&#xf0c1;</a></h1><p>Content</p></main></body></html>`), "https://docs.example.com/docs/", Config{})
 	if err != nil {
