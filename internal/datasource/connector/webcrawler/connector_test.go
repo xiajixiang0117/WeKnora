@@ -93,6 +93,47 @@ func TestExtractPageResolvesImagesRelativeToPrefixSeedDirectory(t *testing.T) {
 	}
 }
 
+func TestExtractPageResolvesNavigableLinksBeforeMarkdownConversion(t *testing.T) {
+	pageURL := "https://docs.sifli.com/projects/sdk/latest/sf32lb52x/audio/mic.html"
+	page, _, err := extractPage([]byte(`<html><body><main>
+		<a href="../tools/SiFli_EQ/SiFli_EQ_UM.html">SiFli_EQ</a>
+		<a href="/projects/sdk/latest/sf32lb52x/app_development/create_board.html?tab=quickstart#install">创建板子</a>
+		<a href="#gain">本页增益说明</a>
+		<a href="https://example.org/guide">外部指南</a>
+		<a href="mailto:help@example.org">联系支持</a>
+		<a href="javascript:alert(1)">不安全链接</a>
+	</main></body></html>`), pageURL, Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"https://docs.sifli.com/projects/sdk/latest/sf32lb52x/tools/SiFli_EQ/SiFli_EQ_UM.html",
+		"https://docs.sifli.com/projects/sdk/latest/sf32lb52x/app_development/create_board.html?tab=quickstart#install",
+		pageURL + "#gain",
+		"https://example.org/guide",
+		"mailto:help@example.org",
+		"javascript:alert",
+	} {
+		if !strings.Contains(page.Content, want) {
+			t.Fatalf("Content = %q, want link URL %q", page.Content, want)
+		}
+	}
+	if strings.Contains(page.Content, "](../tools/") || strings.Contains(page.Content, "](#gain)") {
+		t.Fatalf("Content retained a relative link: %q", page.Content)
+	}
+}
+
+func TestExtractPageResolvesLinksUsingHTMLBaseHref(t *testing.T) {
+	page, _, err := extractPage([]byte(`<html><head><base href="https://docs.example.com/reference/v2/"></head><body><main><a href="api.html">API</a></main></body></html>`), "https://docs.example.com/guides/start.html", Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "https://docs.example.com/reference/v2/api.html"
+	if !strings.Contains(page.Content, want) {
+		t.Fatalf("Content = %q, want link URL %q", page.Content, want)
+	}
+}
+
 func TestExtractPageCleansPrivateUseCharactersFromTitle(t *testing.T) {
 	page, _, err := extractPage([]byte(`<html><head><title>Fallback title&#xf0c1;</title></head><body><main><h1>SiFli-SDK编程指南<span>&#xf0c1;</span></h1><p>Content</p></main></body></html>`), "https://docs.example.com/docs/", Config{})
 	if err != nil {

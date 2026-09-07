@@ -533,6 +533,7 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 			}
 		}
 	}
+	base = resolveHTMLBaseURL(doc, base)
 	resolveImageSources(doc, base)
 	doc.Find("a[href]").Each(func(_ int, selection *goquery.Selection) {
 		href, ok := selection.Attr("href")
@@ -578,6 +579,7 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 		contentDoc.Find(selector).Remove()
 	}
 	removeHeadingAnchorLinks(contentDoc)
+	resolveLinkHrefs(doc, base)
 	html, err := contentDoc.Html()
 	if err != nil {
 		return Page{}, links, err
@@ -639,23 +641,77 @@ func resolveImageSources(doc *goquery.Document, base *url.URL) {
 		if src == "" || strings.HasPrefix(src, "#") {
 			return
 		}
-		parsed, err := url.Parse(src)
-		if err != nil {
-			return
-		}
-		resolved := parsed
-		if !parsed.IsAbs() {
-			resolved = base.ResolveReference(parsed)
-		}
-		if resolved == nil || resolved.Hostname() == "" {
-			return
-		}
-		resolved.Scheme = strings.ToLower(resolved.Scheme)
-		if resolved.Scheme != "http" && resolved.Scheme != "https" {
+		resolved := resolveHTTPReference(src, base)
+		if resolved == nil {
 			return
 		}
 		selection.SetAttr("src", resolved.String())
 	})
+}
+
+// resolveLinkHrefs makes navigable links self-contained before HTML is
+// converted to Markdown. A relative Markdown link would otherwise be resolved
+// against the WeKnora preview URL instead of the source page it came from.
+// Non-HTTP(S) links such as mailto: and tel: are already self-contained and
+// remain unchanged.
+func resolveLinkHrefs(doc *goquery.Document, base *url.URL) {
+	if doc == nil || base == nil {
+		return
+	}
+	doc.Find("a[href]").Each(func(_ int, selection *goquery.Selection) {
+		raw, ok := selection.Attr("href")
+		if !ok {
+			return
+		}
+		href := strings.TrimSpace(raw)
+		if href == "" {
+			return
+		}
+		resolved := resolveHTTPReference(href, base)
+		if resolved == nil {
+			return
+		}
+		selection.SetAttr("href", resolved.String())
+	})
+}
+
+// resolveHTMLBaseURL returns the URL browser would use as the document base.
+// A valid HTML <base href> takes precedence over the crawled page URL.
+func resolveHTMLBaseURL(doc *goquery.Document, pageBase *url.URL) *url.URL {
+	if doc == nil || pageBase == nil {
+		return pageBase
+	}
+	raw, ok := doc.Find("base[href]").First().Attr("href")
+	if !ok {
+		return pageBase
+	}
+	resolved := resolveHTTPReference(strings.TrimSpace(raw), pageBase)
+	if resolved == nil {
+		return pageBase
+	}
+	return resolved
+}
+
+func resolveHTTPReference(raw string, base *url.URL) *url.URL {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return nil
+	}
+	resolved := parsed
+	if !parsed.IsAbs() {
+		if base == nil {
+			return nil
+		}
+		resolved = base.ResolveReference(parsed)
+	}
+	if resolved == nil || resolved.Hostname() == "" {
+		return nil
+	}
+	resolved.Scheme = strings.ToLower(resolved.Scheme)
+	if resolved.Scheme != "http" && resolved.Scheme != "https" {
+		return nil
+	}
+	return resolved
 }
 
 func cleanPageTitle(title string) string {

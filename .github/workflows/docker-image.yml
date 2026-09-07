@@ -10,9 +10,15 @@ on:
         options:
           - dockerhub
           - acr
+  workflow_call:
+    inputs:
+      registry:
+        description: Registry target.
+        required: true
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: weknora-image-build-${{ github.ref }}
   cancel-in-progress: false
 
 env:
