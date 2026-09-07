@@ -144,7 +144,7 @@ func (c *Connector) FetchAll(ctx context.Context, config *types.DataSourceConfig
 			"content_hash": p.ContentHash,
 			"status_code":  fmt.Sprintf("%d", p.StatusCode),
 		}
-		items = append(items, types.FetchedItem{ExternalID: p.CanonicalURL, Title: p.Title, Content: []byte(p.Content), ContentType: "text/markdown", FileName: crawlerFileName(p), URL: p.CanonicalURL, UpdatedAt: time.Now().UTC(), Metadata: metadata})
+		items = append(items, types.FetchedItem{ExternalID: p.CanonicalURL, Title: p.Title, Content: []byte(p.Content), ContentType: "text/markdown", FileName: FileNameForPage(p), URL: p.CanonicalURL, UpdatedAt: time.Now().UTC(), Metadata: metadata})
 	}
 	if len(failures) > 0 {
 		details := make([]string, 0, len(failures))
@@ -304,7 +304,10 @@ func (c *Connector) Crawl(ctx context.Context, config *types.DataSourceConfig) (
 	return pages, failures, nil
 }
 
-func crawlerFileName(page Page) string {
+// FileNameForPage returns the path-qualified filename used when a crawled page
+// is stored. The page title is a filename segment, not part of FolderPath, so
+// it must be sanitized before joining it to the crawler-derived directory.
+func FileNameForPage(page Page) string {
 	name := safeFileName(page.Title) + ".md"
 	if page.FolderPath == "" {
 		return name

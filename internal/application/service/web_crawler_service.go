@@ -489,10 +489,7 @@ func (s *DataSourceService) applyWebCrawlChange(ctx context.Context, ds *types.D
 	if change.NewContent == "" {
 		return errors.New("change has no captured content")
 	}
-	fileName := change.Title + ".md"
-	if change.FolderPath != "" {
-		fileName = change.FolderPath + "/" + fileName
-	}
+	fileName := webcrawler.FileNameForPage(webcrawler.Page{Title: change.Title, FolderPath: change.FolderPath})
 	item := &types.FetchedItem{ExternalID: change.CanonicalURL, Title: change.Title, Content: []byte(change.NewContent), ContentType: "text/markdown", FileName: fileName, URL: change.CanonicalURL, Metadata: map[string]string{"channel": types.ChannelWeb, "source_type": "url", "content_hash": change.NewHash}}
 	_, err := s.ingestItem(withKBActivitySuppressed(ctx), ds, item, nil)
 	if err != nil {

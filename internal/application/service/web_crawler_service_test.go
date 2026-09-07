@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Tencent/WeKnora/internal/datasource/connector/webcrawler"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 	"github.com/Tencent/WeKnora/internal/utils"
@@ -253,19 +254,24 @@ func TestApplyWebCrawlChangeRebuildsLegacyURLKnowledge(t *testing.T) {
 	change := &types.WebCrawlChange{
 		CanonicalURL: canonicalURL,
 		ChangeType:   types.WebCrawlChangeUpdated,
-		Title:        "Guide",
+		Title:        "GATT over BR/EDR",
+		FolderPath:   "middleware",
 		NewContent:   "# Latest guide",
 		NewHash:      "latest-hash",
 	}
 
 	require.NoError(t, svc.applyWebCrawlChange(context.Background(), ds, change, nil))
 
-	assert.Equal(t, []string{"delete:" + legacyID, "create:Guide.md"}, knowledgeService.events)
+	assert.Equal(t, []string{"delete:" + legacyID, "create:middleware/GATT-over-BR-EDR.md"}, knowledgeService.events)
 	assert.Equal(t, []string{legacyID}, knowledgeRepo.hardDeleted)
 	require.Len(t, knowledgeRepo.live, 1, "the updated page must replace, not duplicate, the legacy knowledge")
 	assert.NotNil(t, knowledgeRepo.live["knowledge-rebuilt"])
 	assert.Equal(t, "knowledge-rebuilt", page.KnowledgeID)
 	assert.Equal(t, "latest-hash", page.LastAppliedHash)
+	assert.False(t, webCrawlKnowledgeNeedsRefresh(knowledgeRepo.live["knowledge-rebuilt"], webcrawler.Page{
+		CanonicalURL: canonicalURL,
+		FolderPath:   change.FolderPath,
+	}), "an applied page with an unchanged hash must not reappear due to a title slash")
 }
 
 type webCrawlApplyKnowledgeRepo struct {
@@ -321,7 +327,8 @@ func (s *webCrawlApplyKnowledgeService) CreateKnowledgeFromFile(
 	customFileName string, _ []string, _ string, _ *types.KnowledgeProcessOverrides,
 ) (*types.Knowledge, error) {
 	s.events = append(s.events, "create:"+customFileName)
-	knowledge := &types.Knowledge{ID: "knowledge-rebuilt"}
+	folderPath, _ := types.SplitKnowledgeRelativePath(customFileName)
+	knowledge := &types.Knowledge{ID: "knowledge-rebuilt", FolderPath: folderPath}
 	s.repo.live[knowledge.ID] = knowledge
 	return knowledge, nil
 }
