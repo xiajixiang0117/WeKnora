@@ -39,6 +39,21 @@ func TestAssignFolderPathsWithRootScope(t *testing.T) {
 	}
 }
 
+func TestAssignFolderPathsUsesSeedRootInsteadOfBroaderCrawlScope(t *testing.T) {
+	pages := []Page{
+		{CanonicalURL: "https://docs.example.com/projects/sdk/latest/sf32lb52x/", Title: "SDK"},
+		{CanonicalURL: "https://docs.example.com/projects/sdk/latest/sf32lb52x/quickstart/index.html", Title: "快速入门"},
+		{CanonicalURL: "https://docs.example.com/projects/sdk/latest/sf32lb52x/quickstart/windows.html", Title: "Windows 安装流程"},
+	}
+	assignFolderPaths(pages, Config{
+		SeedURLs:     []string{"https://docs.example.com/projects/sdk/latest/sf32lb52x/"},
+		PathPrefixes: []string{"/"},
+	})
+	if pages[2].FolderPath != "快速入门" {
+		t.Fatalf("folder = %q, want a path relative to the seed URL", pages[2].FolderPath)
+	}
+}
+
 func TestCanonicalURL(t *testing.T) {
 	got := CanonicalURL("HTTPS://Docs.Example.COM/a/../guide/?utm_source=x&keep=1#part")
 	if got != "https://docs.example.com/guide?keep=1" {
@@ -85,6 +100,31 @@ func TestExtractPageCleansPrivateUseCharactersFromTitle(t *testing.T) {
 	}
 	if page.Title != "SiFli-SDK编程指南" {
 		t.Fatalf("Title = %q, want private-use anchor icon removed", page.Title)
+	}
+}
+
+func TestExtractPageRemovesHeadingAnchorLinksFromMarkdown(t *testing.T) {
+	page, _, err := extractPage([]byte(`<html><body><main><h1>SiFli-SDK编程指南<a class="headerlink" href="#sifli-sdk" title="Link to this heading">&#xf0c1;</a></h1><p>Content</p></main></body></html>`), "https://docs.example.com/docs/", Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(page.Content, "Link to this heading") || strings.Contains(page.Content, "[\uf0c1]") {
+		t.Fatalf("Content retained a heading anchor: %q", page.Content)
+	}
+	if !strings.Contains(page.Content, "SiFli-SDK编程指南") {
+		t.Fatalf("Content lost the heading text: %q", page.Content)
+	}
+}
+
+func TestParseConfigKeepsDirectorySeedAsDefaultPathPrefix(t *testing.T) {
+	cfg, err := ParseConfig(&types.DataSourceConfig{Settings: map[string]interface{}{
+		"seed_urls": []string{"https://docs.example.com/projects/sdk/latest/sf32lb52x/"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.PathPrefixes) != 1 || cfg.PathPrefixes[0] != "/projects/sdk/latest/sf32lb52x" {
+		t.Fatalf("PathPrefixes = %#v, want the seed directory", cfg.PathPrefixes)
 	}
 }
 

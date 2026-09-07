@@ -244,8 +244,34 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 		}
 		if existing == nil {
 			existing = &types.WebCrawlPage{DataSourceID: ds.ID, CanonicalURL: page.CanonicalURL, Title: page.Title, Status: "active", LastSeenScanID: scan.ID, LastSeenAt: &now, ETag: page.ETag, LastModified: page.LastModified}
+			knowledge, knowledgeErr := s.knowledgeService.GetRepository().FindByDataSourceExternalID(
+				ctx, ds.TenantID, ds.KnowledgeBaseID, ds.ID, page.CanonicalURL,
+			)
+			if knowledgeErr != nil {
+				return knowledgeErr
+			}
+			if knowledge != nil {
+				existing.KnowledgeID = knowledge.ID
+				if !webCrawlKnowledgeNeedsRefresh(knowledge, page) {
+					existing.LastAppliedHash = page.ContentHash
+					existing.LastAppliedContent = page.Content
+					existing.LastAppliedAt = &now
+					if err := s.webCrawlerRepo.CreatePage(ctx, existing); err != nil {
+						return err
+					}
+					scan.ItemsSkipped++
+					continue
+				}
+			}
 			if err := s.webCrawlerRepo.CreatePage(ctx, existing); err != nil {
 				return err
+			}
+			if knowledge != nil {
+				if err := s.webCrawlerRepo.CreateChange(ctx, &types.WebCrawlChange{ScanID: scan.ID, PageID: existing.ID, CanonicalURL: page.CanonicalURL, Title: page.Title, FolderPath: page.FolderPath, ChangeType: types.WebCrawlChangeUpdated, NewHash: page.ContentHash, NewContent: page.Content, Summary: "source metadata changed", SourceStatus: page.StatusCode}); err != nil {
+					return err
+				}
+				scan.ItemsUpdated++
+				continue
 			}
 			if err := s.webCrawlerRepo.CreateChange(ctx, &types.WebCrawlChange{ScanID: scan.ID, PageID: existing.ID, CanonicalURL: page.CanonicalURL, Title: page.Title, FolderPath: page.FolderPath, ChangeType: types.WebCrawlChangeAdded, NewHash: page.ContentHash, NewContent: page.Content, Summary: "new page", SourceStatus: page.StatusCode}); err != nil {
 				return err
@@ -332,7 +358,11 @@ func (s *DataSourceService) webCrawlKnowledgeNeedsRefresh(ctx context.Context, d
 	if err != nil {
 		return false, err
 	}
-	return knowledge == nil || knowledge.Type != "url" || knowledge.Source != page.CanonicalURL || knowledge.FolderPath != page.FolderPath, nil
+	return webCrawlKnowledgeNeedsRefresh(knowledge, page), nil
+}
+
+func webCrawlKnowledgeNeedsRefresh(knowledge *types.Knowledge, page webcrawler.Page) bool {
+	return knowledge == nil || knowledge.Type != "url" || knowledge.Source != page.CanonicalURL || knowledge.FolderPath != page.FolderPath
 }
 
 func (s *DataSourceService) ProcessWebCrawlApply(ctx context.Context, task *asynq.Task) error {

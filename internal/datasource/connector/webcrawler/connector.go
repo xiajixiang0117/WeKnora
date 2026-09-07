@@ -68,6 +68,7 @@ func (e *PageError) Error() string {
 
 type Config struct {
 	SeedURLs         []string
+	seedRootURLs     []string
 	AllowedHosts     []string
 	PathPrefixes     []string
 	ExcludePatterns  []string
@@ -166,8 +167,9 @@ func ParseConfig(config *types.DataSourceConfig) (Config, error) {
 		return Config{}, fmt.Errorf("data source config is nil")
 	}
 	s := config.Settings
+	rawSeedURLs := append([]string(nil), stringSlice(s["seed_urls"])...)
 	cfg := Config{
-		SeedURLs:         stringSlice(s["seed_urls"]),
+		SeedURLs:         append([]string(nil), rawSeedURLs...),
 		AllowedHosts:     stringSlice(s["allowed_hosts"]),
 		PathPrefixes:     stringSlice(s["path_prefixes"]),
 		ExcludePatterns:  stringSlice(s["exclude_patterns"]),
@@ -178,8 +180,12 @@ func ParseConfig(config *types.DataSourceConfig) (Config, error) {
 	}
 	for i, seed := range cfg.SeedURLs {
 		cfg.SeedURLs[i] = CanonicalURL(seed)
+		if root := seedRootURL(rawSeedURLs[i]); root != "" {
+			cfg.seedRootURLs = append(cfg.seedRootURLs, root)
+		}
 	}
 	cfg.SeedURLs = uniqueSorted(cfg.SeedURLs)
+	cfg.seedRootURLs = uniqueSorted(cfg.seedRootURLs)
 	if len(cfg.SeedURLs) == 0 {
 		return Config{}, fmt.Errorf("settings.seed_urls must contain at least one URL")
 	}
@@ -194,9 +200,9 @@ func ParseConfig(config *types.DataSourceConfig) (Config, error) {
 		cfg.AllowedHosts[i] = strings.ToLower(strings.TrimSpace(host))
 	}
 	if len(cfg.PathPrefixes) == 0 {
-		for _, seed := range cfg.SeedURLs {
+		for _, seed := range cfg.seedRootURLs {
 			if parsed, err := url.Parse(seed); err == nil {
-				prefix := path.Dir(parsed.EscapedPath())
+				prefix := parsed.EscapedPath()
 				if prefix == "." || prefix == "/" {
 					prefix = "/"
 				}
@@ -329,7 +335,15 @@ func folderPathForURL(rawURL string, cfg Config, indexTitles map[string]string) 
 	if err != nil {
 		return ""
 	}
-	prefix := matchingPathPrefix(u.EscapedPath(), cfg.PathPrefixes)
+	prefix := matchingSeedRootPath(u, cfg.seedRootURLs)
+	if prefix == "" {
+		prefix = matchingSeedRootPath(u, seedRootURLs(cfg.SeedURLs))
+	}
+	if prefix == "" {
+		// Config values constructed by callers outside ParseConfig do not carry
+		// seed-root metadata. Retain the path-prefix fallback for that legacy API.
+		prefix = matchingPathPrefix(u.EscapedPath(), cfg.PathPrefixes)
+	}
 	directory := path.Dir(u.EscapedPath())
 	if prefix == "" || directory == prefix {
 		return ""
@@ -356,6 +370,66 @@ func folderPathForURL(rawURL string, cfg Config, indexTitles map[string]string) 
 		}
 	}
 	return strings.Join(labels, "/")
+}
+
+// seedRootURL returns the directory that a seed URL represents. A trailing
+// slash means the seed itself is a directory; a file-like seed uses its parent
+// directory. CanonicalURL deliberately removes trailing slashes, so this must
+// run on the user-provided URL before canonicalization loses that meaning.
+func seedRootURL(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+		return ""
+	}
+	root := u.Path
+	if root == "" || root == "/" {
+		root = "/"
+	} else if strings.HasSuffix(u.EscapedPath(), "/") {
+		root = strings.TrimRight(root, "/")
+	} else {
+		root = path.Dir(root)
+	}
+	if root == "" || root == "." {
+		root = "/"
+	}
+	u.Path = root
+	u.RawPath = ""
+	u.RawQuery = ""
+	u.Fragment = ""
+	return CanonicalURL(u.String())
+}
+
+func seedRootURLs(seeds []string) []string {
+	roots := make([]string, 0, len(seeds))
+	for _, seed := range seeds {
+		if root := seedRootURL(seed); root != "" {
+			roots = append(roots, root)
+		}
+	}
+	return uniqueSorted(roots)
+}
+
+func matchingSeedRootPath(page *url.URL, roots []string) string {
+	if page == nil {
+		return ""
+	}
+	best := ""
+	for _, rawRoot := range roots {
+		root, err := url.Parse(rawRoot)
+		if err != nil || !strings.EqualFold(root.Scheme, page.Scheme) || !strings.EqualFold(root.Host, page.Host) {
+			continue
+		}
+		rootPath := root.EscapedPath()
+		if rootPath == "" {
+			rootPath = "/"
+		}
+		if rootPath == "/" || page.EscapedPath() == rootPath || strings.HasPrefix(page.EscapedPath(), strings.TrimRight(rootPath, "/")+"/") {
+			if len(rootPath) > len(best) {
+				best = rootPath
+			}
+		}
+	}
+	return best
 }
 
 func matchingPathPrefix(pagePath string, prefixes []string) string {
@@ -503,6 +577,7 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 	for _, selector := range cfg.ExcludeSelectors {
 		contentDoc.Find(selector).Remove()
 	}
+	removeHeadingAnchorLinks(contentDoc)
 	html, err := contentDoc.Html()
 	if err != nil {
 		return Page{}, links, err
@@ -528,6 +603,23 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 	}
 	hash := sha256.Sum256([]byte(markdown))
 	return Page{CanonicalURL: pageURL, Title: title, Content: markdown, ContentHash: hex.EncodeToString(hash[:])}, links, nil
+}
+
+// removeHeadingAnchorLinks removes generated same-page permalink controls
+// (for example Sphinx's "Link to this heading" icon) before Markdown
+// conversion. They are navigation chrome, not document text.
+func removeHeadingAnchorLinks(contentDoc *goquery.Selection) {
+	if contentDoc == nil {
+		return
+	}
+	contentDoc.Find("h1,h2,h3,h4,h5,h6").Each(func(_ int, heading *goquery.Selection) {
+		heading.Find("a[href]").Each(func(_ int, link *goquery.Selection) {
+			href, ok := link.Attr("href")
+			if ok && strings.HasPrefix(strings.TrimSpace(href), "#") {
+				link.Remove()
+			}
+		})
+	})
 }
 
 // resolveImageSources makes image URLs self-contained before HTML is converted
