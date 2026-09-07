@@ -9,6 +9,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
+	"github.com/stretchr/testify/require"
 )
 
 // ── interface-embedding fakes: only the methods ingestItem touches are
@@ -18,6 +19,7 @@ type sweepFakeRepo struct {
 	interfaces.KnowledgeRepository
 	prefixCalls  []string           // recorded prefix arguments
 	prefixReturn []*types.Knowledge // children to return from FindByMetadataKeyPrefix
+	updated      []*types.Knowledge
 }
 
 func (r *sweepFakeRepo) FindByMetadataKey(ctx context.Context, tenantID uint64, kbID, key, value string) (*types.Knowledge, error) {
@@ -35,6 +37,11 @@ func (r *sweepFakeRepo) HardDeleteKnowledge(context.Context, uint64, string) err
 }
 
 func (r *sweepFakeRepo) HardDeleteKnowledgeList(context.Context, uint64, []string) error {
+	return nil
+}
+
+func (r *sweepFakeRepo) UpdateKnowledge(_ context.Context, knowledge *types.Knowledge) error {
+	r.updated = append(r.updated, knowledge)
 	return nil
 }
 
@@ -88,6 +95,27 @@ func (k *sweepFakeKS) CreateKnowledgeFromFile(
 		return nil, k.createErr
 	}
 	return &types.Knowledge{ID: "new-knowledge"}, nil
+}
+
+func TestIngestItem_WebCrawlerPreservesURLSource(t *testing.T) {
+	repo := &sweepFakeRepo{}
+	s := &DataSourceService{knowledgeService: &sweepFakeKS{repo: repo}}
+
+	_, err := s.ingestItem(context.Background(), &types.DataSource{ID: "ds-1", TenantID: 7, KnowledgeBaseID: "kb-1"}, &types.FetchedItem{
+		ExternalID: "https://docs.example.com/quickstart/install/windows.html",
+		Title:      "Windows 安装流程",
+		Content:    []byte("# Windows"),
+		FileName:   "快速入门/安装环境/Windows 安装流程.md",
+		URL:        "https://docs.example.com/quickstart/install/windows.html",
+		Metadata:   map[string]string{"source_type": "url"},
+	}, nil)
+	require.NoError(t, err)
+	if len(repo.updated) != 1 {
+		t.Fatalf("UpdateKnowledge calls = %d, want 1", len(repo.updated))
+	}
+	if got := repo.updated[0]; got.Type != "url" || got.Source != "https://docs.example.com/quickstart/install/windows.html" || got.FileType != "html" {
+		t.Fatalf("source fields = %#v", got)
+	}
 }
 
 // TestIngestItem_ReplacesSubtreeSweepsStaleChildrenAfterCreate verifies the

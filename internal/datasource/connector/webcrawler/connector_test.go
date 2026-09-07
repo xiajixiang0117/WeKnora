@@ -11,6 +11,34 @@ import (
 	"github.com/Tencent/WeKnora/internal/utils"
 )
 
+func TestAssignFolderPathsUsesDirectoryIndexTitles(t *testing.T) {
+	pages := []Page{
+		{CanonicalURL: "https://docs.example.com/root/", Title: "SDK"},
+		{CanonicalURL: "https://docs.example.com/root/quickstart/index.html", Title: "快速入门"},
+		{CanonicalURL: "https://docs.example.com/root/quickstart/install/index.html", Title: "安装环境"},
+		{CanonicalURL: "https://docs.example.com/root/quickstart/install/script/index.html", Title: "脚本安装"},
+		{CanonicalURL: "https://docs.example.com/root/quickstart/install/script/windows.html", Title: "Windows 安装流程"},
+	}
+	assignFolderPaths(pages, Config{PathPrefixes: []string{"/root"}})
+	if pages[0].FolderPath != "" {
+		t.Fatalf("root page folder = %q, want empty", pages[0].FolderPath)
+	}
+	if pages[4].FolderPath != "快速入门/安装环境/脚本安装" {
+		t.Fatalf("nested page folder = %q", pages[4].FolderPath)
+	}
+}
+
+func TestAssignFolderPathsWithRootScope(t *testing.T) {
+	pages := []Page{
+		{CanonicalURL: "https://docs.example.com/quickstart/index.html", Title: "快速入门"},
+		{CanonicalURL: "https://docs.example.com/quickstart/install/windows.html", Title: "Windows 安装流程"},
+	}
+	assignFolderPaths(pages, Config{PathPrefixes: []string{"/"}})
+	if pages[1].FolderPath != "快速入门/install" {
+		t.Fatalf("root-scope folder = %q", pages[1].FolderPath)
+	}
+}
+
 func TestCanonicalURL(t *testing.T) {
 	got := CanonicalURL("HTTPS://Docs.Example.COM/a/../guide/?utm_source=x&keep=1#part")
 	if got != "https://docs.example.com/guide?keep=1" {

@@ -37,10 +37,14 @@ var _ datasource.Connector = (*Connector)(nil)
 
 // Page is a crawled, normalized HTML document ready for review or ingestion.
 type Page struct {
-	CanonicalURL   string
-	Title          string
-	Content        string
-	ContentHash    string
+	CanonicalURL string
+	Title        string
+	Content      string
+	ContentHash  string
+	// FolderPath is the display path inside the knowledge base. It is derived
+	// from the page URL relative to the configured crawl scope, while directory
+	// names use the corresponding index page title when one is available.
+	FolderPath     string
 	DiscoveredFrom string
 	StatusCode     int
 	ETag           string
@@ -133,7 +137,13 @@ func (c *Connector) FetchAll(ctx context.Context, config *types.DataSourceConfig
 				continue
 			}
 		}
-		items = append(items, types.FetchedItem{ExternalID: p.CanonicalURL, Title: p.Title, Content: []byte(p.Content), ContentType: "text/markdown", FileName: safeFileName(p.Title) + ".md", URL: p.CanonicalURL, UpdatedAt: time.Now().UTC(), Metadata: map[string]string{"channel": types.ChannelWeb, "content_hash": p.ContentHash, "status_code": fmt.Sprintf("%d", p.StatusCode)}})
+		metadata := map[string]string{
+			"channel":      types.ChannelWeb,
+			"source_type":  "url",
+			"content_hash": p.ContentHash,
+			"status_code":  fmt.Sprintf("%d", p.StatusCode),
+		}
+		items = append(items, types.FetchedItem{ExternalID: p.CanonicalURL, Title: p.Title, Content: []byte(p.Content), ContentType: "text/markdown", FileName: crawlerFileName(p), URL: p.CanonicalURL, UpdatedAt: time.Now().UTC(), Metadata: metadata})
 	}
 	if len(failures) > 0 {
 		details := make([]string, 0, len(failures))
@@ -284,7 +294,116 @@ func (c *Connector) Crawl(ctx context.Context, config *types.DataSourceConfig) (
 		}
 		pages = append(pages, page)
 	}
+	assignFolderPaths(pages, cfg)
 	return pages, failures, nil
+}
+
+func crawlerFileName(page Page) string {
+	name := safeFileName(page.Title) + ".md"
+	if page.FolderPath == "" {
+		return name
+	}
+	return page.FolderPath + "/" + name
+}
+
+// assignFolderPaths maps URL directories to the titles of their index pages.
+// Sphinx sites commonly expose a navigation tree through URLs such as
+// quickstart/install/script/windows.html, while the user-facing labels come
+// from quickstart/index.html, install/index.html, and script/index.html.
+func assignFolderPaths(pages []Page, cfg Config) {
+	indexTitles := make(map[string]string, len(pages))
+	for _, page := range pages {
+		u, err := url.Parse(page.CanonicalURL)
+		if err != nil || !isDirectoryIndex(u) || strings.TrimSpace(page.Title) == "" {
+			continue
+		}
+		indexTitles[normalizeDirectoryURL(u)] = folderSegment(page.Title)
+	}
+	for i := range pages {
+		pages[i].FolderPath = folderPathForURL(pages[i].CanonicalURL, cfg, indexTitles)
+	}
+}
+
+func folderPathForURL(rawURL string, cfg Config, indexTitles map[string]string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	prefix := matchingPathPrefix(u.EscapedPath(), cfg.PathPrefixes)
+	directory := path.Dir(u.EscapedPath())
+	if prefix == "" || directory == prefix {
+		return ""
+	}
+	relative := strings.TrimPrefix(directory, strings.TrimRight(prefix, "/"))
+	relative = strings.Trim(relative, "/")
+	if relative == "" {
+		return ""
+	}
+	segments := strings.Split(relative, "/")
+	labels := make([]string, 0, len(segments))
+	for i, segment := range segments {
+		if decoded, err := url.PathUnescape(segment); err == nil {
+			segment = decoded
+		}
+		candidatePath := strings.TrimRight(prefix, "/") + "/" + strings.Join(segments[:i+1], "/") + "/"
+		candidate := (&url.URL{Scheme: u.Scheme, Host: u.Host, Path: candidatePath}).String()
+		label := indexTitles[CanonicalURL(candidate)]
+		if label == "" {
+			label = folderSegment(segment)
+		}
+		if label != "" {
+			labels = append(labels, label)
+		}
+	}
+	return strings.Join(labels, "/")
+}
+
+func matchingPathPrefix(pagePath string, prefixes []string) string {
+	best := ""
+	for _, prefix := range prefixes {
+		prefix = strings.TrimRight(strings.TrimSpace(prefix), "/")
+		if prefix == "" {
+			prefix = "/"
+		}
+		if prefix == "/" {
+			if best == "" {
+				best = prefix
+			}
+			continue
+		}
+		if pagePath == prefix || strings.HasPrefix(pagePath, prefix+"/") {
+			if len(prefix) > len(best) {
+				best = prefix
+			}
+		}
+	}
+	return best
+}
+
+func isDirectoryIndex(u *url.URL) bool {
+	if u == nil {
+		return false
+	}
+	base := strings.ToLower(path.Base(strings.TrimRight(u.EscapedPath(), "/")))
+	return base == "index.html" || base == "index.htm" || strings.HasSuffix(u.EscapedPath(), "/") || path.Ext(base) == ""
+}
+
+func normalizeDirectoryURL(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	copyURL := *u
+	if strings.EqualFold(path.Base(strings.TrimRight(copyURL.Path, "/")), "index.html") || strings.EqualFold(path.Base(strings.TrimRight(copyURL.Path, "/")), "index.htm") {
+		copyURL.Path = path.Dir(copyURL.Path)
+	}
+	copyURL.Path = strings.TrimRight(copyURL.Path, "/") + "/"
+	copyURL.RawPath = ""
+	return CanonicalURL(copyURL.String())
+}
+
+func folderSegment(value string) string {
+	value = strings.TrimSpace(strings.NewReplacer("/", "-", "\\", "-").Replace(value))
+	return strings.Trim(value, ".")
 }
 
 func fetchBody(ctx context.Context, client *http.Client, rawURL string, requireHTML bool) ([]byte, int, http.Header, error) {

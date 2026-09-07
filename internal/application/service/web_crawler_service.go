@@ -247,14 +247,14 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 			if err := s.webCrawlerRepo.CreatePage(ctx, existing); err != nil {
 				return err
 			}
-			if err := s.webCrawlerRepo.CreateChange(ctx, &types.WebCrawlChange{ScanID: scan.ID, PageID: existing.ID, CanonicalURL: page.CanonicalURL, Title: page.Title, ChangeType: types.WebCrawlChangeAdded, NewHash: page.ContentHash, NewContent: page.Content, Summary: "new page", SourceStatus: page.StatusCode}); err != nil {
+			if err := s.webCrawlerRepo.CreateChange(ctx, &types.WebCrawlChange{ScanID: scan.ID, PageID: existing.ID, CanonicalURL: page.CanonicalURL, Title: page.Title, FolderPath: page.FolderPath, ChangeType: types.WebCrawlChangeAdded, NewHash: page.ContentHash, NewContent: page.Content, Summary: "new page", SourceStatus: page.StatusCode}); err != nil {
 				return err
 			}
 			scan.ItemsAdded++
 			continue
 		}
 		if existing.LastAppliedHash == "" && existing.KnowledgeID == "" {
-			if err := s.webCrawlerRepo.CreateChange(ctx, &types.WebCrawlChange{ScanID: scan.ID, PageID: existing.ID, CanonicalURL: page.CanonicalURL, Title: page.Title, ChangeType: types.WebCrawlChangeAdded, NewHash: page.ContentHash, NewContent: page.Content, Summary: "new page", SourceStatus: page.StatusCode}); err != nil {
+			if err := s.webCrawlerRepo.CreateChange(ctx, &types.WebCrawlChange{ScanID: scan.ID, PageID: existing.ID, CanonicalURL: page.CanonicalURL, Title: page.Title, FolderPath: page.FolderPath, ChangeType: types.WebCrawlChangeAdded, NewHash: page.ContentHash, NewContent: page.Content, Summary: "new page", SourceStatus: page.StatusCode}); err != nil {
 				return err
 			}
 			scan.ItemsAdded++
@@ -278,11 +278,19 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 		if err := s.webCrawlerRepo.UpdatePage(ctx, existing); err != nil {
 			return err
 		}
-		if existing.LastAppliedHash == page.ContentHash {
+		needsMetadataRefresh, refreshErr := s.webCrawlKnowledgeNeedsRefresh(ctx, ds, page)
+		if refreshErr != nil {
+			return refreshErr
+		}
+		if existing.LastAppliedHash == page.ContentHash && !needsMetadataRefresh {
 			scan.ItemsSkipped++
 			continue
 		}
-		if err := s.webCrawlerRepo.CreateChange(ctx, &types.WebCrawlChange{ScanID: scan.ID, PageID: existing.ID, CanonicalURL: page.CanonicalURL, Title: page.Title, ChangeType: types.WebCrawlChangeUpdated, OldHash: existing.LastAppliedHash, NewHash: page.ContentHash, PreviousContent: existing.LastAppliedContent, NewContent: page.Content, Summary: "content changed", SourceStatus: page.StatusCode}); err != nil {
+		summary := "content changed"
+		if existing.LastAppliedHash == page.ContentHash {
+			summary = "source metadata changed"
+		}
+		if err := s.webCrawlerRepo.CreateChange(ctx, &types.WebCrawlChange{ScanID: scan.ID, PageID: existing.ID, CanonicalURL: page.CanonicalURL, Title: page.Title, FolderPath: page.FolderPath, ChangeType: types.WebCrawlChangeUpdated, OldHash: existing.LastAppliedHash, NewHash: page.ContentHash, PreviousContent: existing.LastAppliedContent, NewContent: page.Content, Summary: summary, SourceStatus: page.StatusCode}); err != nil {
 			return err
 		}
 		scan.ItemsUpdated++
@@ -315,6 +323,16 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 	scan.FinishedAt = timePtr(time.Now().UTC())
 	scan.UpdatedAt = time.Now().UTC()
 	return s.webCrawlerRepo.UpdateScan(ctx, scan)
+}
+
+func (s *DataSourceService) webCrawlKnowledgeNeedsRefresh(ctx context.Context, ds *types.DataSource, page webcrawler.Page) (bool, error) {
+	knowledge, err := s.knowledgeService.GetRepository().FindByDataSourceExternalID(
+		ctx, ds.TenantID, ds.KnowledgeBaseID, ds.ID, page.CanonicalURL,
+	)
+	if err != nil {
+		return false, err
+	}
+	return knowledge == nil || knowledge.Type != "url" || knowledge.Source != page.CanonicalURL || knowledge.FolderPath != page.FolderPath, nil
 }
 
 func (s *DataSourceService) ProcessWebCrawlApply(ctx context.Context, task *asynq.Task) error {
@@ -426,7 +444,11 @@ func (s *DataSourceService) applyWebCrawlChange(ctx context.Context, ds *types.D
 	if change.NewContent == "" {
 		return errors.New("change has no captured content")
 	}
-	item := &types.FetchedItem{ExternalID: change.CanonicalURL, Title: change.Title, Content: []byte(change.NewContent), ContentType: "text/markdown", FileName: change.Title + ".md", URL: change.CanonicalURL, Metadata: map[string]string{"channel": types.ChannelWeb, "content_hash": change.NewHash}}
+	fileName := change.Title + ".md"
+	if change.FolderPath != "" {
+		fileName = change.FolderPath + "/" + fileName
+	}
+	item := &types.FetchedItem{ExternalID: change.CanonicalURL, Title: change.Title, Content: []byte(change.NewContent), ContentType: "text/markdown", FileName: fileName, URL: change.CanonicalURL, Metadata: map[string]string{"channel": types.ChannelWeb, "source_type": "url", "content_hash": change.NewHash}}
 	_, err := s.ingestItem(withKBActivitySuppressed(ctx), ds, item, nil)
 	if err != nil {
 		return err

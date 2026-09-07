@@ -1331,7 +1331,7 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 		if err != nil {
 			return isUpdate, fmt.Errorf("build file header: %w", err)
 		}
-		if _, err := s.knowledgeService.CreateKnowledgeFromFile(
+		created, err := s.knowledgeService.CreateKnowledgeFromFile(
 			ctx,
 			ds.KnowledgeBaseID,
 			fh,
@@ -1341,7 +1341,8 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 			tagIDs,        // auto-tag from data source
 			channel,
 			nil,
-		); err != nil {
+		)
+		if err != nil {
 			var dupErr *types.DuplicateKnowledgeError
 			if errors.As(err, &dupErr) && dupIsSameNode(dupErr, item) {
 				// Identical content is already present in the KB under THIS node's
@@ -1349,6 +1350,9 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 				// subtree so children removed from the doc do not linger.
 				s.sweepStaleSubtree(ctx, ds, item)
 			}
+			return isUpdate, err
+		}
+		if err := s.applyFetchedItemOrigin(ctx, created, item); err != nil {
 			return isUpdate, err
 		}
 		s.sweepStaleSubtree(ctx, ds, item)
@@ -1397,6 +1401,23 @@ func (s *DataSourceService) ingestItem(ctx context.Context, ds *types.DataSource
 	}
 
 	return isUpdate, fmt.Errorf("item has neither content nor URL")
+}
+
+// applyFetchedItemOrigin preserves the source semantics of connectors that
+// fetched a page snapshot before ingestion. The file pipeline is still used so
+// the captured content is indexed without a second network request, but the
+// resulting knowledge row must behave like a normal URL import in the UI.
+func (s *DataSourceService) applyFetchedItemOrigin(ctx context.Context, knowledge *types.Knowledge, item *types.FetchedItem) error {
+	if knowledge == nil || item == nil || item.Metadata["source_type"] != "url" || item.URL == "" {
+		return nil
+	}
+	knowledge.Type = "url"
+	knowledge.Source = item.URL
+	knowledge.FileType = "html"
+	if err := s.knowledgeService.GetRepository().UpdateKnowledge(ctx, knowledge); err != nil {
+		return fmt.Errorf("attach fetched item source: %w", err)
+	}
+	return nil
 }
 
 // dupIsSameNode reports whether a duplicate-content error means the parent still

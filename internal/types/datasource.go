@@ -286,6 +286,7 @@ type WebCrawlChange struct {
 	PageID          string     `json:"page_id" gorm:"type:varchar(36);index"`
 	CanonicalURL    string     `json:"canonical_url" gorm:"type:text;index"`
 	Title           string     `json:"title"`
+	FolderPath      string     `json:"folder_path" gorm:"type:varchar(1024)"`
 	ChangeType      string     `json:"change_type" gorm:"type:varchar(32);index"`
 	OldHash         string     `json:"old_hash" gorm:"type:varchar(64)"`
 	NewHash         string     `json:"new_hash" gorm:"type:varchar(64)"`

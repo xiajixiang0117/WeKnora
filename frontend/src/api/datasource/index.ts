@@ -93,6 +93,7 @@ export interface WebCrawlChange {
   page_id?: string
   canonical_url: string
   title: string
+  folder_path?: string
   change_type: WebCrawlChangeType
   old_hash: string
   new_hash: string
