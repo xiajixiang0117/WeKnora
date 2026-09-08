@@ -554,6 +554,9 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 		}
 	})
 	links = uniqueSorted(links)
+	// Sphinx renders a visible pilcrow (¶) inside a same-page heading link.
+	// Remove that navigation control before deriving the page title or content.
+	removeHeadingAnchorLinks(doc.Selection)
 	title := cleanPageTitle(doc.Find("h1").First().Text())
 	if title == "" {
 		title = cleanPageTitle(doc.Find("title").First().Text())
@@ -581,7 +584,6 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 	for _, selector := range cfg.ExcludeSelectors {
 		contentDoc.Find(selector).Remove()
 	}
-	removeHeadingAnchorLinks(contentDoc)
 	resolveLinkHrefs(doc, base)
 	html, err := contentDoc.Html()
 	if err != nil {
@@ -589,7 +591,13 @@ func extractPage(body []byte, pageURL string, cfg Config) (Page, []string, error
 	}
 	markdown, err := htmltomd.ConvertString(html)
 	if err != nil {
-		reader, readErr := readability.FromReader(strings.NewReader(string(body)), base)
+		// Reuse the cleaned DOM. Falling back to the original response would
+		// reintroduce heading anchors that were removed above.
+		cleanedHTML, htmlErr := doc.Html()
+		if htmlErr != nil {
+			return Page{}, links, htmlErr
+		}
+		reader, readErr := readability.FromReader(strings.NewReader(cleanedHTML), base)
 		if readErr != nil {
 			return Page{}, links, err
 		}

@@ -170,6 +170,19 @@ func TestExtractPageRemovesHeadingAnchorLinksFromMarkdown(t *testing.T) {
 	}
 }
 
+func TestExtractPageRemovesSphinxPilcrowAnchorFromTitleAndContent(t *testing.T) {
+	page, _, err := extractPage([]byte(`<html><body><main><h1>SiFli Solution介绍<a class="headerlink" href="#sifli-solution" title="Link to this heading">¶</a></h1><p>Solution 正文</p></main></body></html>`), "https://docs.sifli.com/projects/solution/0.introduction/index.html", Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Title != "SiFli Solution介绍" {
+		t.Fatalf("Title = %q, want Sphinx pilcrow anchor removed", page.Title)
+	}
+	if strings.Contains(page.Content, "¶") {
+		t.Fatalf("Content retained Sphinx pilcrow anchor: %q", page.Content)
+	}
+}
+
 func TestParseConfigKeepsDirectorySeedAsDefaultPathPrefix(t *testing.T) {
 	cfg, err := ParseConfig(&types.DataSourceConfig{Settings: map[string]interface{}{
 		"seed_urls": []string{"https://docs.example.com/projects/sdk/latest/sf32lb52x/"},
