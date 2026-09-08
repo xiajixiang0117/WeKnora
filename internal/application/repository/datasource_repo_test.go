@@ -81,6 +81,29 @@ func TestDataSourceRepositoryUpdatePersistsDisabledSyncDeletions(t *testing.T) {
 	assert.True(t, stored.SyncDeletions)
 }
 
+func TestDataSourceRepositoryUpdateClearsSyncSchedule(t *testing.T) {
+	db := setupDataSourceRepoTestDB(t)
+	repo := NewDataSourceRepository(db)
+	ctx := context.Background()
+
+	ds := &types.DataSource{
+		ID:              "ds-clear-schedule",
+		TenantID:        1,
+		KnowledgeBaseID: "kb-1",
+		Name:            "Website crawl",
+		Type:            types.ConnectorTypeWebCrawler,
+		SyncSchedule:    "0 0 */6 * * *",
+	}
+	require.NoError(t, repo.Create(ctx, ds))
+
+	ds.SyncSchedule = ""
+	require.NoError(t, repo.Update(ctx, ds))
+
+	var stored types.DataSource
+	require.NoError(t, db.First(&stored, "id = ?", ds.ID).Error)
+	assert.Empty(t, stored.SyncSchedule)
+}
+
 func TestDataSourceRepositoryCreatePersistsDisabledSyncDeletions(t *testing.T) {
 	db := setupDataSourceRepoTestDB(t)
 	repo := NewDataSourceRepository(db)

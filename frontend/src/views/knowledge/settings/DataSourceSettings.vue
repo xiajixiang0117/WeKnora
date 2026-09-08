@@ -287,7 +287,7 @@ onBeforeUnmount(stopPolling)
                 </t-dropdown>
               </div>
             </div>
-            <p class="ds-card__subtitle">
+            <p v-if="ds.type !== 'web_crawler'" class="ds-card__subtitle">
               {{ connectorLabel(ds.type) }} · {{ syncModeLabel(ds.sync_mode) }}
               <span class="ds-card__sep">·</span>
               <span class="ds-card__status" :class="`ds-card__status--${ds.status}`">
@@ -296,24 +296,29 @@ onBeforeUnmount(stopPolling)
               </span>
             </p>
             <p class="ds-card__detail">
-              {{ scheduleLabel(ds.sync_schedule) }}
-              <span class="ds-card__sep">·</span>
-              <t-tooltip :content="lastSyncFullTime(ds)" :disabled="!lastSyncFullTime(ds)">
-                <span>{{ lastSyncTime(ds) || '--' }}</span>
-              </t-tooltip>
-              <template v-if="ds.latest_sync_log">
+              <template v-if="ds.type === 'web_crawler'">
+                {{ t('datasource.webCrawler.manualSync') }}
+              </template>
+              <template v-else>
+                {{ scheduleLabel(ds.sync_schedule) }}
                 <span class="ds-card__sep">·</span>
-                <span
-                  class="ds-card__sync-result"
-                  :class="`ds-card__sync-result--${ds.latest_sync_log.status}`"
-                >
-                  {{ lastSyncStatusLabel(ds) }}
-                </span>
-                <span
-                  v-for="pill in syncResultPills(ds)"
-                  :key="pill.cls"
-                  class="ds-card__metric"
-                >{{ pill.text }}</span>
+                <t-tooltip :content="lastSyncFullTime(ds)" :disabled="!lastSyncFullTime(ds)">
+                  <span>{{ lastSyncTime(ds) || '--' }}</span>
+                </t-tooltip>
+                <template v-if="ds.latest_sync_log">
+                  <span class="ds-card__sep">·</span>
+                  <span
+                    class="ds-card__sync-result"
+                    :class="`ds-card__sync-result--${ds.latest_sync_log.status}`"
+                  >
+                    {{ lastSyncStatusLabel(ds) }}
+                  </span>
+                  <span
+                    v-for="pill in syncResultPills(ds)"
+                    :key="pill.cls"
+                    class="ds-card__metric"
+                  >{{ pill.text }}</span>
+                </template>
               </template>
             </p>
             <div v-if="ds.error_message" class="ds-card__error">

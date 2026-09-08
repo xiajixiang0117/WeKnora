@@ -180,6 +180,13 @@ func TestScheduler_StartWithActiveDataSources(t *testing.T) {
 		Status:       types.DataSourceStatusPaused, // should NOT be scheduled
 		SyncSchedule: "*/2 * * * * *",
 	})
+	_ = repo.Create(context.Background(), &types.DataSource{
+		ID:           "ds-web-crawler",
+		TenantID:     1,
+		Type:         types.ConnectorTypeWebCrawler,
+		Status:       types.DataSourceStatusActive,
+		SyncSchedule: "*/2 * * * * *", // legacy rows may still contain a cron value
+	})
 
 	enqueuer := &fakeTaskEnqueuer{}
 	scheduler := NewScheduler(repo, newFakeSyncLogRepo(), enqueuer)
@@ -189,7 +196,8 @@ func TestScheduler_StartWithActiveDataSources(t *testing.T) {
 	}
 	defer scheduler.Stop()
 
-	// Only ds-1 should be registered (ds-2 is paused, not returned by FindActive)
+	// Only ds-1 should be registered: paused sources and review-only website
+	// crawlers must never enter the generic sync scheduler.
 	if scheduler.EntryCount() != 1 {
 		t.Errorf("EntryCount() = %d, want 1", scheduler.EntryCount())
 	}

@@ -131,6 +131,11 @@ func (s *DataSourceService) CreateDataSource(ctx context.Context, ds *types.Data
 	if err := s.validateDataSourceConfig(ctx, ds); err != nil {
 		return nil, err
 	}
+	// Website crawls are manual/review-only, so never persist a generic cron
+	// schedule that could later be mistaken for an automatic sync policy.
+	if ds.Type == types.ConnectorTypeWebCrawler {
+		ds.SyncSchedule = ""
+	}
 
 	// Create in database
 	if err := s.dsRepo.Create(ctx, ds); err != nil {
@@ -249,6 +254,9 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 		if err := s.validateDataSourceConfig(ctx, ds); err != nil {
 			return nil, err
 		}
+	}
+	if ds.Type == types.ConnectorTypeWebCrawler {
+		ds.SyncSchedule = ""
 	}
 
 	if err := s.dsRepo.Update(ctx, ds); err != nil {

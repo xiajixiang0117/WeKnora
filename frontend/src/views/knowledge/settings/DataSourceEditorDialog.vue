@@ -181,6 +181,8 @@ function enterReplaceCredentials() {
 }
 
 // Form data
+const DEFAULT_SYNC_SCHEDULE = '0 0 */6 * * *'
+
 const form = ref({
   name: '',
   type: '',
@@ -189,7 +191,7 @@ const form = ref({
     resource_ids: [] as string[],
     settings: {} as Record<string, any>,
   },
-  sync_schedule: '0 0 */6 * * *',
+  sync_schedule: DEFAULT_SYNC_SCHEDULE,
   sync_mode: 'incremental' as 'incremental' | 'full',
   conflict_strategy: 'overwrite' as 'overwrite' | 'skip',
   sync_deletions: true,
@@ -792,6 +794,9 @@ function selectType(def: ConnectorDef) {
   if (!def.available) return
   form.value.type = def.type
   form.value.name = t(`datasource.connector.${def.type}`)
+  form.value.sync_schedule = isWebCrawlerConnector(def.type)
+    ? ''
+    : form.value.sync_schedule || DEFAULT_SYNC_SCHEDULE
   form.value.config.credentials = {}
   if (isGitLabConnector(def.type)) addGitLabProject()
   rssAuthHeaders.value = []
@@ -1141,6 +1146,7 @@ async function handleSubmit() {
       await updateDataSource(tempDsId.value, {
         ...form.value,
         config: buildConfigPayload(),
+        sync_schedule: isWebCrawlerConnector(form.value.type) ? '' : form.value.sync_schedule,
         knowledge_base_id: props.kbId,
         status: 'active',
       } as any)
@@ -1148,6 +1154,7 @@ async function handleSubmit() {
       const res = await createDataSource({
         ...form.value,
         config: buildConfigPayload(),
+        sync_schedule: isWebCrawlerConnector(form.value.type) ? '' : form.value.sync_schedule,
         knowledge_base_id: props.kbId,
         status: 'active',
       } as any)
