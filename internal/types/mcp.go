@@ -22,6 +22,9 @@ const (
 
 // MCPService represents an MCP (Model Context Protocol) service configuration
 type MCPService struct {
+	// UsageInstructions is maintained locally and is not overwritten by directory refresh.
+	UsageInstructions string `json:"usage_instructions" gorm:"type:text;not null;default:''"`
+
 	ID             string             `json:"id"                     gorm:"type:varchar(36);primaryKey"`
 	TenantID       uint64             `json:"tenant_id"              gorm:"uniqueIndex:idx_tenant_name"`
 	Name           string             `json:"name"                   gorm:"type:varchar(255);not null;uniqueIndex:idx_tenant_name"`
@@ -123,16 +126,30 @@ type MCPTool struct {
 	RequireApproval bool `json:"require_approval,omitempty"`
 }
 
-// MCPToolApproval persists per-tool "danger / needs human approval" for an MCP service.
-// Tool list itself comes from MCP ListTools; this table only stores overrides.
+// MCPToolApproval persists per-tool policies for an MCP service, including
+// whether the tool is enabled and whether calls require human approval.
+// The tool list itself comes from MCP ListTools; this table stores overrides.
 type MCPToolApproval struct {
-	ID              string    `json:"id"               gorm:"type:varchar(36);primaryKey"`
-	TenantID        uint64    `json:"tenant_id"        gorm:"not null;uniqueIndex:idx_mcp_tool_approvals_tenant_svc_tool"`
-	ServiceID       string    `json:"service_id"       gorm:"type:varchar(36);not null;uniqueIndex:idx_mcp_tool_approvals_tenant_svc_tool;index"`
-	ToolName        string    `json:"tool_name"        gorm:"type:varchar(512);not null;uniqueIndex:idx_mcp_tool_approvals_tenant_svc_tool"`
-	RequireApproval bool      `json:"require_approval" gorm:"not null;default:false"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              string `json:"id"               gorm:"type:varchar(36);primaryKey"`
+	TenantID        uint64 `json:"tenant_id"        gorm:"not null;uniqueIndex:idx_mcp_tool_approvals_tenant_svc_tool"`
+	ServiceID       string `json:"service_id"       gorm:"type:varchar(36);not null;uniqueIndex:idx_mcp_tool_approvals_tenant_svc_tool;index"`
+	ToolName        string `json:"tool_name"        gorm:"type:varchar(512);not null;uniqueIndex:idx_mcp_tool_approvals_tenant_svc_tool"`
+	RequireApproval bool   `json:"require_approval" gorm:"not null;default:false"`
+	// Enabled controls whether this tool is exposed to the Agent. Missing rows
+	// are treated as enabled for backwards compatibility. The DB/GORM default is
+	// true; inserts persist false via a map Create so GORM does not omit the
+	// Go zero value.
+	Enabled   bool      `json:"enabled" gorm:"not null;default:true"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// MCPToolPolicyPatch is a partial per-tool policy update. Nil fields are left
+// unchanged on existing rows. A newly inserted row uses RequireApproval=false
+// and Enabled=true for any omitted field.
+type MCPToolPolicyPatch struct {
+	RequireApproval *bool
+	Enabled         *bool
 }
 
 // BeforeCreate sets ID for MCPToolApproval.

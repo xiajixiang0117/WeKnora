@@ -3,70 +3,93 @@
         'is-embedded': embeddedMode,
         'is-sidebar-collapsed': uiStore.sidebarCollapsed,
         'has-references-panel': referencesDrawerVisible,
-    }">
+        'has-sandbox-panel': sandboxPanel.visible.value,
+    }" :style="{ '--sandbox-panel-width': `${sandboxPanel.width.value}px` }">
         <ChatHeader v-if="!embeddedMode" :session="currentSession" :has-references-panel="referencesDrawerVisible" />
+        <!-- 沙箱面板收起时：图标与左侧栏展开按钮同一套，位置镜像会话左上角三个点。 -->
+        <div v-if="!embeddedMode && !sandboxPanel.visible.value" class="sandbox-header-toggle">
+            <t-tooltip placement="bottom">
+                <template #content>{{ t('chatHeader.toggleSandboxPanel') }}</template>
+                <button type="button" class="sandbox-header-toggle__btn"
+                    :aria-label="t('chatHeader.toggleSandboxPanel')" @click="sandboxPanel.open()">
+                    <svg viewBox="0 0 20 20" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg"
+                        aria-hidden="true">
+                        <rect x="1.5" y="1.5" width="17" height="17" rx="3" stroke="currentColor" stroke-width="1.2" />
+                        <line x1="12.5" y1="1.5" x2="12.5" y2="18.5" stroke="currentColor" stroke-width="1.2" />
+                        <line x1="16" y1="7.5" x2="16" y2="12.5" stroke="currentColor" stroke-width="1.2"
+                            stroke-linecap="round" />
+                    </svg>
+                </button>
+            </t-tooltip>
+        </div>
         <div class="chat_thread">
             <div ref="scrollContainer" class="chat_scroll_box" @scroll="handleScroll">
                 <div class="msg_list" :class="{ 'is-embedded': embeddedMode }">
-                <!-- 消息列表骨架屏 -->
-                <div v-if="historyLoading && messagesList.length === 0" class="msg-skeleton-list">
-                    <div class="msg-skeleton msg-skeleton-user">
-                        <t-skeleton animation="gradient" :row-col="[{ width: '45%', height: '36px', type: 'rect' }]" />
-                    </div>
-                    <div class="msg-skeleton msg-skeleton-bot">
-                        <t-skeleton animation="gradient"
-                            :row-col="[{ width: '80%', height: '16px' }, { width: '100%', height: '16px' }, { width: '60%', height: '16px' }]" />
-                    </div>
-                    <div class="msg-skeleton msg-skeleton-user">
-                        <t-skeleton animation="gradient" :row-col="[{ width: '35%', height: '36px', type: 'rect' }]" />
-                    </div>
-                    <div class="msg-skeleton msg-skeleton-bot">
-                        <t-skeleton animation="gradient"
-                            :row-col="[{ width: '70%', height: '16px' }, { width: '90%', height: '16px' }]" />
-                    </div>
-                </div>
-                <!-- 推荐问题卡片 - 仅在新会话（无消息）时展示 -->
-                <div v-if="!embeddedMode && messagesList.length === 0 && !loading" class="suggested-questions-container"
-                    :class="{ 'has-questions': suggestedQuestions.length > 0 || suggestedQuestionsLoading }">
-                    <!-- 骨架屏占位 -->
-                    <div v-if="suggestedQuestionsLoading && suggestedQuestions.length === 0"
-                        class="suggested-questions-inner">
-                        <div class="suggested-questions-title"><t-skeleton animation="gradient"
-                                :row-col="[{ width: '120px', height: '14px' }]" /></div>
-                        <div class="suggested-questions-grid">
-                            <div v-for="n in 6" :key="'sq-skel-' + n" class="suggested-question-card sq-card-skeleton">
-                                <t-skeleton animation="gradient"
-                                    :row-col="[{ width: '100%', height: '14px', type: 'rect' }]" />
-                            </div>
+                    <!-- 消息列表骨架屏 -->
+                    <div v-if="historyLoading && messagesList.length === 0" class="msg-skeleton-list">
+                        <div class="msg-skeleton msg-skeleton-user">
+                            <t-skeleton animation="gradient"
+                                :row-col="[{ width: '45%', height: '36px', type: 'rect' }]" />
+                        </div>
+                        <div class="msg-skeleton msg-skeleton-bot">
+                            <t-skeleton animation="gradient"
+                                :row-col="[{ width: '80%', height: '16px' }, { width: '100%', height: '16px' }, { width: '60%', height: '16px' }]" />
+                        </div>
+                        <div class="msg-skeleton msg-skeleton-user">
+                            <t-skeleton animation="gradient"
+                                :row-col="[{ width: '35%', height: '36px', type: 'rect' }]" />
+                        </div>
+                        <div class="msg-skeleton msg-skeleton-bot">
+                            <t-skeleton animation="gradient"
+                                :row-col="[{ width: '70%', height: '16px' }, { width: '90%', height: '16px' }]" />
                         </div>
                     </div>
-                    <transition v-else appear name="sq-fade">
-                        <div v-if="suggestedQuestions.length > 0" class="suggested-questions-inner">
-                            <div class="suggested-questions-title-row">
-                                <p class="suggested-questions-caption">
-                                    <span class="suggested-questions-title">{{ t('chat.suggestedQuestions') }}</span>
-                                    <button type="button" class="suggested-questions-refresh"
-                                        :disabled="suggestedQuestionsLoading"
-                                        :title="t('chat.refreshSuggestedQuestions')"
-                                        :aria-label="t('chat.refreshSuggestedQuestions')"
-                                        @click="fetchSuggestedQuestions">
-                                        <t-icon :name="suggestedQuestionsLoading ? 'loading' : 'refresh'"
-                                            :class="{ 'sq-refresh-spin': suggestedQuestionsLoading }" />
-                                    </button>
-                                </p>
-                            </div>
+                    <!-- 推荐问题卡片 - 仅在新会话（无消息）时展示 -->
+                    <div v-if="!embeddedMode && messagesList.length === 0 && !loading"
+                        class="suggested-questions-container"
+                        :class="{ 'has-questions': suggestedQuestions.length > 0 || suggestedQuestionsLoading }">
+                        <!-- 骨架屏占位 -->
+                        <div v-if="suggestedQuestionsLoading && suggestedQuestions.length === 0"
+                            class="suggested-questions-inner">
+                            <div class="suggested-questions-title"><t-skeleton animation="gradient"
+                                    :row-col="[{ width: '120px', height: '14px' }]" /></div>
                             <div class="suggested-questions-grid">
-                                <div v-for="(item, index) in suggestedQuestions" :key="item.question"
-                                    class="suggested-question-card"
-                                    @click="handleSuggestedQuestionClick(item.question)">
-                                    <span class="suggested-question-text">{{ item.question }}</span>
-                                    <span v-if="item.source === 'faq'" class="suggested-question-badge faq">FAQ</span>
+                                <div v-for="n in 6" :key="'sq-skel-' + n"
+                                    class="suggested-question-card sq-card-skeleton">
+                                    <t-skeleton animation="gradient"
+                                        :row-col="[{ width: '100%', height: '14px', type: 'rect' }]" />
                                 </div>
                             </div>
                         </div>
-                    </transition>
-                </div>
-                <!--
+                        <transition v-else appear name="sq-fade">
+                            <div v-if="suggestedQuestions.length > 0" class="suggested-questions-inner">
+                                <div class="suggested-questions-title-row">
+                                    <p class="suggested-questions-caption">
+                                        <span class="suggested-questions-title">{{ t('chat.suggestedQuestions')
+                                            }}</span>
+                                        <button type="button" class="suggested-questions-refresh"
+                                            :disabled="suggestedQuestionsLoading"
+                                            :title="t('chat.refreshSuggestedQuestions')"
+                                            :aria-label="t('chat.refreshSuggestedQuestions')"
+                                            @click="fetchSuggestedQuestions">
+                                            <t-icon :name="suggestedQuestionsLoading ? 'loading' : 'refresh'"
+                                                :class="{ 'sq-refresh-spin': suggestedQuestionsLoading }" />
+                                        </button>
+                                    </p>
+                                </div>
+                                <div class="suggested-questions-grid">
+                                    <div v-for="(item, index) in suggestedQuestions" :key="item.question"
+                                        class="suggested-question-card"
+                                        @click="handleSuggestedQuestionClick(item.question)">
+                                        <span class="suggested-question-text">{{ item.question }}</span>
+                                        <span v-if="item.source === 'faq'"
+                                            class="suggested-question-badge faq">FAQ</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </transition>
+                    </div>
+                    <!--
                   关键：必须用 session.id 作为 key，不能用 v-for 的索引。
                   向上滚动加载历史时会插入一批消息（push/unshift）到列表，
                   若用索引作 key 会让所有已渲染消息的 key 漂移，触发整个列表的销毁重建
@@ -96,8 +119,7 @@
                                 @render-complete-change="(ready) => handleAnswerRenderComplete(session, ready)">
                             </botmsg>
                             <FollowUpSuggestions v-if="session.answerFullyRendered && !session.suggestionsDismissed"
-                                :suggestion-set="session.suggestionSet"
-                                :loading="session.suggestionLoading"
+                                :suggestion-set="session.suggestionSet" :loading="session.suggestionLoading"
                                 :allow-regenerate="session.suggestionSet?.allow_regenerate"
                                 @select="(item) => handleFollowUpSelect(session, item)"
                                 @regenerate="loadFollowUpSuggestions(session, true, true)"
@@ -111,12 +133,8 @@
                     </div>
                 </div>
             </div>
-            <ChatQuestionMinimap
-                v-if="!embeddedMode"
-                :scroll-container="scrollContainer"
-                :messages="messagesList"
-                @jump="jumpToQuestion"
-            />
+            <ChatQuestionMinimap v-if="!embeddedMode" :scroll-container="scrollContainer" :messages="messagesList"
+                @jump="jumpToQuestion" />
         </div>
         <transition name="scroll-btn-fade">
             <div v-show="userHasScrolledUp" class="scroll-to-bottom-btn" @click="onClickScrollToBottom">
@@ -135,6 +153,11 @@
         @update:visible="(val) => val ? null : uiStore.closeKBEditor()" @success="handleKBEditorSuccess" />
     <ChatReferencesDrawer />
     <ChatAttachmentPreviewDrawer />
+    <SandboxSidePanel v-if="!embeddedMode" :session-id="session_id"
+        :agent-id="useSettingsStoreInstance.selectedAgentId"
+        :agent-source-tenant-id="useSettingsStoreInstance.selectedAgentSourceTenantId"
+        :shifted="referencesDrawerVisible"
+        :artifacts="sessionArtifacts" :artifacts-collecting="sessionArtifactsCollecting" />
 </template>
 <script setup>
 import { storeToRefs } from 'pinia';
@@ -175,8 +198,14 @@ import {
 } from '@/api/message-suggestion';
 import { provideChatReferencesDrawer } from '@/composables/useChatReferencesDrawer';
 import { provideChatAttachmentPreviewDrawer } from '@/composables/useChatAttachmentPreviewDrawer';
+import { useSessionActivityStore } from '@/stores/sessionActivity';
+import { provideChatSandboxPanel } from '@/composables/useChatSandboxPanel';
+import SandboxSidePanel from '@/components/chat/SandboxSidePanel.vue';
+import { collectSessionArtifacts } from '@/utils/sessionArtifacts';
+import { isCollectingSkillArtifacts } from '@/utils/skillArtifacts';
 const referencesDrawer = provideChatReferencesDrawer();
 provideChatAttachmentPreviewDrawer();
+const sandboxPanel = provideChatSandboxPanel();
 const { visible: referencesDrawerVisible } = referencesDrawer;
 
 const props = defineProps({
@@ -201,7 +230,7 @@ const uiStore = useUIStore();
 const { navigateToKnowledgeBaseList } = useKnowledgeBaseCreationNavigation();
 const { t } = useI18n();
 const { firstQuery, firstMentionedItems, firstModelId, firstImageFiles, firstAttachmentFiles } = storeToRefs(usemenuStore);
-const { onChunk, error, startStream, stopStream, lastStreamRequest } = useStream();
+const { onChunk, error, isStreaming, startStream, stopStream, lastStreamRequest } = useStream();
 /** Snapshot of the in-flight HTTP request for attaching to the next assistant message. */
 const pendingStreamDebug = ref(null);
 
@@ -256,6 +285,10 @@ const inputFieldRef = ref();
 const created_at = ref('');
 const limit = ref(20);
 const messagesList = reactive([]);
+const sessionArtifacts = computed(() => collectSessionArtifacts(messagesList));
+const sessionArtifactsCollecting = computed(() =>
+    messagesList.some((message) => isCollectingSkillArtifacts(message)),
+);
 const isReplying = ref(false);
 const currentAssistantMessageId = ref(''); // 当前正在生成的 assistant message ID
 // True only while attaching to an in-flight *IM-originated* reply via continue-stream.
@@ -271,6 +304,12 @@ const isImRecovering = ref(false);
 const scrollLock = ref(false);
 const isFirstEnter = ref(true);
 const loading = ref(false);
+const sessionActivity = useSessionActivityStore();
+const activitySessionId = ref('');
+watch([activitySessionId, isReplying, isStreaming, isImRecovering, currentAssistantMessageId], () => {
+    if (props.embeddedMode || !activitySessionId.value) return;
+    sessionActivity.update(activitySessionId.value, isReplying.value || isStreaming.value || isImRecovering.value, currentAssistantMessageId.value);
+}, { flush: 'sync' });
 const historyLoading = ref(true);
 const historyLoadingMore = ref(false);
 const hasMoreHistory = ref(true);
@@ -596,12 +635,20 @@ const {
     scrollContainer,
     debug: import.meta.env.DEV,
     onAfterMsgList: async () => {
+        activitySessionId.value = String(session_id.value);
         for (const message of messagesList) {
             if (message.role === 'assistant' && message.is_completed && message.suggestionSet === undefined) {
                 void loadFollowUpSuggestions(message, false);
             }
         }
         const lastMessage = messagesList[messagesList.length - 1];
+        const locallyRunning = isReplying.value || isStreaming.value || isImRecovering.value;
+        // History reload can finish after sendMsg already marked this session
+        // running. Do not clear that marker just because the snapshot's last
+        // message still looks completed.
+        if (!props.embeddedMode && !locallyRunning && (!lastMessage || lastMessage.is_completed)) {
+            sessionActivity.update(activitySessionId.value, false);
+        }
         if (lastMessage && !lastMessage.is_completed) {
             isReplying.value = true;
             if (lastMessage.role === 'assistant') {
@@ -698,6 +745,8 @@ const handleStopGeneration = () => {
     stopStream();
     loading.value = false;
     isReplying.value = false;
+    if (recoverPollTimer) { clearTimeout(recoverPollTimer); recoverPollTimer = null; }
+    isImRecovering.value = false;
     // 标记当前 assistant 为已结束，避免下一条 query 复用该消息行
     markInFlightAssistantStopped(currentAssistantMessageId.value);
     // 保留 currentAssistantMessageId，Input-field 仍需用它调用 stop API
@@ -706,6 +755,7 @@ const handleStopGeneration = () => {
 const sendMsg = async (value, modelId = '', mentionedItems = [], imageFiles = [], attachmentFiles = []) => {
     stopStream();
     prepareForNewOutgoingMessage();
+    activitySessionId.value = String(session_id.value);
     isReplying.value = true;
     loading.value = true;
     const selectedAgentId = props.embeddedMode ? props.agentId : (useSettingsStoreInstance.selectedAgentId || '');
@@ -783,8 +833,8 @@ const sendMsg = async (value, modelId = '', mentionedItems = [], imageFiles = []
         .filter(attachment => attachment.documentId && attachment.status !== 'failed')
         .map(attachment => attachment.documentId);
     attachmentIds.push(...imageAttachmentIds);
-	// Embedded public routes do not expose the authenticated session upload API;
-	// keep their existing inline payload for compatibility.
+    // Embedded public routes do not expose the authenticated session upload API;
+    // keep their existing inline payload for compatibility.
     const legacyAttachmentFiles = props.embeddedMode
         ? (attachmentFiles || []).filter(attachment => !attachment.documentId)
         : [];
@@ -1041,6 +1091,8 @@ onMounted(async () => {
     }
 })
 const clearData = () => {
+    if (!props.embeddedMode) sessionActivity.detach(activitySessionId.value);
+    activitySessionId.value = '';
     stopStream();
     referencesDrawer.close();
     isReplying.value = false;
@@ -1051,6 +1103,8 @@ const clearData = () => {
     isImRecovering.value = false;
 }
 onUnmounted(() => {
+    if (!props.embeddedMode) sessionActivity.detach(activitySessionId.value);
+    activitySessionId.value = '';
     window.removeEventListener(SESSION_MUTATION_EVENT, handleSessionMutation);
     clearMinimapFlash();
     if (recoverPollTimer) { clearTimeout(recoverPollTimer); recoverPollTimer = null; }
@@ -1073,6 +1127,8 @@ onBeforeRouteUpdate((to, from, next) => {
     font-size: 20px;
     // 右侧不留 padding，滚动条贴到内容区最右缘
     padding: 0 0 20px 20px;
+    // 右侧抽屉让出的宽度。回到底部按钮按「剩余聊天列」居中，而不是整页 50%。
+    --chat-right-inset: 0px;
     box-sizing: border-box;
     flex: 1;
     // The parent .platform-route-outlet is a flex column with min-height:0
@@ -1106,12 +1162,39 @@ onBeforeRouteUpdate((to, from, next) => {
 
     &.has-references-panel:not(.is-embedded) {
         @media (min-width: 960px) {
+            --chat-right-inset: 420px;
             padding-right: 420px;
             box-sizing: border-box;
 
             .chat_scroll_box {
                 padding-top: 0;
             }
+
+            .sandbox-header-toggle {
+                right: 432px;
+            }
+        }
+    }
+
+    // 沙箱可视化右侧面板：宽度可拖拽调整（--sandbox-panel-width 由
+    // composable 持久化），聊天区 padding 跟随面板宽度让位。
+    &.has-sandbox-panel:not(.is-embedded) {
+        @media (min-width: 960px) {
+            --chat-right-inset: var(--sandbox-panel-width, 420px);
+            padding-right: var(--sandbox-panel-width, 420px);
+            box-sizing: border-box;
+        }
+    }
+
+    &.has-sandbox-panel.has-references-panel:not(.is-embedded) {
+        @media (min-width: 1400px) {
+            --chat-right-inset: calc(420px + var(--sandbox-panel-width, 420px));
+            padding-right: calc(420px + var(--sandbox-panel-width, 420px));
+        }
+
+        @media (max-width: 1399.98px) and (min-width: 960px) {
+            --chat-right-inset: var(--sandbox-panel-width, 420px);
+            padding-right: var(--sandbox-panel-width, 420px);
         }
     }
 
@@ -1155,6 +1238,48 @@ onBeforeRouteUpdate((to, from, next) => {
     overflow: hidden;
 }
 
+// 沙箱面板入口：chrome 对齐会话左上角三个点（毛玻璃底 + 24px 图标按钮），
+// 图标是左侧栏 sidebar-toggle 的水平镜像（栏在右侧）。
+.sandbox-header-toggle {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    z-index: 6;
+    display: inline-flex;
+    align-items: center;
+    padding: 2px;
+    border-radius: 8px;
+    box-sizing: border-box;
+    background: color-mix(in srgb, var(--td-bg-color-container) 88%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: auto;
+}
+
+.sandbox-header-toggle__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    color: var(--td-text-color-placeholder);
+    background: transparent;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+
+    &:hover {
+        color: var(--td-text-color-primary);
+        background: var(--td-bg-color-container-hover);
+    }
+
+    &:active {
+        background: var(--td-bg-color-container-active);
+    }
+}
+
 .chat_scroll_box {
     flex: 1;
     min-height: 0;
@@ -1184,7 +1309,7 @@ onBeforeRouteUpdate((to, from, next) => {
 
 .scroll-to-bottom-btn {
     position: absolute;
-    left: 50%;
+    left: calc((100% - var(--chat-right-inset, 0px)) / 2);
     transform: translateX(-50%);
     bottom: 140px;
     z-index: 10;
@@ -1199,7 +1324,7 @@ onBeforeRouteUpdate((to, from, next) => {
     justify-content: center;
     cursor: pointer;
     color: var(--td-text-color-secondary);
-    transition: all 0.2s ease;
+    transition: left 0.3s cubic-bezier(0.22, 0.61, 0.36, 1), background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 
     &:hover {
         background: var(--td-bg-color-container-hover);
