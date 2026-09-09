@@ -323,7 +323,7 @@ onBeforeUnmount(stopPolling)
             </p>
             <div v-if="ds.error_message" class="ds-card__error">
               <t-icon name="error-circle-filled" size="14px" />
-              <span>{{ ds.error_message }}</span>
+              <span class="ds-card__error-text">{{ ds.error_message }}</span>
             </div>
           </div>
         </component>
@@ -599,12 +599,25 @@ onBeforeUnmount(stopPolling)
     gap: 6px;
     margin-top: 8px;
     padding: 8px 10px;
+    max-width: 100%;
+    box-sizing: border-box;
     border-radius: 6px;
     background: var(--td-error-color-1);
     color: var(--td-error-color);
     font-size: 12px;
     line-height: 1.45;
     text-align: left;
+  }
+
+  &__error-text {
+    flex: 1;
+    min-width: 0;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   &__actions {

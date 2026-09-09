@@ -13,6 +13,13 @@ test('renders website crawlers as manual sync instead of generic schedule and sy
   assert.match(component, /datasource\.webCrawler\.manualSync/)
 })
 
+test('keeps long data source errors inside their card', () => {
+  assert.match(component, /&__error\s*\{[\s\S]*?max-width:\s*100%/)
+  assert.match(component, /&__error-text\s*\{[\s\S]*?min-width:\s*0/)
+  assert.match(component, /&__error-text\s*\{[\s\S]*?overflow-wrap:\s*anywhere/)
+  assert.match(component, /&__error-text\s*\{[\s\S]*?-webkit-line-clamp:\s*2/)
+})
+
 test('defines the website crawler manual-sync label in every supported locale', () => {
   for (const locale of [zhCN, enUS, koKR, ruRU]) {
     assert.match(locale, /manualSync:/)
