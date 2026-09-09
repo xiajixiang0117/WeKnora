@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Tencent/WeKnora/internal/agent/compaction"
 	agenttools "github.com/Tencent/WeKnora/internal/agent/tools"
@@ -495,6 +496,109 @@ func TestBuildSystemPromptUsesInternalCitationSetting(t *testing.T) {
 	prompt := disabledEngine.buildSystemPrompt(context.Background())
 	require.Contains(t, prompt, "Source citations are disabled")
 	require.NotContains(t, prompt, "Source citations are enabled")
+}
+
+func TestEmitCompletionEventCollectsKnowledgeSearchReferences(t *testing.T) {
+	engine := newTestEngine(t, &mockChat{})
+	var completed event.AgentCompleteData
+	engine.eventBus.On(event.EventAgentComplete, func(_ context.Context, evt event.Event) error {
+		completed = evt.Data.(event.AgentCompleteData)
+		return nil
+	})
+
+	state := &types.AgentState{
+		RoundSteps: []types.AgentStep{{
+			ToolCalls: []types.ToolCall{{
+				Name: agenttools.ToolKnowledgeSearch,
+				Result: &types.ToolResult{
+					Success: true,
+					Data: map[string]interface{}{
+						"display_type": "search_results",
+						"results": []map[string]interface{}{
+							{
+								"chunk_id":          "chunk-1",
+								"knowledge_id":      "knowledge-1",
+								"knowledge_base_id": "kb-1",
+								"knowledge_title":   "Board Guide.md",
+								"chunk_index":       1,
+								"content":           "first source",
+							},
+							{
+								"chunk_id":          "chunk-2",
+								"knowledge_id":      "knowledge-1",
+								"knowledge_base_id": "kb-1",
+								"knowledge_title":   "Board Guide.md",
+								"chunk_index":       2,
+								"content":           "second source",
+							},
+						},
+					},
+				},
+			}},
+		}},
+	}
+
+	engine.emitCompletionEvent(context.Background(), state, "session-1", "message-1", time.Now())
+
+	require.Len(t, completed.KnowledgeRefs, 2)
+	first, ok := completed.KnowledgeRefs[0].(*types.SearchResult)
+	require.True(t, ok)
+	require.Equal(t, "chunk-1", first.ID)
+	require.Equal(t, "Board Guide.md", first.KnowledgeTitle)
+}
+
+func TestEmitCompletionEventDeduplicatesReferencesAcrossRetrievalTools(t *testing.T) {
+	engine := newTestEngine(t, &mockChat{})
+	var completed event.AgentCompleteData
+	engine.eventBus.On(event.EventAgentComplete, func(_ context.Context, evt event.Event) error {
+		completed = evt.Data.(event.AgentCompleteData)
+		return nil
+	})
+
+	state := &types.AgentState{
+		RoundSteps: []types.AgentStep{
+			{
+				ToolCalls: []types.ToolCall{{
+					Name: agenttools.ToolKnowledgeSearch,
+					Result: &types.ToolResult{
+						Success: true,
+						Data: map[string]interface{}{
+							"display_type": "search_results",
+							"results": []map[string]interface{}{
+								{"chunk_id": "chunk-1", "knowledge_id": "knowledge-1", "content": "search result"},
+							},
+						},
+					},
+				}},
+			},
+			{
+				ToolCalls: []types.ToolCall{{
+					Name: agenttools.ToolGrepChunks,
+					Result: &types.ToolResult{
+						Success: true,
+						Data: map[string]interface{}{
+							"display_type": "grep_results",
+							"chunk_results": []map[string]interface{}{
+								{"chunk_id": "chunk-1", "knowledge_id": "knowledge-1", "content": "duplicate result"},
+								{"faq_id": "faq-2", "knowledge_id": "knowledge-2", "faq_question": "FAQ title", "index": 3, "content": "FAQ result"},
+							},
+						},
+					},
+				}},
+			},
+		},
+	}
+
+	engine.emitCompletionEvent(context.Background(), state, "session-1", "message-1", time.Now())
+
+	require.Len(t, completed.KnowledgeRefs, 2)
+	first := completed.KnowledgeRefs[0].(*types.SearchResult)
+	second := completed.KnowledgeRefs[1].(*types.SearchResult)
+	require.Equal(t, "chunk-1", first.ID)
+	require.Equal(t, "faq-2", second.ID)
+	require.Equal(t, string(types.ChunkTypeFAQ), second.ChunkType)
+	require.Equal(t, "FAQ title", second.KnowledgeTitle)
+	require.Equal(t, 3, second.ChunkIndex)
 }
 
 func newTestEngine(t *testing.T, chatModel chat.Chat, opts ...testEngineOption) *AgentEngine {

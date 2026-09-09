@@ -192,6 +192,8 @@ func (e *AgentEngine) handleMaxIterations(
 func (e *AgentEngine) emitCompletionEvent(
 	ctx context.Context, state *types.AgentState, sessionID, messageID string, startTime time.Time,
 ) {
+	state.KnowledgeRefs = collectKnowledgeReferences(state)
+
 	// Convert knowledge refs to interface{} slice for event data
 	knowledgeRefsInterface := make([]interface{}, 0, len(state.KnowledgeRefs))
 	for _, ref := range state.KnowledgeRefs {
