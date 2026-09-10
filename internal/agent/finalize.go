@@ -14,6 +14,8 @@ import (
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
+const finalAnswerPresentationRequirement = `Use clear, natural language that fits the user's question. Headings and lists are optional: use them only when they make steps, comparisons, or conditions easier to understand. Do not force a fixed section template.`
+
 func finalAnswerImageRequirement(hasRetrievedImage bool) string {
 	if !hasRetrievedImage {
 		return ""
@@ -21,6 +23,23 @@ func finalAnswerImageRequirement(hasRetrievedImage bool) string {
 	return `
 5. Retrieved tool results contain Markdown images. Unless the user explicitly requested text-only output or every image is clearly unrelated, the final answer MUST include at least one relevant Markdown image copied verbatim from the tool results. Preserve its complete URL exactly. Use ASCII half-width parentheses exactly as ![alt](url) and never use full-width （ or ）. Place the image immediately after the paragraph it supports. When multiple images support different sections, distribute them across those sections instead of stopping after the first image.
 6. Before finishing, silently verify that the answer contains a Markdown image when requirement 5 applies.`
+}
+
+// finalAnswerCitationRequirement repeats the source protocol in the final
+// synthesis instruction. Tool results are supplied after the system prompt, so
+// keeping the rule adjacent to the answer request makes it less likely that a
+// provider will omit otherwise valid inline citations.
+func finalAnswerCitationRequirement(citationsEnabled bool) string {
+	if !citationsEnabled {
+		return ""
+	}
+	return `
+
+Citation requirement:
+- When the answer uses retrieved knowledge, you MUST cite every material claim with the supplied source handle, for example <ref id="cN"/> for a knowledge chunk or <ref id="wN"/> for a web page.
+- Put each citation inline on the same line as the claim it supports. Do not group citations at the end of the answer.
+- Copy only cN/wN handles that appear in the supplied tool results. Never invent a handle or write <kb> or <web> tags.
+- Before finishing, silently verify that every material retrieved claim has at least one valid inline citation.`
 }
 
 // streamFinalAnswerToEventBus streams the final answer generation through EventBus
@@ -72,6 +91,7 @@ func (e *AgentEngine) streamFinalAnswerToEventBus(
 		len(messages), toolResultCount)
 
 	imageRequirement := finalAnswerImageRequirement(hasRetrievedImage)
+	citationRequirement := finalAnswerCitationRequirement(e.config.CitationsEnabled())
 
 	// Add final answer prompt
 	finalPrompt := fmt.Sprintf(`Based on the above tool call results, generate a complete answer for the user's question.
@@ -80,12 +100,12 @@ User question: %s
 
 Requirements:
 1. Answer based on the actually retrieved content
-2. Organize the answer in a structured format
+2. %s
 3. If information is insufficient, honestly state so
 4. IMPORTANT: Respond in the same language as the user's question
-%s
+%s%s
 
-Now generate the final answer:`, query, imageRequirement)
+Now generate the final answer:`, query, finalAnswerPresentationRequirement, citationRequirement, imageRequirement)
 
 	messages = append(messages, chat.Message{
 		Role:    "user",

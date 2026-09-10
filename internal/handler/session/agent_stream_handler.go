@@ -770,6 +770,23 @@ func (h *AgentStreamHandler) handleComplete(ctx context.Context, evt event.Event
 		}
 	}
 
+	// The completed message may have gained references from the Agent's final
+	// retrieval summary. Stream them before completion so the live UI updates
+	// the same source panel that a history reload would render.
+	if len(h.assistantMessage.KnowledgeReferences) > 0 {
+		if err := h.streamManager.AppendEvent(h.ctx, h.sessionID, h.assistantMessageID, interfaces.StreamEvent{
+			ID:        evt.ID + "-references",
+			Type:      types.ResponseTypeReferences,
+			Done:      false,
+			Timestamp: time.Now(),
+			Data: map[string]interface{}{
+				"references": types.References(h.assistantMessage.KnowledgeReferences),
+			},
+		}); err != nil {
+			logger.GetLogger(h.ctx).Errorf("Append completion references event failed: %v", err)
+		}
+	}
+
 	// Send completion event to stream manager so SSE can detect completion
 	completeData := map[string]interface{}{
 		"total_steps":       data.TotalSteps,
