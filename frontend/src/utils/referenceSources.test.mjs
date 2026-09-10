@@ -49,6 +49,44 @@ test('buildReferenceList renders stored URL knowledge as its original web page',
   assert.equal(items[0].title, 'docs.example.com')
 })
 
+test('buildReferenceList uses the best available preview for the same web page', () => {
+  const items = buildReferenceList([
+    {
+      id: 'chunk-match-only',
+      knowledge_id: 'doc-1',
+      knowledge_type: 'url',
+      knowledge_source: 'https://docs.example.com/guide',
+      matched_content: 'short matched passage',
+    },
+    {
+      id: 'chunk-content',
+      knowledge_id: 'doc-1',
+      knowledge_type: 'url',
+      knowledge_source: 'https://docs.example.com/guide',
+      content: 'full source passage',
+    },
+  ])
+
+  assert.equal(items.length, 1)
+  assert.equal(items[0].content, 'full source passage')
+  assert.match(items[0].snippet || '', /full source passage/)
+})
+
+test('buildReferenceList falls back to matched content when no source body is available', () => {
+  const items = buildReferenceList([
+    {
+      id: 'chunk-match-only',
+      knowledge_id: 'doc-1',
+      knowledge_type: 'url',
+      knowledge_source: 'https://docs.example.com/guide',
+      matched_content: 'short matched passage',
+    },
+  ])
+
+  assert.equal(items[0].content, 'short matched passage')
+  assert.match(items[0].snippet || '', /short matched passage/)
+})
+
 test('buildReferenceList aggregates chunks from the same document', () => {
   const items = buildReferenceList([
     {

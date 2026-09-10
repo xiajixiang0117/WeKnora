@@ -116,6 +116,52 @@ func publicAttr(expression *regexp.Regexp, tag string) string {
 	return html.UnescapeString(match[1])
 }
 
+// PublicCitationTargets identifies the durable sources actually cited by a
+// completed assistant answer. It intentionally understands only the
+// system-generated public citation tags, never private model handles.
+type PublicCitationTargets struct {
+	chunkIDs map[string]struct{}
+	webURLs  map[string]struct{}
+}
+
+// ExtractPublicCitationTargets returns the knowledge chunks and web pages
+// referenced by canonical <kb/> and <web/> output tags. Web URLs are compared
+// in their fragment-free canonical form, matching RegisterWeb's identity rule.
+func ExtractPublicCitationTargets(text string) PublicCitationTargets {
+	targets := PublicCitationTargets{
+		chunkIDs: make(map[string]struct{}),
+		webURLs:  make(map[string]struct{}),
+	}
+	for _, tag := range publicKBTagRE.FindAllString(text, -1) {
+		if chunkID := strings.TrimSpace(publicAttr(chunkAttrRE, tag)); chunkID != "" {
+			targets.chunkIDs[chunkID] = struct{}{}
+		}
+	}
+	for _, tag := range publicWebTagRE.FindAllString(text, -1) {
+		if rawURL := strings.TrimSpace(publicAttr(urlAttrRE, tag)); rawURL != "" {
+			targets.webURLs[canonicalWebURL(rawURL)] = struct{}{}
+		}
+	}
+	return targets
+}
+
+// Empty reports whether the answer has no canonical public citations.
+func (t PublicCitationTargets) Empty() bool {
+	return len(t.chunkIDs) == 0 && len(t.webURLs) == 0
+}
+
+// HasChunk reports whether a knowledge chunk was cited in the final answer.
+func (t PublicCitationTargets) HasChunk(chunkID string) bool {
+	_, ok := t.chunkIDs[strings.TrimSpace(chunkID)]
+	return ok
+}
+
+// HasWebURL reports whether a web page was cited in the final answer.
+func (t PublicCitationTargets) HasWebURL(rawURL string) bool {
+	_, ok := t.webURLs[canonicalWebURL(strings.TrimSpace(rawURL))]
+	return ok
+}
+
 var (
 	refTagRE       = regexp.MustCompile(`(?i)<ref\s+id\s*=\s*"([^"]+)"\s*/?>`)
 	refCandidateRE = regexp.MustCompile(`(?is)<ref(?:\s|$)[^>]*(?:>|$)`)

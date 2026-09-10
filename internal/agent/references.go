@@ -2,15 +2,16 @@ package agent
 
 import (
 	"encoding/json"
+	"strings"
 
 	agenttools "github.com/Tencent/WeKnora/internal/agent/tools"
+	"github.com/Tencent/WeKnora/internal/modelcontext"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
-// collectKnowledgeReferences rebuilds the durable reference list from the
-// structured results of every completed Agent tool call. Tool result output is
-// model-facing and may be compacted, but Data retains the stable chunk IDs
-// needed by the message's source drawer after the stream has finished.
+// collectKnowledgeReferences retains only sources the final answer actually
+// cites. Completed retrieval tool results remain in AgentSteps for the
+// execution timeline, but must not be presented to users as answer citations.
 func collectKnowledgeReferences(state *types.AgentState) []*types.SearchResult {
 	if state == nil {
 		return nil
@@ -39,7 +40,43 @@ func collectKnowledgeReferences(state *types.AgentState) []*types.SearchResult {
 			}
 		}
 	}
-	return references
+	return filterCitedReferences(state.FinalAnswer, references)
+}
+
+func filterCitedReferences(answer string, candidates []*types.SearchResult) []*types.SearchResult {
+	targets := modelcontext.ExtractPublicCitationTargets(answer)
+	if targets.Empty() {
+		return nil
+	}
+
+	cited := make([]*types.SearchResult, 0, len(candidates))
+	for _, candidate := range candidates {
+		if candidate == nil {
+			continue
+		}
+		if targets.HasChunk(candidate.ID) || targets.HasWebURL(referenceWebURL(candidate)) {
+			cited = append(cited, candidate)
+		}
+	}
+	return cited
+}
+
+func referenceWebURL(reference *types.SearchResult) string {
+	if reference == nil {
+		return ""
+	}
+	if reference.Metadata != nil {
+		if rawURL := strings.TrimSpace(reference.Metadata["url"]); rawURL != "" {
+			return rawURL
+		}
+	}
+	if strings.EqualFold(strings.TrimSpace(reference.KnowledgeType), "url") {
+		return reference.KnowledgeSource
+	}
+	if strings.HasPrefix(reference.ID, "http://") || strings.HasPrefix(reference.ID, "https://") {
+		return reference.ID
+	}
+	return ""
 }
 
 // referencesFromToolResult restores references only from built-in retrieval

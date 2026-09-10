@@ -50,6 +50,20 @@ func TestRegistryExpandsStoredWebKnowledgeChunkAsWebCitation(t *testing.T) {
 	)
 }
 
+func TestExtractPublicCitationTargetsUsesCanonicalSourceIdentity(t *testing.T) {
+	targets := ExtractPublicCitationTargets(`
+<kb doc="Guide" chunk_id="chunk-1" kb_id="kb-1" />
+<web url="https://example.com/guide#section" title="Guide" />
+<web url="https://example.com/guide" title="Guide" />`)
+
+	require.True(t, targets.HasChunk("chunk-1"))
+	require.False(t, targets.HasChunk("chunk-2"))
+	require.True(t, targets.HasWebURL("https://example.com/guide"))
+	require.True(t, targets.HasWebURL("https://example.com/guide#another-section"))
+	require.False(t, targets.HasWebURL("https://example.com/other"))
+	require.False(t, targets.Empty())
+}
+
 func TestRegistryDoesNotExposeGeneratedMarkdownNameAsWebCitationTitle(t *testing.T) {
 	registry := newSourceRegistry()
 	registry.RegisterChunk(ChunkReference{

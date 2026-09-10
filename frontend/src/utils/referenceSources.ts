@@ -12,6 +12,7 @@ export type KnowledgeReferenceLike = {
   chunk_index?: number
   chunk_type?: string
   content?: string
+  matched_content?: string
   metadata?: Record<string, string>
 }
 
@@ -85,6 +86,17 @@ function truncateText(text: string, maxLen: number): string {
   return `${normalized.slice(0, maxLen)}…`
 }
 
+function referenceContent(item: KnowledgeReferenceLike): string {
+  return item.content || item.matched_content || item.metadata?.snippet || ''
+}
+
+function referencePreviewRank(item: KnowledgeReferenceLike): number {
+  if (item.metadata?.snippet) return 3
+  if (item.content) return 2
+  if (item.matched_content) return 1
+  return 0
+}
+
 export function formatReferenceSnippet(text: string | undefined): string {
   let value = String(text || '').replace(/\s+/g, ' ').trim()
   if (!value) return ''
@@ -149,9 +161,8 @@ function buildWebItem(item: KnowledgeReferenceLike, index: number): ReferenceLis
   if (!url) return null
   const domain = getDomainFromUrl(url)
   const title = resolveWebTitle(item, url, domain)
-  const snippet =
-    item.metadata?.snippet ||
-    truncateText(item.content || '', 220)
+  const content = referenceContent(item)
+  const snippet = truncateText(content, 220)
   const normalizedUrl = normalizeReferenceUrl(url)
   return {
     key: `web:${normalizedUrl}`,
@@ -163,7 +174,7 @@ function buildWebItem(item: KnowledgeReferenceLike, index: number): ReferenceLis
     faviconUrl: getFaviconUrl(url),
     snippet: snippet || undefined,
     chunkId: item.id,
-    content: item.content,
+    content,
   }
 }
 
@@ -183,8 +194,8 @@ function buildDocumentItem(item: KnowledgeReferenceLike, index: number): Referen
     chunkIds: item.chunk_ids,
     knowledgeId: item.knowledge_id,
     knowledgeBaseId: item.knowledge_base_id,
-    snippet: truncateText(item.content || '', 220) || undefined,
-    content: item.content,
+    snippet: truncateText(referenceContent(item), 220) || undefined,
+    content: referenceContent(item),
   }
 }
 
@@ -196,9 +207,9 @@ function buildToolItem(item: KnowledgeReferenceLike, index: number): ReferenceLi
     index,
     title: item.knowledge_title || item.metadata?.title || 'Tool result',
     domain: item.metadata?.source || item.metadata?.tool || undefined,
-    snippet: truncateText(item.content || '', 220) || undefined,
+    snippet: truncateText(referenceContent(item), 220) || undefined,
     chunkId: id,
-    content: item.content,
+    content: referenceContent(item),
   }
 }
 
@@ -217,7 +228,7 @@ function mergeDocumentReferences(refs: KnowledgeReferenceLike[]): KnowledgeRefer
 
   refs.forEach((item, index) => {
     const key = getDocumentGroupKey(item, index)
-    const content = String(item.content || '').trim()
+    const content = referenceContent(item).trim()
     const chunkIds = Array.from(new Set([...(item.chunk_ids || []), ...(item.id ? [item.id] : [])]))
     const existing = groups.get(key)
 
@@ -260,7 +271,8 @@ function mergeWebReferences(refs: KnowledgeReferenceLike[]): KnowledgeReferenceL
   refs.forEach((item, index) => {
     const url = getWebSearchUrl(item)
     const key = url ? normalizeReferenceUrl(url) : item.id || `web-${index}`
-    if (!groups.has(key)) {
+    const existing = groups.get(key)
+    if (!existing || referencePreviewRank(item) > referencePreviewRank(existing)) {
       groups.set(key, item)
     }
   })

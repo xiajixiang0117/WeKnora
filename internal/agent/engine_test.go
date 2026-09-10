@@ -507,6 +507,8 @@ func TestEmitCompletionEventCollectsKnowledgeSearchReferences(t *testing.T) {
 	})
 
 	state := &types.AgentState{
+		FinalAnswer: `<web url="https://example.com/guide" title="Board Guide" />
+<kb doc="Board Guide.md" chunk_id="chunk-2" kb_id="kb-1" />`,
 		RoundSteps: []types.AgentStep{{
 			ToolCalls: []types.ToolCall{{
 				Name: agenttools.ToolKnowledgeSearch,
@@ -560,6 +562,8 @@ func TestEmitCompletionEventDeduplicatesReferencesAcrossRetrievalTools(t *testin
 	})
 
 	state := &types.AgentState{
+		FinalAnswer: `<kb doc="Search result" chunk_id="chunk-1" />
+<kb doc="FAQ title" chunk_id="faq-2" />`,
 		RoundSteps: []types.AgentStep{
 			{
 				ToolCalls: []types.ToolCall{{
