@@ -165,6 +165,24 @@ func TestProcessWebCrawlScanAdoptsExistingURLKnowledgeWithoutDataSourceMetadata(
 	assert.Equal(t, 1, scan.ItemsSkipped)
 }
 
+func TestWebCrawlKnowledgeNeedsRefreshWhenPageTitleChanges(t *testing.T) {
+	knowledge := &types.Knowledge{
+		Type:       "url",
+		Source:     "https://example.com/guide",
+		FolderPath: "docs",
+		Title:      "Guide.md",
+	}
+	page := webcrawler.Page{
+		CanonicalURL: "https://example.com/guide",
+		FolderPath:   "docs",
+		Title:        "Guide",
+	}
+
+	assert.True(t, webCrawlKnowledgeNeedsRefresh(knowledge, page))
+	knowledge.Title = page.Title
+	assert.False(t, webCrawlKnowledgeNeedsRefresh(knowledge, page))
+}
+
 type webCrawlStateRepo struct {
 	interfaces.WebCrawlerRepository
 	scan    *types.WebCrawlScan
@@ -266,6 +284,7 @@ func TestApplyWebCrawlChangeRebuildsLegacyURLKnowledge(t *testing.T) {
 	assert.Equal(t, []string{legacyID}, knowledgeRepo.hardDeleted)
 	require.Len(t, knowledgeRepo.live, 1, "the updated page must replace, not duplicate, the legacy knowledge")
 	assert.NotNil(t, knowledgeRepo.live["knowledge-rebuilt"])
+	assert.Equal(t, change.Title, knowledgeRepo.live["knowledge-rebuilt"].Title)
 	assert.Equal(t, "knowledge-rebuilt", page.KnowledgeID)
 	assert.Equal(t, "latest-hash", page.LastAppliedHash)
 	assert.False(t, webCrawlKnowledgeNeedsRefresh(knowledgeRepo.live["knowledge-rebuilt"], webcrawler.Page{

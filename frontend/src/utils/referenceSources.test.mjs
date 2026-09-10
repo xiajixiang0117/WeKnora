@@ -31,6 +31,24 @@ test('buildReferenceList separates web and document references', () => {
   assert.equal(items[1].kind, 'document')
 })
 
+test('buildReferenceList renders stored URL knowledge as its original web page', () => {
+  const items = buildReferenceList([
+    {
+      id: 'chunk-1',
+      knowledge_id: 'doc-1',
+      knowledge_title: 'PM示例.md',
+      knowledge_type: 'url',
+      knowledge_source: 'https://docs.example.com/pm-guide',
+      content: 'page content',
+    },
+  ])
+
+  assert.equal(items.length, 1)
+  assert.equal(items[0].kind, 'web')
+  assert.equal(items[0].url, 'https://docs.example.com/pm-guide')
+  assert.equal(items[0].title, 'docs.example.com')
+})
+
 test('buildReferenceList aggregates chunks from the same document', () => {
   const items = buildReferenceList([
     {

@@ -52,6 +52,8 @@ func prepareMessagesWithModelContext(
 			"knowledge_id":      result.KnowledgeID,
 			"knowledge_base_id": result.KnowledgeBaseID,
 			"knowledge_title":   firstPipelineTitle(result),
+			"knowledge_source":  result.KnowledgeSource,
+			"knowledge_type":    result.KnowledgeType,
 			"chunk_index":       result.ChunkIndex,
 			"chunk_type":        result.ChunkType,
 			"content":           getEnrichedPassageForChat(ctx, result),

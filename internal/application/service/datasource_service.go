@@ -1452,6 +1452,9 @@ func (s *DataSourceService) applyFetchedItemOrigin(ctx context.Context, knowledg
 	knowledge.Type = "url"
 	knowledge.Source = item.URL
 	knowledge.FileType = "html"
+	if title := strings.TrimSpace(item.Title); title != "" {
+		knowledge.Title = title
+	}
 	if err := s.knowledgeService.GetRepository().UpdateKnowledge(ctx, knowledge); err != nil {
 		return fmt.Errorf("attach fetched item source: %w", err)
 	}

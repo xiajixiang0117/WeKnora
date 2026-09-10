@@ -225,6 +225,8 @@ func (t *GrepChunksTool) Execute(ctx context.Context, args json.RawMessage) (*ty
 type chunkWithTitle struct {
 	types.Chunk
 	KnowledgeTitle  string  `json:"knowledge_title"   gorm:"column:knowledge_title"`
+	KnowledgeSource string  `json:"knowledge_source"  gorm:"column:knowledge_source"`
+	KnowledgeType   string  `json:"knowledge_type"    gorm:"column:knowledge_type"`
 	MatchScore      float64 `json:"match_score"       gorm:"column:match_score"`
 	MatchedPatterns int     `json:"matched_patterns"`
 	// TitleMatch is true when the query regex matches the owning knowledge's
@@ -385,7 +387,8 @@ func (t *GrepChunksTool) searchChunks(
 	query := t.db.WithContext(ctx).Table("chunks").
 		Select("chunks.id, chunks.content, chunks.chunk_index, chunks.knowledge_id, "+
 			"chunks.knowledge_base_id, chunks.chunk_type, chunks.metadata, chunks.created_at, "+
-			"knowledges.title as knowledge_title").
+			"knowledges.title as knowledge_title, knowledges.source as knowledge_source, "+
+			"knowledges.type as knowledge_type").
 		Joins("JOIN knowledges ON chunks.knowledge_id = knowledges.id").
 		Where("chunks.is_enabled = ?", true).
 		Where("chunks.deleted_at IS NULL").
@@ -673,6 +676,8 @@ type grepChunkResult struct {
 	KnowledgeID     string  `json:"knowledge_id"`
 	KnowledgeBaseID string  `json:"knowledge_base_id"`
 	KnowledgeTitle  string  `json:"knowledge_title"`
+	KnowledgeSource string  `json:"knowledge_source,omitempty"`
+	KnowledgeType   string  `json:"knowledge_type,omitempty"`
 	ChunkType       string  `json:"chunk_type"`
 	Index           int     `json:"index,omitempty"`
 	ChunkIndex      int     `json:"chunk_index,omitempty"`
@@ -692,6 +697,8 @@ func buildGrepChunkResults(results []chunkWithTitle, compiled []*regexp.Regexp) 
 			KnowledgeID:     r.KnowledgeID,
 			KnowledgeBaseID: r.KnowledgeBaseID,
 			KnowledgeTitle:  r.KnowledgeTitle,
+			KnowledgeSource: r.KnowledgeSource,
+			KnowledgeType:   r.KnowledgeType,
 			ChunkType:       string(r.ChunkType),
 			TitleMatch:      r.TitleMatch,
 			MatchSnippet:    extractChunkMatchSnippet(&r.Chunk, compiled),

@@ -96,6 +96,31 @@ func TestPrepareMessagesWithModelContextKeepsWebSeparateFromChunks(t *testing.T)
 	)
 }
 
+func TestPrepareMessagesWithModelContextExpandsStoredWebKnowledgeAsWebCitation(t *testing.T) {
+	manage := &types.ChatManage{
+		PipelineRequest: types.PipelineRequest{Query: "question", SummaryConfig: types.SummaryConfig{Prompt: "system"}},
+		PipelineState: types.PipelineState{
+			UserContent: "question",
+			MergeResult: []*types.SearchResult{{
+				ID:              "chunk-1",
+				KnowledgeID:     "doc-1",
+				KnowledgeBaseID: "kb-1",
+				KnowledgeTitle:  "Example page",
+				KnowledgeType:   "url",
+				KnowledgeSource: "https://example.com/guide",
+				Content:         "web content",
+			}},
+		},
+	}
+
+	messages, refs := prepareMessagesWithModelContext(context.Background(), manage)
+	require.Contains(t, messages[1].Content, `<chunk id="c1"`)
+	require.Equal(t,
+		`<web url="https://example.com/guide" title="Example page" />`,
+		refs.DecodeOutputText(`<ref id="c1"/>`),
+	)
+}
+
 func TestPrepareMessagesWithModelContextCompactsHistoryWithoutCurrentRetrieval(t *testing.T) {
 	manage := &types.ChatManage{
 		PipelineRequest: types.PipelineRequest{Query: "follow-up", SummaryConfig: types.SummaryConfig{Prompt: "system"}},

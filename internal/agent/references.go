@@ -102,6 +102,8 @@ func searchResultsFromRows(value interface{}) []*types.SearchResult {
 			ChunkType:         chunkType,
 			MatchedContent:    firstReferenceString(row, "matched_content", "match_snippet"),
 			KnowledgeFilename: referenceString(row, "knowledge_filename"),
+			KnowledgeSource:   referenceString(row, "knowledge_source"),
+			KnowledgeType:     referenceString(row, "knowledge_type"),
 		})
 	}
 	return references

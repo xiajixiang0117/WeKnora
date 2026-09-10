@@ -480,6 +480,7 @@ func searchResultFromMap(refMap map[string]interface{}) *types.SearchResult {
 		ImageInfo:            getString(refMap, "image_info"),
 		KnowledgeFilename:    getString(refMap, "knowledge_filename"),
 		KnowledgeSource:      getString(refMap, "knowledge_source"),
+		KnowledgeType:        getString(refMap, "knowledge_type"),
 		KnowledgeDescription: getString(refMap, "knowledge_description"),
 		KnowledgeBaseID:      getString(refMap, "knowledge_base_id"),
 	}

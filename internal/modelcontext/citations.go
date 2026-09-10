@@ -173,6 +173,10 @@ func (r *sourceRegistry) ExpandText(text string) string {
 		}
 		handle := strings.ToLower(match[1])
 		if chunkID, chunkRef, ok := r.chunks.resolve(handle); ok {
+			if isStoredWebKnowledge(chunkRef.KnowledgeType, chunkRef.KnowledgeSource) {
+				return fmt.Sprintf(`<web url="%s" title="%s" />`,
+					escapeAttr(chunkRef.KnowledgeSource), escapeAttr(publicWebCitationTitle(chunkRef.DocumentTitle)))
+			}
 			attrs := fmt.Sprintf(`doc="%s" chunk_id="%s"`, escapeAttr(chunkRef.DocumentTitle), escapeAttr(chunkID))
 			if chunkRef.KnowledgeBaseID != "" {
 				attrs += fmt.Sprintf(` kb_id="%s"`, escapeAttr(chunkRef.KnowledgeBaseID))
@@ -184,6 +188,14 @@ func (r *sourceRegistry) ExpandText(text string) string {
 		}
 		return ""
 	})
+}
+
+func publicWebCitationTitle(title string) string {
+	title = strings.TrimSpace(title)
+	if strings.HasSuffix(strings.ToLower(title), ".md") {
+		return ""
+	}
+	return title
 }
 
 func escapeAttr(value string) string { return html.EscapeString(value) }

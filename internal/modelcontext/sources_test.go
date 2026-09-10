@@ -33,6 +33,93 @@ func TestRegistryChunkAliasIsStableAndExpandsCanonicalCitation(t *testing.T) {
 	)
 }
 
+func TestRegistryExpandsStoredWebKnowledgeChunkAsWebCitation(t *testing.T) {
+	registry := newSourceRegistry()
+	registry.RegisterChunk(ChunkReference{
+		ChunkID:         "chunk-uuid-1",
+		KnowledgeID:     "knowledge-uuid-1",
+		KnowledgeBaseID: "kb-uuid-1",
+		DocumentTitle:   "Example page",
+		KnowledgeType:   "url",
+		KnowledgeSource: "https://example.com/guide",
+	})
+
+	require.Equal(t,
+		`claim <web url="https://example.com/guide" title="Example page" />`,
+		registry.ExpandText(`claim <ref id="c1"/>`),
+	)
+}
+
+func TestRegistryDoesNotExposeGeneratedMarkdownNameAsWebCitationTitle(t *testing.T) {
+	registry := newSourceRegistry()
+	registry.RegisterChunk(ChunkReference{
+		ChunkID:         "chunk-uuid-1",
+		DocumentTitle:   "PM示例.md",
+		KnowledgeType:   "url",
+		KnowledgeSource: "https://example.com/guide",
+	})
+
+	require.Equal(t,
+		`<web url="https://example.com/guide" title="" />`,
+		registry.ExpandText(`<ref id="c1"/>`),
+	)
+}
+
+func TestRegistryKeepsURLHostedFileAsKnowledgeCitation(t *testing.T) {
+	registry := newSourceRegistry()
+	registry.RegisterChunk(ChunkReference{
+		ChunkID:         "chunk-uuid-1",
+		KnowledgeBaseID: "kb-uuid-1",
+		DocumentTitle:   "Guide.pdf",
+		KnowledgeType:   "file",
+		KnowledgeSource: "https://example.com/guide.pdf",
+	})
+
+	require.Equal(t,
+		`claim <kb doc="Guide.pdf" chunk_id="chunk-uuid-1" kb_id="kb-uuid-1" />`,
+		registry.ExpandText(`claim <ref id="c1"/>`),
+	)
+}
+
+func TestRegistryKeepsInvalidStoredWebSourceAsKnowledgeCitation(t *testing.T) {
+	registry := newSourceRegistry()
+	registry.RegisterChunk(ChunkReference{
+		ChunkID:         "chunk-uuid-1",
+		KnowledgeBaseID: "kb-uuid-1",
+		DocumentTitle:   "Unverified page",
+		KnowledgeType:   "url",
+		KnowledgeSource: "javascript:alert(1)",
+	})
+
+	require.Equal(t,
+		`claim <kb doc="Unverified page" chunk_id="chunk-uuid-1" kb_id="kb-uuid-1" />`,
+		registry.ExpandText(`claim <ref id="c1"/>`),
+	)
+}
+
+func TestModelOutputExpandsDeepReadStoredWebKnowledgeAsWebCitation(t *testing.T) {
+	registry := newSourceRegistry()
+	registry.ModelOutput(&types.ToolResult{
+		Success: true,
+		Data: map[string]interface{}{
+			"display_type":     "knowledge_chunks_list",
+			"knowledge_id":     "knowledge-uuid-1",
+			"knowledge_title":  "Example page",
+			"knowledge_type":   "url",
+			"knowledge_source": "https://example.com/guide",
+			"chunks": []map[string]interface{}{{
+				"chunk_id": "chunk-uuid-1",
+				"content":  "page content",
+			}},
+		},
+	})
+
+	require.Equal(t,
+		`<web url="https://example.com/guide" title="Example page" />`,
+		registry.ExpandText(`<ref id="c1"/>`),
+	)
+}
+
 func TestRegisterDoesNotTreatModelAliasesAsNewDurableIdentities(t *testing.T) {
 	r := newSourceRegistry()
 	require.Equal(t, "c1", r.RegisterChunk(ChunkReference{ChunkID: "chunk-real"}))

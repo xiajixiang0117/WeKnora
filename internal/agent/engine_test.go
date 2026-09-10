@@ -520,6 +520,8 @@ func TestEmitCompletionEventCollectsKnowledgeSearchReferences(t *testing.T) {
 								"knowledge_id":      "knowledge-1",
 								"knowledge_base_id": "kb-1",
 								"knowledge_title":   "Board Guide.md",
+								"knowledge_source":  "https://example.com/guide",
+								"knowledge_type":    "url",
 								"chunk_index":       1,
 								"content":           "first source",
 							},
@@ -545,6 +547,8 @@ func TestEmitCompletionEventCollectsKnowledgeSearchReferences(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "chunk-1", first.ID)
 	require.Equal(t, "Board Guide.md", first.KnowledgeTitle)
+	require.Equal(t, "https://example.com/guide", first.KnowledgeSource)
+	require.Equal(t, "url", first.KnowledgeType)
 }
 
 func TestEmitCompletionEventDeduplicatesReferencesAcrossRetrievalTools(t *testing.T) {

@@ -23,6 +23,8 @@ type ChunkReference struct {
 	DocumentTitle   string
 	ChunkIndex      int
 	ChunkType       string
+	KnowledgeType   string
+	KnowledgeSource string
 }
 
 // webMeta is the per-web-page metadata stored next to the raw URL.
@@ -103,6 +105,12 @@ func mergeChunkReference(dst *ChunkReference, src ChunkReference) {
 	if dst.ChunkType == "" {
 		dst.ChunkType = src.ChunkType
 	}
+	if dst.KnowledgeType == "" {
+		dst.KnowledgeType = src.KnowledgeType
+	}
+	if dst.KnowledgeSource == "" {
+		dst.KnowledgeSource = src.KnowledgeSource
+	}
 }
 
 func (r *sourceRegistry) RegisterDocument(id string) string {
@@ -167,8 +175,25 @@ func (r *sourceRegistry) RegisterSearchResults(results []*types.SearchResult) {
 			DocumentTitle:   firstNonEmpty(result.KnowledgeTitle, result.KnowledgeFilename),
 			ChunkIndex:      result.ChunkIndex,
 			ChunkType:       result.ChunkType,
+			KnowledgeType:   result.KnowledgeType,
+			KnowledgeSource: result.KnowledgeSource,
 		})
 	}
+}
+
+// isStoredWebKnowledge returns true only for pages deliberately imported as
+// URL knowledge. A file fetched from a URL keeps its document citation even
+// though it also has an HTTP source address.
+func isStoredWebKnowledge(knowledgeType, source string) bool {
+	if !strings.EqualFold(strings.TrimSpace(knowledgeType), "url") {
+		return false
+	}
+	parsed, err := url.Parse(strings.TrimSpace(source))
+	if err != nil || parsed == nil || parsed.Host == "" {
+		return false
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	return scheme == "http" || scheme == "https"
 }
 
 func firstNonEmpty(values ...string) string {

@@ -196,6 +196,8 @@ func (r *sourceRegistry) modelKnowledgeOutput(mode string, rows []map[string]int
 			DocumentTitle:   title,
 			ChunkIndex:      chunkIndex,
 			ChunkType:       chunkType,
+			KnowledgeType:   stringValue(row, "knowledge_type"),
+			KnowledgeSource: stringValue(row, "knowledge_source"),
 		})
 		chunks = append(chunks, modelChunk{
 			handle:     chunkHandle,
@@ -237,12 +239,20 @@ func (r *sourceRegistry) modelKnowledgeChunksOutput(data map[string]interface{},
 	rows := mapsValue(data["chunks"])
 	title := stringValue(data, "knowledge_title")
 	knowledgeID := stringValue(data, "knowledge_id")
+	knowledgeType := stringValue(data, "knowledge_type")
+	knowledgeSource := stringValue(data, "knowledge_source")
 	for _, row := range rows {
 		if stringValue(row, "knowledge_id") == "" {
 			row["knowledge_id"] = knowledgeID
 		}
 		if stringValue(row, "knowledge_title") == "" {
 			row["knowledge_title"] = title
+		}
+		if stringValue(row, "knowledge_type") == "" {
+			row["knowledge_type"] = knowledgeType
+		}
+		if stringValue(row, "knowledge_source") == "" {
+			row["knowledge_source"] = knowledgeSource
 		}
 	}
 	output := r.modelKnowledgeOutput("deep_read", rows, fallback)

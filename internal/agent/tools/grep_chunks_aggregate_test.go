@@ -56,3 +56,24 @@ func TestAggregateByKnowledge_mergesChunksFromSameDocument(t *testing.T) {
 		t.Fatalf("doc-2 chunk hits = %d, want 1", byID["doc-2"].ChunkHitCount)
 	}
 }
+
+func TestBuildGrepChunkResultsPreservesStoredWebSource(t *testing.T) {
+	results := buildGrepChunkResults([]chunkWithTitle{{
+		Chunk: types.Chunk{
+			ID:              "chunk-1",
+			KnowledgeID:     "doc-1",
+			KnowledgeBaseID: "kb-1",
+			ChunkType:       types.ChunkTypeText,
+		},
+		KnowledgeTitle:  "Example page",
+		KnowledgeType:   "url",
+		KnowledgeSource: "https://example.com/guide",
+	}}, nil)
+
+	if len(results) != 1 {
+		t.Fatalf("want one result, got %d", len(results))
+	}
+	if results[0].KnowledgeType != "url" || results[0].KnowledgeSource != "https://example.com/guide" {
+		t.Fatalf("source fields were not preserved: %#v", results[0])
+	}
+}

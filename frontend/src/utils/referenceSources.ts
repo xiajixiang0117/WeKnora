@@ -6,6 +6,8 @@ export type KnowledgeReferenceLike = {
   knowledge_id?: string
   knowledge_title?: string
   knowledge_filename?: string
+  knowledge_source?: string
+  knowledge_type?: string
   knowledge_base_id?: string
   chunk_index?: number
   chunk_type?: string
@@ -53,6 +55,7 @@ export function normalizeReferenceUrl(url: string): string {
 
 export function getWebSearchUrl(item: KnowledgeReferenceLike): string {
   if (item.metadata?.url) return item.metadata.url
+  if (isStoredWebKnowledge(item)) return item.knowledge_source || ''
   if (item.id && (item.id.startsWith('http://') || item.id.startsWith('https://'))) {
     return item.id
   }
@@ -97,7 +100,12 @@ export function formatReferenceSnippet(text: string | undefined): string {
 }
 
 function isWebReference(item: KnowledgeReferenceLike): boolean {
-  return item.chunk_type === 'web_search'
+  return item.chunk_type === 'web_search' || isStoredWebKnowledge(item)
+}
+
+function isStoredWebKnowledge(item: KnowledgeReferenceLike): boolean {
+  const source = String(item.knowledge_source || '').trim()
+  return item.knowledge_type === 'url' && /^https?:\/\//i.test(source)
 }
 
 function isToolReference(item: KnowledgeReferenceLike): boolean {
@@ -125,6 +133,7 @@ function resolveWebTitle(item: KnowledgeReferenceLike, url: string, domain: stri
   const knowledgeTitle = item.knowledge_title?.trim()
   if (
     knowledgeTitle &&
+    !(isStoredWebKnowledge(item) && /\.md$/i.test(knowledgeTitle)) &&
     !isLikelyUrl(knowledgeTitle) &&
     !isSameReferenceUrl(knowledgeTitle, url) &&
     knowledgeTitle !== domain

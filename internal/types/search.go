@@ -189,6 +189,11 @@ type SearchResult struct {
 	// Used to indicate the source of the knowledge, such as "url"
 	KnowledgeSource string `json:"knowledge_source"`
 
+	// KnowledgeType distinguishes stored web pages ("url") from files that
+	// merely originated at a URL, so citation rendering can expose only real
+	// page sources as public web links.
+	KnowledgeType string `json:"knowledge_type"`
+
 	// KnowledgeChannel indicates through which channel the knowledge was ingested (web, api, wechat, etc.)
 	KnowledgeChannel string `json:"knowledge_channel"`
 

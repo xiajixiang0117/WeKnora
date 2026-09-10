@@ -377,7 +377,13 @@ func (s *DataSourceService) findWebCrawlKnowledge(ctx context.Context, ds *types
 }
 
 func webCrawlKnowledgeNeedsRefresh(knowledge *types.Knowledge, page webcrawler.Page) bool {
-	return knowledge == nil || knowledge.Type != "url" || knowledge.Source != page.CanonicalURL || knowledge.FolderPath != page.FolderPath
+	return knowledge == nil ||
+		knowledge.Type != "url" ||
+		knowledge.Source != page.CanonicalURL ||
+		knowledge.FolderPath != page.FolderPath ||
+		(strings.TrimSpace(page.Title) != "" &&
+			strings.HasSuffix(strings.ToLower(strings.TrimSpace(knowledge.Title)), ".md") &&
+			strings.TrimSpace(knowledge.Title) != strings.TrimSpace(page.Title))
 }
 
 func (s *DataSourceService) ProcessWebCrawlApply(ctx context.Context, task *asynq.Task) error {
