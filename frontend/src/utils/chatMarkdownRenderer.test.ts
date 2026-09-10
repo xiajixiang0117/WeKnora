@@ -17,6 +17,7 @@ import {
 } from './chatMarkdownRenderer.ts'
 import {
   collapseStandaloneCitationParagraphs,
+  dedupeAdjacentWebCitationTags,
   joinCitationTagsToPreviousLine,
   resolveCitationChunkId,
   stripIncompleteCitationTag,
@@ -492,6 +493,47 @@ test('joinCitationTagsToPreviousLine inlines consecutive citation tags across si
   const tag3 = `<kb doc="${SAMPLE_DOC}" chunk_id="${SAMPLE_CHUNK_C}" />`
   const input = `${tag1}\n${tag2}\n${tag3}`
   assert.equal(joinCitationTagsToPreviousLine(input), `${tag1} ${tag2} ${tag3}`)
+})
+
+test('dedupeAdjacentWebCitationTags removes the same URL from one citation cluster', () => {
+  const first = '<web url="https://sifli.com/board/" title="Board" />'
+  const duplicate = '<web url="https://sifli.com/board#display" title="Display" />'
+  const other = '<web url="https://example.com/guide" title="Guide" />'
+
+  assert.equal(
+    dedupeAdjacentWebCitationTags(`${first}\n${duplicate} ${other}`),
+    `${first} ${other}`,
+  )
+})
+
+test('dedupeAdjacentWebCitationTags preserves repeated URLs attached to separate claims', () => {
+  const tag = '<web url="https://sifli.com/board" title="Board" />'
+  assert.equal(
+    dedupeAdjacentWebCitationTags(`First claim ${tag}\nSecond claim ${tag}`),
+    `First claim ${tag}\nSecond claim ${tag}`,
+  )
+})
+
+test('dedupeAdjacentWebCitationTags preserves prose after a citation cluster', () => {
+  const tag = '<web url="https://sifli.com/board" title="Board" />'
+  assert.equal(
+    dedupeAdjacentWebCitationTags(`${tag}\n${tag}\nNext paragraph`),
+    `${tag}\nNext paragraph`,
+  )
+})
+
+test('renderChatMarkdown renders one badge for adjacent citations with the same web URL', () => {
+  const renderer = createChatMarkdownRenderer()
+  const html = renderChatMarkdown(
+    '开发板采用 DPI 接口。\n<web url="https://sifli.com/board" title="Board" />\n<web url="https://sifli.com/board/" title="Board duplicate" />',
+    {
+      renderer,
+      escapeMarkdown: (text) => text,
+      sanitizeHtml: (value) => value,
+    },
+  )
+
+  assert.equal((html.match(/citation-web/g) || []).length, 1)
 })
 
 test('renderChatMarkdown inlines consecutive citation tags across newlines', () => {

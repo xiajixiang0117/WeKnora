@@ -4,6 +4,7 @@
 export const KB_WEB_TAG_RE = /<(?:kb|web)\b[^>]*?\s*\/?>/g
 const KB_TAG_ATTR_RE = /<kb\b([^>]*?)\s*\/?>/g
 const WEB_TAG_ATTR_RE = /<web\b([^>]*?)\s*\/?>/g
+const CITATION_TAG_RUN_RE = /<(?:kb|web)\b[^>]*?\s*\/?>(?:\s*<(?:kb|web)\b[^>]*?\s*\/?>)+/gi
 
 const ATTRIBUTE_REGEX = /([\w-]+)\s*=\s*"([^"]*)"/g
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -50,6 +51,41 @@ function parseTagAttributes(attrString: string): Record<string, string> {
     attributes[match[1]] = match[2]
   }
   return attributes
+}
+
+function normalizeCitationUrl(url: string): string {
+  const raw = String(url || '').trim()
+  if (!raw) return ''
+  try {
+    const parsed = new URL(raw)
+    parsed.hash = ''
+    if (parsed.pathname.length > 1 && parsed.pathname.endsWith('/')) {
+      parsed.pathname = parsed.pathname.slice(0, -1)
+    }
+    return parsed.toString()
+  } catch {
+    return raw.replace(/\/$/, '')
+  }
+}
+
+/** Remove repeated web URLs inside one adjacent citation cluster. */
+export function dedupeAdjacentWebCitationTags(content: string): string {
+  if (!content || !/<web\b/i.test(content)) return content
+
+  return content.replace(CITATION_TAG_RUN_RE, (run) => {
+    const tags = run.match(KB_WEB_TAG_RE) || []
+    const seenWebUrls = new Set<string>()
+    const uniqueTags = tags.filter((tag) => {
+      const match = tag.match(/^<web\b([^>]*?)\s*\/?>$/i)
+      if (!match) return true
+
+      const url = normalizeCitationUrl(parseTagAttributes(match[1]).url || '')
+      if (!url || seenWebUrls.has(url)) return !url
+      seenWebUrls.add(url)
+      return true
+    })
+    return uniqueTags.join(' ')
+  })
 }
 
 function escapeHtml(text: string): string {
@@ -246,6 +282,8 @@ export function joinCitationTagsToPreviousLine(content: string): string {
       '$1 $2',
     )
   }
+
+  result = dedupeAdjacentWebCitationTags(result)
 
   // Blank lines before citations: join to the previous content. Fenced-code
   // delimiters are the only exception because ``` / ~~~ must stay on their own line.
