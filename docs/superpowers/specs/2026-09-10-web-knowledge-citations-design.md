@@ -1,120 +1,99 @@
-# Web Knowledge Citations Design
+# 网页知识引用设计
 
-## Status
+## 状态
 
-Approved for implementation on 2026-09-10.
+已于 2026-09-10 确认，待实施。
 
-## Problem
+## 问题
 
-Pages imported through the web crawler are converted to Markdown before they
-are indexed. The generated Markdown filename (for example, `PM示例.md`) is
-currently carried through retrieval and rendered as a knowledge-document
-citation. Although the knowledge record already retains its source URL, that
-URL is not preserved across every citation boundary. Users consequently cannot
-recognize or open the original web page from an answer citation.
+网页爬虫会在索引前把页面转换为 Markdown。由此生成的文件名（例如
+`PM示例.md`）目前被带入检索结果，并作为知识库文档引用展示。知识记录虽然
+保留了原始 URL，但该 URL 没有穿过所有引用数据边界，因此用户无法从回答引用
+识别或打开原始网页。
 
-## Goals
+## 目标
 
-- Render an HTTP(S) page imported as `Knowledge.Type == "url"` as a web
-  citation, backed by its original URL.
-- Preserve internal chunk IDs for retrieval, access checks, de-duplication and
-  source-drawer matching.
-- Keep ordinary uploaded files, manual documents and direct file downloads as
-  document citations.
-- Work for semantic retrieval, keyword retrieval, Agent replies, ordinary
-  knowledge-base chat, persisted references and the reference drawer.
-- Let historical data continue to render safely when new source fields are
-  absent.
+- 将 `Knowledge.Type == "url"` 导入的 HTTP(S) 网页，按网页引用展示，并使用
+  原始 URL。
+- 保留内部 chunk ID，用于检索、访问校验、去重和来源抽屉匹配。
+- 普通上传文件、手工文档与 URL 下载的文件继续按文档引用展示。
+- 覆盖语义检索、关键词检索、Agent 回答、普通知识库问答、持久化引用及来源抽屉。
+- 新增来源字段缺失时，历史数据仍能安全地按原有文档逻辑渲染。
 
-## Non-goals
+## 非目标
 
-- Change Markdown conversion, chunking, crawler storage paths or URL fetching.
-- Treat live web search results and stored web knowledge as the same retrieval
-  type. They remain separate internally.
-- Rewrite citations in assistant messages that have already been persisted.
+- 不修改 Markdown 转换、分块、爬虫存储路径或 URL 抓取行为。
+- 不将实时联网搜索结果与已入库网页知识混为一种内部检索类型。
+- 不重写已经持久化的历史助手消息中的引用。
 
-## Design
+## 设计
 
-### Source classification
+### 来源分类
 
-`types.SearchResult` will carry the owning knowledge's `KnowledgeType` in
-addition to its existing `KnowledgeSource`. Search-result builders populate
-both fields from the knowledge row.
+`types.SearchResult` 除已有的 `KnowledgeSource` 外，还将携带所属知识的
+`KnowledgeType`。检索结果构造器从知识记录中填充这两个字段。
 
-Only a result with all of the following is a stored web page:
+仅同时满足下列条件的结果视为已入库网页：
 
 1. `KnowledgeType == "url"`;
-2. `KnowledgeSource` is a valid `http` or `https` URL.
+2. `KnowledgeSource` 是有效的 `http` 或 `https` URL。
 
-This excludes direct-file imports such as a PDF downloaded from a URL, whose
-knowledge type is not `url`.
+这会排除 URL 下载的 PDF 等直接文件导入，因为其知识类型不是 `url`。
 
-### Citation protocol
+### 引用协议
 
-The model continues to see and cite the retrieved chunk with its private `cN`
-handle. `ChunkReference` gains the page classification and source URL. When a
-valid cited `cN` is expanded for the user:
+模型继续使用私有 `cN` 句柄查看和引用检索到的 chunk。`ChunkReference` 增加
+页面分类和来源 URL。当有效的 `cN` 在面向用户的输出中展开时：
 
-- A normal chunk expands to the existing `<kb ... />` tag.
-- A stored-page chunk expands to `<web url="original URL" title="document title" />`.
+- 普通 chunk 展开为现有的 `<kb ... />` 标签。
+- 已入库网页的 chunk 展开为
+  `<web url="原始 URL" title="文档标题" />`。
 
-Keeping `cN` private avoids changing Agent tool contracts, chunk lookup and
-deduplication. The public citation is transformed deterministically, so the
-model never needs to reproduce a long URL.
+保留 `cN` 的私有性，无须变更 Agent 工具契约、chunk 查询与去重逻辑。公共引用
+由程序确定性地转换，模型无需复述长 URL。
 
-### Data propagation
+### 数据传递
 
-The following result boundaries retain `knowledge_type` and
-`knowledge_source`:
+下列检索结果边界保留 `knowledge_type` 和 `knowledge_source`：
 
-- Semantic `knowledge_search` results.
-- Keyword `grep_chunks` results, including its SQL projection and structured
-  result rows.
-- Agent reference reconstruction from tool-result data.
-- The ordinary chat pipeline's model-context registration.
+- 语义检索 `knowledge_search` 结果。
+- 关键词检索 `grep_chunks` 结果，包括 SQL 投影和结构化结果行。
+- 从工具结果重建 Agent 引用的流程。
+- 普通聊天流水线的模型上下文注册。
 
-Missing fields are treated as a normal document source for backward
-compatibility.
+为保证向后兼容，缺少字段时一律视为普通文档来源。
 
-### Frontend presentation
+### 前端展示
 
-Reference data gains optional `knowledge_type` and `knowledge_source` fields.
-The reference drawer considers a stored-page result to be a web source under
-the same condition used by the backend. It uses `knowledge_source` as the URL
-when the result ID is a private chunk ID.
+引用数据增加可选的 `knowledge_type` 和 `knowledge_source` 字段。来源抽屉以与
+后端相同的条件判断已入库网页；当结果 ID 是私有 chunk ID 时，使用
+`knowledge_source` 作为网页 URL。
 
-The answer citation uses the existing web appearance: a web icon and domain;
-its hover information exposes the complete URL. The reference drawer lists it
-in the web-source section and its card links to the original page. The UI must
-not use an internally generated `.md` filename as the primary page-source
-label. If an old crawler record still has such a title, the domain/URL is used
-instead.
+回答引用复用现有网页样式：显示网页图标和域名，悬浮信息展示完整 URL。来源抽屉
+将其放入网页来源分区，卡片链接至原始页面。UI 不得再将内部生成的 `.md` 文件名
+作为网页来源的主标签；旧爬虫记录仍带有该类标题时，改用域名或 URL。
 
-### Crawler titles
+### 爬虫标题
 
-Crawler pages retain their generated `.md` name only as an internal file name.
-When a crawler item is recorded as URL-origin knowledge, its display title is
-set to the extracted page title. A later crawler refresh detects a title
-mismatch and repairs existing crawler records. New replies can still show the
-correct URL for old records before they are refreshed.
+爬虫页面保留生成的 `.md` 名称，仅将其用作内部文件名。爬虫条目被记录为 URL
+来源知识时，展示标题设为提取出的网页标题。后续爬虫同步会检测标题不一致并修复
+已有爬虫记录；旧记录即使未同步，新回答也能展示正确的 URL。
 
-## Failure and Security Handling
+## 异常与安全处理
 
-- URLs are rendered as web sources only when they pass standard HTTP(S) URL
-  parsing. Invalid, empty and non-HTTP schemes fall back to document behavior.
-- The server remains the authority for chunk content and document access.
-  Changing the public citation tag does not expose storage paths or bypass
-  existing authorization checks.
-- An unresolved source URL never creates a fabricated web link.
+- URL 仅在通过标准 HTTP(S) URL 解析时才按网页来源展示。无效、空或非 HTTP
+  协议的 URL 回退为文档行为。
+- 服务端仍然是 chunk 内容和文档访问的唯一权威。变更公共引用标签不会暴露存储
+  路径，也不会绕过既有授权校验。
+- 无法解析的来源 URL 绝不生成虚构网页链接。
 
-## Verification
+## 验证
 
-- Backend unit tests cover stored-page `cN` expansion to `<web>`, normal
-  document expansion to `<kb>`, and invalid/file URL fallback behavior.
-- Agent tests verify semantic and keyword tool rows preserve the source fields
-  into durable `knowledge_references`.
-- Chat-pipeline tests verify URL knowledge is rendered as a web citation while
-  a URL-hosted PDF remains a document citation.
-- Frontend tests verify stored-page references group as web, target the source
-  URL, and do not display a generated `.md` filename as the source label.
-- Relevant Go and frontend test suites must pass before delivery.
+- 后端单元测试覆盖：已入库网页的 `cN` 展开为 `<web>`、普通文档展开为 `<kb>`，
+  以及无效 URL、文件 URL 的回退行为。
+- Agent 测试验证语义和关键词工具结果会将来源字段保留到持久化的
+  `knowledge_references`。
+- 聊天流水线测试验证 URL 网页渲染为网页引用，而 URL 承载的 PDF 仍为文档引用。
+- 前端测试验证已入库网页归入网页分区、指向来源 URL，且不以生成的 `.md` 文件名
+  作为来源标签。
+- 交付前必须通过相关 Go 与前端测试套件。
