@@ -90,7 +90,7 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 		// KB via the URL — they accept a kb_id (or source/target KB) in the
 		// body and the handler fans out the access check itself. /batch and
 		// /search are read routes (retrieve). /move, /batch-delete,
-		// /batch-reparse and /tags are content writes that each bound
+		// /batch-reparse, /batch-refresh-url-titles and /tags are content writes that each bound
 		// themselves to a single (or source+target) KB and enforce the API
 		// key's KB allow-list downstream — MoveKnowledge via
 		// requireTenantAPIKeyKnowledgeBases(source,target); the batch ops via
@@ -127,6 +127,7 @@ func RegisterKnowledgeRoutes(r *gin.RouterGroup, handler *handler.KnowledgeHandl
 		// can only touch KBs it is already permitted to write.
 		k.PUT("/tags", g.Contributor(), handler.UpdateKnowledgeTagBatch)
 		k.POST("/batch-reparse", g.Contributor(), handler.BatchReparseKnowledge)
+		k.POST("/batch-refresh-url-titles", g.Contributor(), handler.BatchRefreshURLTitles)
 		k.POST("/batch-delete", g.Contributor(), handler.BatchDeleteKnowledge)
 		k.POST("/folder", g.Contributor(), handler.MoveKnowledgeToFolder)
 		k.POST("/move", g.Contributor(), handler.MoveKnowledge)

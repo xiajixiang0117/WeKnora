@@ -232,6 +232,32 @@ func (h *KnowledgeHandler) enqueueKnowledgeListReparse(
 	return info.ID, nil
 }
 
+// enqueueKnowledgeListTitleRefresh enqueues a title-only URL metadata refresh.
+// It deliberately uses the maintenance queue rather than the document parser
+// queue because it never changes content, chunks, or embeddings.
+func (h *KnowledgeHandler) enqueueKnowledgeListTitleRefresh(
+	ctx context.Context, tenantID uint64, kbID string, ids []string,
+) (string, error) {
+	payload := types.KnowledgeListTitleRefreshPayload{
+		KnowledgeBaseID: kbID,
+		TenantID:        tenantID,
+		KnowledgeIDs:    ids,
+		Initiator:       types.TaskInitiatorFromContext(ctx),
+	}
+	langfuse.InjectTracing(ctx, &payload)
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal title refresh payload: %w", err)
+	}
+	task := asynq.NewTask(types.TypeKnowledgeListTitleRefresh, payloadBytes,
+		asynq.Queue(types.QueueMaintenance), asynq.MaxRetry(0), asynq.Timeout(time.Hour))
+	info, err := h.asynqClient.Enqueue(task)
+	if err != nil {
+		return "", fmt.Errorf("enqueue title refresh task: %w", err)
+	}
+	return info.ID, nil
+}
+
 // CreateKnowledgeFromFile godoc
 // @Summary      从文件创建知识
 // @Description  上传文件并创建知识条目
@@ -2585,6 +2611,11 @@ type batchReparseKnowledgeRequest struct {
 	ProcessConfig *types.KnowledgeProcessOverrides `json:"process_config,omitempty"`
 }
 
+type batchRefreshURLTitlesRequest struct {
+	KBID string   `json:"kb_id" binding:"required"`
+	IDs  []string `json:"ids" binding:"required"`
+}
+
 // BatchReparseKnowledge godoc
 // @Summary      批量重新解析知识
 // @Description  按 ID 列表批量重新解析单个知识库下的多个知识条目
@@ -2686,6 +2717,94 @@ func (h *KnowledgeHandler) BatchReparseKnowledge(c *gin.Context) {
 		"data": gin.H{
 			"task_id":       taskID,
 			"reparse_count": len(ids),
+		},
+	})
+}
+
+// BatchRefreshURLTitles refreshes only the display titles of URL knowledge.
+// It is intentionally separate from batch-reparse: no stored text, chunks,
+// embeddings, or parser status changes are made.
+func (h *KnowledgeHandler) BatchRefreshURLTitles(c *gin.Context) {
+	ctx := c.Request.Context()
+	var req batchRefreshURLTitlesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(errors.NewBadRequestError("invalid URL title refresh request parameters"))
+		return
+	}
+
+	seen := make(map[string]struct{}, len(req.IDs))
+	ids := make([]string, 0, len(req.IDs))
+	for _, raw := range req.IDs {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		c.Error(errors.NewBadRequestError("no knowledge IDs provided for URL title refresh"))
+		return
+	}
+	const maxBatch = 200
+	if len(ids) > maxBatch {
+		c.Error(errors.NewBadRequestError(fmt.Sprintf("too many ids (max %d per batch)", maxBatch)))
+		return
+	}
+
+	_, kbID, tenantID, permission, err := h.validateKnowledgeBaseWriteAccessWithKBID(c, req.KBID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	if permission != types.OrgRoleAdmin && permission != types.OrgRoleEditor {
+		c.Error(errors.NewForbiddenError("no permission to refresh URL titles in this kb"))
+		return
+	}
+	if err := h.requireKBOwnershipOrAdmin(c, kbID); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	ctx = types.WithExecutionTenant(ctx, tenantID)
+
+	knowledgeList, err := h.kgService.GetKnowledgeBatch(ctx, tenantID, ids)
+	if err != nil {
+		c.Error(errors.NewInternalServerError("failed to get knowledge batch"))
+		return
+	}
+	if len(knowledgeList) != len(ids) {
+		c.Error(errors.NewBadRequestError("some knowledge entries were not found"))
+		return
+	}
+	for _, knowledge := range knowledgeList {
+		if err := access.RejectMovingKnowledge(knowledge); err != nil {
+			_ = c.Error(err)
+			return
+		}
+		if knowledge.KnowledgeBaseID != kbID {
+			c.Error(errors.NewBadRequestError("all knowledge entries must belong to the requested knowledge base"))
+			return
+		}
+		if knowledge.Type != "url" || strings.TrimSpace(knowledge.Source) == "" {
+			c.Error(errors.NewBadRequestError("URL title refresh accepts URL knowledge only"))
+			return
+		}
+	}
+
+	taskID, err := h.enqueueKnowledgeListTitleRefresh(ctx, tenantID, kbID, ids)
+	if err != nil {
+		c.Error(errors.NewInternalServerError("failed to enqueue URL title refresh task"))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "URL title refresh task submitted",
+		"data": gin.H{
+			"task_id": taskID,
+			"count":   len(ids),
 		},
 	})
 }

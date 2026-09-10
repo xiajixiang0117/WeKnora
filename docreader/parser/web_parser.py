@@ -66,6 +66,8 @@ class _ScrapeResult:
     html: str
     visible_text: str
     page_title: str
+    open_graph_title: str = ""
+    h1_title: str = ""
     error: str = ""
 
 
@@ -180,6 +182,39 @@ async def read_visible_text(page: Page) -> str:
     )
 
 
+async def read_page_title_metadata(page: Page) -> tuple[str, str]:
+    """Read title fallbacks without confusing a generic page heading for its name."""
+    metadata = await page.evaluate(
+        """() => {
+            const og = document.querySelector('meta[property="og:title"], meta[name="og:title"]');
+            const h1 = document.querySelector('h1');
+            return {
+                openGraphTitle: (og?.getAttribute('content') || '').trim(),
+                h1Title: (h1?.innerText || h1?.textContent || '').trim(),
+            };
+        }"""
+    )
+    if not isinstance(metadata, dict):
+        return "", ""
+    return (
+        str(metadata.get("openGraphTitle") or "").strip(),
+        str(metadata.get("h1Title") or "").strip(),
+    )
+
+
+def select_page_title(scrape_result: _ScrapeResult) -> str:
+    """Prefer the browser tab title, then Open Graph, then the page heading."""
+    for value in (
+        scrape_result.page_title,
+        scrape_result.open_graph_title,
+        scrape_result.h1_title,
+    ):
+        title = (value or "").strip()
+        if title:
+            return title
+    return ""
+
+
 async def install_ssrf_route_guard(page: Page) -> None:
     """Block navigation/subresource requests to SSRF-restricted targets (incl. redirects)."""
 
@@ -271,6 +306,7 @@ class StdWebParser(BaseParser):
                 await wait_for_rendered_content(page)
 
                 page_title = await page.title()
+                open_graph_title, h1_title = await read_page_title_metadata(page)
                 visible_text = await read_visible_text(page)
                 content = await page.content()
                 logger.info(
@@ -288,6 +324,8 @@ class StdWebParser(BaseParser):
                 html=content,
                 visible_text=visible_text,
                 page_title=page_title or "",
+                open_graph_title=open_graph_title,
+                h1_title=h1_title,
             )
 
         except Exception as e:
@@ -352,19 +390,10 @@ class StdWebParser(BaseParser):
             raise WebParseError(f"Failed to parse web page: {url}")
 
         metadata = {}
-        title_match = re.search(r"^title:\s*(.+)", md_text, re.MULTILINE)
-        if title_match:
-            extracted_title = title_match.group(1).strip()
-            if extracted_title:
-                metadata["title"] = extracted_title
-                logger.info(
-                    f"Extracted article title from trafilatura: {extracted_title}"
-                )
-        elif scrape_result.page_title:
-            metadata["title"] = scrape_result.page_title.strip()
-            logger.info(
-                "Using page title from Playwright: %s", metadata["title"]
-            )
+        title = select_page_title(scrape_result)
+        if title:
+            metadata["title"] = title
+            logger.info("Using page title metadata: %s", title)
         else:
             logger.info(
                 "No title found in trafilatura output, first 200 chars: %r",

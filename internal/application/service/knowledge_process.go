@@ -3476,9 +3476,11 @@ func (s *knowledgeService) ProcessDocument(ctx context.Context, t *asynq.Task) e
 		if convertResult == nil {
 			return nil
 		}
-		// Update knowledge title from extracted page title if not already set
-		if knowledge.Title == "" || knowledge.Title == payload.URL {
-			if extractedTitle := convertResult.Metadata["title"]; extractedTitle != "" {
+		// URL imports begin with an empty title or a generated Markdown file
+		// name. Replace only those placeholders; a normal user-provided title
+		// remains authoritative.
+		if shouldRefreshURLKnowledgeTitle(knowledge.Title, payload.URL) {
+			if extractedTitle := strings.TrimSpace(convertResult.Metadata["title"]); extractedTitle != "" {
 				knowledge.Title = extractedTitle
 				knowledge.UpdatedAt = time.Now()
 				if err := s.repo.UpdateKnowledge(ctx, knowledge); err != nil {
@@ -3685,6 +3687,11 @@ func sanitizeReadResult(result *types.ReadResult) {
 		result.ImageRefs[i].MimeType = common.CleanInvalidUTF8(result.ImageRefs[i].MimeType)
 		result.ImageRefs[i].StorageKey = common.CleanInvalidUTF8(result.ImageRefs[i].StorageKey)
 	}
+}
+
+func shouldRefreshURLKnowledgeTitle(currentTitle, sourceURL string) bool {
+	title := strings.TrimSpace(currentTitle)
+	return title == "" || title == strings.TrimSpace(sourceURL) || strings.HasSuffix(strings.ToLower(title), ".md")
 }
 
 // convert handles both file and URL reading using a unified ReadRequest.

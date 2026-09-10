@@ -11,6 +11,7 @@ from docreader.parser.web_parser import (
     build_visible_text_fallback,
     extract_markdown_from_html,
     install_ssrf_route_guard,
+    select_page_title,
 )
 from docreader.utils.ssrf import is_ssrf_safe_url, reset_ssrf_whitelist_cache_for_test
 
@@ -61,6 +62,34 @@ class TestWebParserHelpers(unittest.TestCase):
 
     def test_install_ssrf_route_guard_is_importable(self):
         self.assertTrue(callable(install_ssrf_route_guard))
+
+    def test_select_page_title_prefers_browser_tab_over_generic_heading(self):
+        title = select_page_title(
+            _ScrapeResult(
+                html="",
+                visible_text="",
+                page_title="快速入门 - SiFli SDK编程指南 文档",
+                open_graph_title="SDK 快速入门",
+                h1_title="说明",
+            )
+        )
+        self.assertEqual(title, "快速入门 - SiFli SDK编程指南 文档")
+
+    def test_select_page_title_uses_open_graph_then_heading(self):
+        self.assertEqual(
+            select_page_title(
+                _ScrapeResult(
+                    html="", visible_text="", page_title="", open_graph_title="页面标题", h1_title="说明"
+                )
+            ),
+            "页面标题",
+        )
+        self.assertEqual(
+            select_page_title(
+                _ScrapeResult(html="", visible_text="", page_title="", h1_title="说明")
+            ),
+            "说明",
+        )
 
     def test_redirect_target_blocked_before_navigation(self):
         safe, reason = is_ssrf_safe_url("http://127.0.0.1:39127/audit.txt")

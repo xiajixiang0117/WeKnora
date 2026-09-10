@@ -290,6 +290,7 @@ func RunAsynqServer(params AsynqTaskParams) *asynq.ServeMux {
 
 	// Register knowledge list reparse handler
 	mux.HandleFunc(types.TypeKnowledgeListReparse, params.KnowledgeService.ProcessKnowledgeListReparse)
+	mux.HandleFunc(types.TypeKnowledgeListTitleRefresh, params.KnowledgeService.ProcessKnowledgeListTitleRefresh)
 
 	// Register index delete handler
 	mux.HandleFunc(types.TypeIndexDelete, params.TagService.ProcessIndexDelete)
