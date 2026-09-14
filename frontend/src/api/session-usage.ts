@@ -14,6 +14,8 @@ export interface SessionUsageAgent {
   name?: string
 }
 
+export type SessionUsageSource = 'web' | 'embed' | 'api'
+
 export interface SessionUsageSummary {
   session_id: string
   title: string
@@ -33,6 +35,7 @@ export interface SessionUsageDetail {
   agent_id?: string
   agent_name?: string
   model_id?: string
+  model_name?: string
   has_usage: boolean
   usage?: SessionTokenUsage
 }
@@ -57,12 +60,14 @@ export function listSessionUsage(params: {
   page: number
   pageSize: number
   keyword?: string
+  source?: SessionUsageSource
 }) {
   const query = new URLSearchParams({
     page: String(params.page),
     page_size: String(params.pageSize),
   })
   if (params.keyword?.trim()) query.set('keyword', params.keyword.trim())
+  if (params.source) query.set('source', params.source)
   return get<SessionUsageListResponse>(`/api/v1/sessions/usage?${query.toString()}`)
 }
 

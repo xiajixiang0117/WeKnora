@@ -28,6 +28,12 @@
       >
         <template #prefix-icon><t-icon name="search" /></template>
       </t-input>
+      <t-select
+        v-model="source"
+        :options="sourceOptions"
+        :aria-label="t('sessionManagement.channelFilter')"
+        @change="applySearch"
+      />
       <t-button theme="primary" @click="applySearch">{{ t('sessionManagement.search') }}</t-button>
     </section>
 
@@ -60,14 +66,9 @@
             </template>
             <template #agents="{ row }">
               <div v-if="row.agents.length" class="session-management__agents">
-                <t-tooltip
-                  v-for="agent in row.agents"
-                  :key="agent.id"
-                  :content="agent.id"
-                  placement="top"
-                >
-                  <span class="session-management__agent">{{ agent.name || agent.id }}</span>
-                </t-tooltip>
+                <span v-for="agent in row.agents" :key="agent.id" class="session-management__agent">
+                  {{ agent.name || t('sessionManagement.unknownAgent') }}
+                </span>
               </div>
               <span v-else class="session-management__muted">{{ t('sessionManagement.unknownAgent') }}</span>
             </template>
@@ -98,7 +99,6 @@
           </t-table>
         </div>
         <div v-if="total > 0" class="data-table-shell__pager">
-          <span>{{ t('sessionManagement.total', { count: total }) }}</span>
           <t-pagination
             v-model="page"
             v-model:page-size="pageSize"
@@ -151,11 +151,10 @@
             <template #created_at="{ row }"><time :datetime="row.created_at">{{ formatDate(row.created_at) }}</time></template>
             <template #agent="{ row }">
               <div class="session-management__agent-cell">
-                <span>{{ row.agent_name || row.agent_id || t('sessionManagement.unknownAgent') }}</span>
-                <code v-if="row.agent_id">{{ row.agent_id }}</code>
+                <span>{{ row.agent_name || t('sessionManagement.unknownAgent') }}</span>
               </div>
             </template>
-            <template #model="{ row }"><code v-if="row.model_id">{{ row.model_id }}</code><span v-else>--</span></template>
+            <template #model="{ row }"><span v-if="row.model_name">{{ row.model_name }}</span><span v-else>--</span></template>
             <template #input="{ row }">{{ usageValue(row, 'prompt_tokens') }}</template>
             <template #output="{ row }">{{ usageValue(row, 'completion_tokens') }}</template>
             <template #cache="{ row }">{{ usageValue(row, 'cache_read_tokens') }}</template>
@@ -175,6 +174,7 @@ import {
   getSessionUsage,
   listSessionUsage,
   type SessionTokenUsage,
+  type SessionUsageSource,
   type SessionUsageDetail,
   type SessionUsageSummary,
 } from '@/api/session-usage'
@@ -186,6 +186,7 @@ const page = ref(1)
 const pageSize = ref(20)
 const searchInput = ref('')
 const keyword = ref('')
+const source = ref<SessionUsageSource | 'all'>('all')
 const loading = ref(false)
 const error = ref('')
 const detailsVisible = ref(false)
@@ -193,6 +194,14 @@ const detailsLoading = ref(false)
 const detailsError = ref('')
 const selectedSummary = ref<SessionUsageSummary | null>(null)
 const details = ref<SessionUsageDetail[]>([])
+
+const sourceOptions = computed(() => [
+  { label: t('sessionManagement.allChannels'), value: 'all' },
+  ...(['web', 'embed', 'api'] as const).map((channel) => ({
+    label: channelLabel({ channel }),
+    value: channel,
+  })),
+])
 
 const columns = computed(() => [
   { colKey: 'session', title: t('sessionManagement.columns.session'), width: 250, ellipsis: true },
@@ -225,6 +234,7 @@ async function loadSessions() {
       page: page.value,
       pageSize: pageSize.value,
       keyword: keyword.value,
+      source: source.value === 'all' ? undefined : source.value,
     })
     rows.value = response.data || []
     total.value = response.total || 0
@@ -303,8 +313,9 @@ onMounted(() => { void loadSessions() })
 .session-management__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
 .session-management__header h1 { margin: 0; color: var(--td-text-color-primary); font-size: 22px; font-weight: 600; letter-spacing: 0; }
 .session-management__header p { max-width: 680px; margin: 8px 0 0; color: var(--td-text-color-secondary); font-size: 14px; line-height: 1.55; }
-.session-management__toolbar { display: flex; width: min(560px, 100%); gap: 10px; margin-bottom: 20px; }
+.session-management__toolbar { display: flex; width: min(720px, 100%); gap: 10px; margin-bottom: 20px; }
 .session-management__toolbar :deep(.t-input) { flex: 1; }
+.session-management__toolbar :deep(.t-select) { flex: 0 0 156px; width: 156px; }
 .session-management__table-section { min-width: 0; }
 .session-management__table-shell { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--td-component-stroke); border-radius: 6px; background: var(--td-bg-color-container); }
 .session-management__table-shell > .data-table-shell__scroll { min-width: 0; overflow-x: auto; }

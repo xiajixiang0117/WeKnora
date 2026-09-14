@@ -61,3 +61,12 @@ func TestNormalizedUsageSynthesizesOnlyMissingTotal(t *testing.T) {
 	reportedTotal := normalizedUsage(types.TokenUsage{PromptTokens: 120, CompletionTokens: 34, TotalTokens: 999})
 	require.Equal(t, 999, reportedTotal.TotalTokens)
 }
+
+func TestSessionUsageModelNamePrefersDisplayName(t *testing.T) {
+	require.Equal(t, "Customer Support", sessionUsageModelName(&types.Model{
+		Name:        "gpt-4.1",
+		DisplayName: " Customer Support ",
+	}))
+	require.Equal(t, "gpt-4.1", sessionUsageModelName(&types.Model{Name: " gpt-4.1 "}))
+	require.Empty(t, sessionUsageModelName(nil))
+}

@@ -47,6 +47,7 @@ type SessionUsageDetail struct {
 	AgentID   string            `json:"agent_id,omitempty"`
 	AgentName string            `json:"agent_name,omitempty"`
 	ModelID   string            `json:"model_id,omitempty"`
+	ModelName string            `json:"model_name,omitempty"`
 	HasUsage  bool              `json:"has_usage"`
 	Usage     *types.TokenUsage `json:"usage,omitempty"`
 }
@@ -90,7 +91,7 @@ func (h *Handler) ListSessionUsage(c *gin.Context) {
 
 	summaries := make([]SessionUsageSummary, 0, len(items))
 	for _, item := range items {
-		summary, _, err := h.buildSessionUsage(ctx, item, agentNames, false)
+		summary, _, err := h.buildSessionUsage(ctx, item, agentNames, nil, false)
 		if err != nil {
 			logger.ErrorWithFields(ctx, err, map[string]interface{}{"session_id": item.ID})
 			c.Error(errors.NewInternalServerError(err.Error()))
@@ -128,11 +129,17 @@ func (h *Handler) GetSessionUsage(c *gin.Context) {
 		c.Error(errors.NewInternalServerError(err.Error()))
 		return
 	}
+	modelNames, err := h.sessionUsageModelNames(ctx)
+	if err != nil {
+		logger.ErrorWithFields(ctx, err, nil)
+		c.Error(errors.NewInternalServerError(err.Error()))
+		return
+	}
 
 	summary, details, err := h.buildSessionUsage(ctx, &types.SessionListItem{
 		Session:    *row,
 		IMPlatform: row.IMPlatform,
-	}, agentNames, true)
+	}, agentNames, modelNames, true)
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{"session_id": sessionID})
 		c.Error(errors.NewInternalServerError(err.Error()))
@@ -161,10 +168,38 @@ func (h *Handler) sessionUsageAgentNames(ctx context.Context) (map[string]string
 	return names, nil
 }
 
+func (h *Handler) sessionUsageModelNames(ctx context.Context) (map[string]string, error) {
+	models, err := h.modelService.ListModels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[string]string, len(models))
+	for _, model := range models {
+		if model == nil || model.ID == "" {
+			continue
+		}
+		if name := sessionUsageModelName(model); name != "" {
+			names[model.ID] = name
+		}
+	}
+	return names, nil
+}
+
+func sessionUsageModelName(model *types.Model) string {
+	if model == nil {
+		return ""
+	}
+	if displayName := strings.TrimSpace(model.DisplayName); displayName != "" {
+		return displayName
+	}
+	return strings.TrimSpace(model.Name)
+}
+
 func (h *Handler) buildSessionUsage(
 	ctx context.Context,
 	session *types.SessionListItem,
 	agentNames map[string]string,
+	modelNames map[string]string,
 	includeDetails bool,
 ) (SessionUsageSummary, []SessionUsageDetail, error) {
 	summary := SessionUsageSummary{
@@ -204,6 +239,7 @@ func (h *Handler) buildSessionUsage(
 				AgentID:   message.AgentID,
 				AgentName: agentNames[message.AgentID],
 				ModelID:   message.ModelID,
+				ModelName: modelNames[message.ModelID],
 			}
 			if message.Usage != nil {
 				usage := normalizedUsage(*message.Usage)
