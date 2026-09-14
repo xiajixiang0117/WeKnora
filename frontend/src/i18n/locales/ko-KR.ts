@@ -5121,7 +5121,9 @@ export default {
     empty: '일치하는 세션이 없습니다', untitled: '제목 없는 세션', unknownAgent: '에이전트 기록 없음',
     viewDetails: '응답 상세 보기', detailsTitle: '세션 사용량 상세', loadingDetails: '응답 상세를 불러오는 중…',
     loadFailed: '세션 사용량을 불러오지 못했습니다', loadDetailsFailed: '세션 상세를 불러오지 못했습니다', summary: '세션 요약', responseDetails: '응답 상세',
-    columns: { session: '세션', channel: '채널', agent: '에이전트', answers: '응답 수', model: '모델', time: '시간', input: '입력', output: '출력', cacheRead: '캐시 읽기', total: '총 Token', updatedAt: '최근 업데이트' },
+    executionTraces: '실행 추적', loadingTraces: '실행 추적을 불러오는 중…', loadTracesFailed: '실행 추적을 불러오지 못했습니다', loadTraceFailed: '실행 추적 세부 정보를 불러오지 못했습니다',
+    noTraces: '이 세션에는 실행 기록이 없습니다', viewTrace: '추적 보기', traceDetail: '실행 추적 세부 정보', rewrittenQuery: '개선된 쿼리:', expansionQueries: '확장 쿼리:', recalledCount: '검색 수:', threshold: '임계값:', truncated: '후보가 잘렸습니다', selected: '선택됨',
+    columns: { session: '세션', channel: '채널', agent: '에이전트', answers: '응답 수', model: '모델', time: '시간', input: '입력', output: '출력', cacheRead: '캐시 읽기', total: '총 Token', updatedAt: '최근 업데이트', status: '상태', query: '쿼리', steps: '단계', knowledgeBase: '지식 베이스', document: '문서', documentId: '문서 ID', chunk: '청크 ID', retrievalScore: '검색 점수', modelScore: '모델 점수', finalScore: '최종 점수', selected: '선택' },
     channels: { web: '웹', api: 'API', embed: '웹 임베드', wecom: 'WeCom', wechat: 'WeChat', feishu: 'Feishu', lark: 'Lark', dingtalk: 'DingTalk', slack: 'Slack', telegram: 'Telegram', mattermost: 'Mattermost', qqbot: 'QQ Bot', yunzhijia: 'Yunzhijia', other: '{channel}' }
   },
   vectorStoreSettings: {

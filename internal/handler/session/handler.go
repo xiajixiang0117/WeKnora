@@ -9,6 +9,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/infrastructure/docparser"
 	"github.com/Tencent/WeKnora/internal/logger"
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 	secutils "github.com/Tencent/WeKnora/internal/utils"
@@ -47,6 +48,7 @@ type Handler struct {
 	// selected agent so the sandbox is created with the same config a
 	// conversation turn would use.
 	terminalService *service.SandboxTerminalService
+	traceStore      *retrievaltrace.Store
 }
 
 // NewHandler creates a new instance of Handler with all necessary dependencies
@@ -73,6 +75,7 @@ func NewHandler(
 	userService interfaces.UserService,
 	memberService interfaces.TenantMemberService,
 	terminalService *service.SandboxTerminalService,
+	traceStore *retrievaltrace.Store,
 ) *Handler {
 	return &Handler{
 		sessionService:       sessionService,
@@ -95,6 +98,7 @@ func NewHandler(
 		userService:          userService,
 		memberService:        memberService,
 		terminalService:      terminalService,
+		traceStore:           traceStore,
 		attachmentProcessor: NewAttachmentProcessor(
 			fileService,
 			documentReader,
@@ -377,6 +381,11 @@ func (h *Handler) DeleteSession(c *gin.Context) {
 		c.Error(errors.NewInternalServerError(err.Error()))
 		return
 	}
+	if h.traceStore != nil {
+		if err := h.traceStore.DeleteSession(ctx, c.GetUint64(types.TenantIDContextKey.String()), id); err != nil {
+			logger.Warnf(ctx, "Failed to delete retrieval execution traces for session %s: %v", id, err)
+		}
+	}
 
 	// Return success message
 	c.JSON(http.StatusOK, gin.H{
@@ -419,6 +428,11 @@ func (h *Handler) ClearSessionMessages(c *gin.Context) {
 		logger.ErrorWithFields(ctx, err, map[string]interface{}{"session_id": id})
 		c.Error(errors.NewInternalServerError(err.Error()))
 		return
+	}
+	if h.traceStore != nil {
+		if err := h.traceStore.DeleteSession(ctx, c.GetUint64(types.TenantIDContextKey.String()), id); err != nil {
+			logger.Warnf(ctx, "Failed to delete retrieval execution traces while clearing session %s: %v", id, err)
+		}
 	}
 
 	logger.Infof(ctx, "Session messages cleared successfully, ID: %s", id)

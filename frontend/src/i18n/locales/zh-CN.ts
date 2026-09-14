@@ -5139,9 +5139,14 @@ export default {
     loadDetailsFailed: '加载会话明细失败',
     summary: '会话汇总',
     responseDetails: '回答明细',
+    executionTraces: '执行轨迹', loadingTraces: '正在加载执行轨迹…', loadTracesFailed: '加载执行轨迹失败', loadTraceFailed: '加载执行轨迹详情失败',
+    noTraces: '该会话暂无执行记录', viewTrace: '查看轨迹', traceDetail: '执行轨迹详情', rewrittenQuery: '增强后查询：', expansionQueries: '扩展查询：',
+    recalledCount: '召回数：', threshold: '阈值：', truncated: '候选已截断', selected: '已选中',
     columns: {
       session: '会话', channel: '渠道', agent: '智能体', answers: '回答数', model: '模型', time: '时间',
-      input: '输入', output: '输出', cacheRead: '缓存读取', total: '总 Token', updatedAt: '最近更新'
+      input: '输入', output: '输出', cacheRead: '缓存读取', total: '总 Token', updatedAt: '最近更新',
+      status: '状态', query: '查询', steps: '步骤', knowledgeBase: '知识库', document: '文档', documentId: '文档 ID', chunk: '分块 ID',
+      retrievalScore: '召回分', modelScore: '模型分', finalScore: '最终分', selected: '选中'
     },
     channels: {
       web: '网页', api: 'API', embed: '网页嵌入', wecom: '企微', wechat: '微信', feishu: '飞书',

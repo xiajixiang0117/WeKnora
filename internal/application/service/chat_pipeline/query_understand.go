@@ -9,6 +9,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/models/chat"
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 )
@@ -66,6 +67,7 @@ func (p *PluginQueryUnderstand) OnEvent(ctx context.Context,
 	hasImages := len(chatManage.Images) > 0
 	needRewrite := chatManage.EnableRewrite
 	if !needRewrite && !hasImages {
+		retrievaltrace.RecordRewrite(ctx, chatManage.Query, chatManage.RewriteQuery)
 		pipelineInfo(ctx, "QueryUnderstand", "skip", map[string]interface{}{
 			"session_id": chatManage.SessionID,
 			"reason":     "rewrite_disabled_no_images",
@@ -136,6 +138,7 @@ func (p *PluginQueryUnderstand) OnEvent(ctx context.Context,
 
 	// --- Parse structured output ---
 	p.parseOutput(chatManage, response.Content)
+	retrievaltrace.RecordRewrite(ctx, chatManage.Query, chatManage.RewriteQuery)
 
 	// Persist image description asynchronously — this DB write does not affect
 	// the current pipeline result, so it can run in the background.

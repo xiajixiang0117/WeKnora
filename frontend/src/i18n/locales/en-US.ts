@@ -2106,9 +2106,14 @@ export default {
     loadDetailsFailed: 'Failed to load session details',
     summary: 'Session summary',
     responseDetails: 'Response details',
+    executionTraces: 'Execution traces', loadingTraces: 'Loading execution traces…', loadTracesFailed: 'Failed to load execution traces', loadTraceFailed: 'Failed to load execution trace details',
+    noTraces: 'No execution trace was recorded for this session', viewTrace: 'View trace', traceDetail: 'Execution trace details', rewrittenQuery: 'Rewritten query:', expansionQueries: 'Expanded queries:',
+    recalledCount: 'Recalled:', threshold: 'Threshold:', truncated: 'Candidates truncated', selected: 'Selected',
     columns: {
       session: 'Session', channel: 'Channel', agent: 'Agent', answers: 'Responses', model: 'Model', time: 'Time',
-      input: 'Input', output: 'Output', cacheRead: 'Cache read', total: 'Total tokens', updatedAt: 'Last updated'
+      input: 'Input', output: 'Output', cacheRead: 'Cache read', total: 'Total tokens', updatedAt: 'Last updated',
+      status: 'Status', query: 'Query', steps: 'Steps', knowledgeBase: 'Knowledge base', document: 'Document', documentId: 'Document ID', chunk: 'Chunk ID',
+      retrievalScore: 'Retrieval score', modelScore: 'Model score', finalScore: 'Final score', selected: 'Selected'
     },
     channels: {
       web: 'Web', api: 'API', embed: 'Web embed', wecom: 'WeCom', wechat: 'WeChat', feishu: 'Feishu',

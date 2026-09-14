@@ -18,6 +18,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/event"
 	"github.com/Tencent/WeKnora/internal/logger"
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/storageurl"
 	"github.com/Tencent/WeKnora/internal/tracing/langfuse"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -899,7 +900,9 @@ const (
 // executeQA is the unified execution flow for both KnowledgeQA and AgentQA modes.
 // It handles message creation, SSE setup, VLM analysis, service invocation, and error handling.
 func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle bool) {
-	ctx := reqCtx.ctx
+	ctx := retrievaltrace.WithRecorder(reqCtx.ctx, retrievaltrace.NewRecorder(reqCtx.query))
+	recorder := retrievaltrace.FromContext(ctx)
+	reqCtx.ctx = ctx
 	sessionID := reqCtx.sessionID
 
 	// Persist the input-bar state used for this request so reopening the
@@ -956,6 +959,32 @@ func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle
 
 	// Setup SSE stream
 	streamCtx := h.setupSSEStream(reqCtx, generateTitle)
+	streamCtx.asyncCtx = retrievaltrace.WithRecorder(streamCtx.asyncCtx, recorder)
+	var traceOnce sync.Once
+	finishTrace := func(status string) {
+		traceOnce.Do(func() {
+			if h.traceStore == nil {
+				return
+			}
+			traceCtx := context.WithValue(
+				context.WithoutCancel(streamCtx.asyncCtx),
+				types.TenantIDContextKey,
+				reqCtx.session.TenantID,
+			)
+			if err := h.traceStore.Save(
+				traceCtx,
+				reqCtx.session.TenantID,
+				sessionID,
+				reqCtx.requestID,
+				reqCtx.userMessageID,
+				streamCtx.assistantMessage.ID,
+				status,
+				recorder,
+			); err != nil {
+				logger.Warnf(traceCtx, "persist retrieval execution trace for request %s failed: %v", reqCtx.requestID, err)
+			}
+		})
+	}
 
 	// Normal mode: register completion handler on EventAgentFinalAnswer
 	// (Agent mode handles completion in the defer block instead)
@@ -998,6 +1027,7 @@ func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle
 				logger.Infof(streamCtx.asyncCtx, "Knowledge QA service completed for session: %s", sessionID)
 				updateCtx := context.WithValue(streamCtx.asyncCtx, types.TenantIDContextKey, reqCtx.session.TenantID)
 				h.completeAssistantMessage(updateCtx, streamCtx.assistantMessage, reqCtx.query, reqCtx.userMessageID)
+				finishTrace("completed")
 				streamCtx.eventBus.Emit(streamCtx.asyncCtx, event.Event{
 					Type:      event.EventAgentComplete,
 					SessionID: sessionID,
@@ -1009,6 +1039,7 @@ func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle
 	}
 
 	// Execute QA asynchronously
+	traceStatus := "completed"
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -1021,6 +1052,7 @@ func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle
 				logger.ErrorWithFields(streamCtx.asyncCtx,
 					errors.NewInternalServerError(fmt.Sprintf("%s service panicked: %v\n%s", stageName, r, string(buf))),
 					map[string]interface{}{"session_id": sessionID})
+				traceStatus = "failed"
 			}
 			// Agent mode: complete the assistant message in defer (normal mode does it via event handler)
 			if mode == qaModeAgent {
@@ -1034,6 +1066,7 @@ func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle
 					types.TenantIDContextKey, reqCtx.session.TenantID,
 				)
 				h.completeAssistantMessage(updateCtx, streamCtx.assistantMessage, reqCtx.query, reqCtx.userMessageID)
+				finishTrace(traceStatus)
 				logger.Infof(streamCtx.asyncCtx, "Agent QA service completed for session: %s", sessionID)
 			}
 		}()
@@ -1064,8 +1097,12 @@ func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle
 			// the stop event already notifies the client, so don't emit a
 			// spurious error event (which would otherwise show an error toast).
 			if streamCtx.asyncCtx.Err() != nil {
+				traceStatus = "cancelled"
+				finishTrace(traceStatus)
 				logger.Infof(streamCtx.asyncCtx, "QA cancelled by user stop for session: %s", sessionID)
 			} else {
+				traceStatus = "failed"
+				finishTrace(traceStatus)
 				logger.ErrorWithFields(streamCtx.asyncCtx, serviceErr, nil)
 				streamCtx.eventBus.Emit(streamCtx.asyncCtx, event.Event{
 					Type:      event.EventError,

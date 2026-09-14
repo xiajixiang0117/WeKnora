@@ -2093,7 +2093,9 @@ export default {
     empty: '一致するセッションはありません', untitled: '無題のセッション', unknownAgent: 'エージェント未記録',
     viewDetails: '回答の詳細を表示', detailsTitle: 'セッション使用量の詳細', loadingDetails: '回答の詳細を読み込み中…',
     loadFailed: 'セッション使用量の読み込みに失敗しました', loadDetailsFailed: 'セッション詳細の読み込みに失敗しました', summary: 'セッション集計', responseDetails: '回答の詳細',
-    columns: { session: 'セッション', channel: 'チャネル', agent: 'エージェント', answers: '回答数', model: 'モデル', time: '時刻', input: '入力', output: '出力', cacheRead: 'キャッシュ読取', total: '合計 Token', updatedAt: '最終更新' },
+    executionTraces: '実行トレース', loadingTraces: '実行トレースを読み込み中…', loadTracesFailed: '実行トレースの読み込みに失敗しました', loadTraceFailed: '実行トレース詳細の読み込みに失敗しました',
+    noTraces: 'このセッションには実行記録がありません', viewTrace: 'トレースを表示', traceDetail: '実行トレース詳細', rewrittenQuery: '強化後のクエリ:', expansionQueries: '拡張クエリ:', recalledCount: '再現数:', threshold: 'しきい値:', truncated: '候補は切り詰められました', selected: '選択済み',
+    columns: { session: 'セッション', channel: 'チャネル', agent: 'エージェント', answers: '回答数', model: 'モデル', time: '時刻', input: '入力', output: '出力', cacheRead: 'キャッシュ読取', total: '合計 Token', updatedAt: '最終更新', status: '状態', query: 'クエリ', steps: 'ステップ', knowledgeBase: 'ナレッジベース', document: '文書', documentId: '文書 ID', chunk: 'チャンク ID', retrievalScore: '検索スコア', modelScore: 'モデルスコア', finalScore: '最終スコア', selected: '選択' },
     channels: { web: 'Web', api: 'API', embed: 'Web 埋め込み', wecom: 'WeCom', wechat: 'WeChat', feishu: 'Feishu', lark: 'Lark', dingtalk: 'DingTalk', slack: 'Slack', telegram: 'Telegram', mattermost: 'Mattermost', qqbot: 'QQ Bot', yunzhijia: 'Yunzhijia', other: '{channel}' }
   },
   retrievalSettings: {

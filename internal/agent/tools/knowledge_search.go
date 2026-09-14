@@ -12,6 +12,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/rerank"
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/searchutil"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
@@ -275,6 +276,7 @@ func (t *KnowledgeSearchTool) Execute(ctx context.Context, args json.RawMessage)
 
 	allResults := t.concurrentSearchByTargets(ctx, queries, searchTargets,
 		topK, vectorThreshold, keywordThreshold, kbTypeMap)
+	recordAgentRetrievals(ctx, queries, searchTargets, allResults)
 	logger.Infof(ctx, "[Tool][KnowledgeSearch] Concurrent search completed: %d raw results", len(allResults))
 
 	// Note: HybridSearch now uses RRF (Reciprocal Rank Fusion) which produces normalized scores
@@ -630,6 +632,7 @@ func (t *KnowledgeSearchTool) rerankResults(
 	if err != nil {
 		logger.Warnf(ctx,
 			"[Tool][KnowledgeSearch] Rerank model failed, using raw retrieval results: %v", err)
+		retrievaltrace.RecordRerank(ctx, "agent", query, t.rerankModel.GetModelID(), t.rerankModel.GetModelName(), t.rerankThreshold(), unwrapSearchResults(results), nil, unwrapSearchResults(results), "fallback", err)
 		return results, nil
 	}
 
@@ -640,9 +643,46 @@ func (t *KnowledgeSearchTool) rerankResults(
 		threshold,
 		t.searchTargets.HasRecallThresholdOverride(),
 	)
+	scores := make(map[string]float64, len(rankResults))
+	for _, rank := range rankResults {
+		if rank.Index >= 0 && rank.Index < len(results) && results[rank.Index] != nil {
+			scores[results[rank.Index].ID] = rank.RelevanceScore
+		}
+	}
+	retrievaltrace.RecordRerank(ctx, "agent", query, t.rerankModel.GetModelID(), t.rerankModel.GetModelName(), threshold, unwrapSearchResults(results), scores, unwrapSearchResults(reranked), "completed", nil)
 	logger.Infof(ctx, "[Tool][KnowledgeSearch] Reranked %d/%d results above threshold %.2f",
 		len(reranked), len(results), threshold)
 	return reranked, nil
+}
+
+func unwrapSearchResults(results []*searchResultWithMeta) []*types.SearchResult {
+	plain := make([]*types.SearchResult, 0, len(results))
+	for _, result := range results {
+		if result != nil && result.SearchResult != nil {
+			plain = append(plain, result.SearchResult)
+		}
+	}
+	return plain
+}
+
+func recordAgentRetrievals(ctx context.Context, queries []string, targets types.SearchTargets, results []*searchResultWithMeta) {
+	byQueryAndKB := make(map[string][]*types.SearchResult)
+	for _, result := range results {
+		if result == nil || result.SearchResult == nil {
+			continue
+		}
+		key := result.SourceQuery + "\x00" + result.KnowledgeBaseID
+		byQueryAndKB[key] = append(byQueryAndKB[key], result.SearchResult)
+	}
+	for _, query := range queries {
+		for _, target := range targets {
+			if target == nil || target.KnowledgeBaseID == "" {
+				continue
+			}
+			key := query + "\x00" + target.KnowledgeBaseID
+			retrievaltrace.RecordRetrieval(ctx, "agent", query, target.KnowledgeBaseID, byQueryAndKB[key], nil)
+		}
+	}
 }
 
 func (t *KnowledgeSearchTool) getFAQMetadata(

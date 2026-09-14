@@ -57,6 +57,8 @@ func RegisterSessionRoutes(
 		// session list and requires Admin+.
 		sessions.GET("/usage", g.Admin(), handler.ListSessionUsage)
 		sessions.GET("/:id/usage", g.Admin(), handler.GetSessionUsage)
+		sessions.GET("/:id/retrieval-execution-traces", g.Admin(), handler.ListRetrievalExecutionTraces)
+		sessions.GET("/:id/retrieval-execution-traces/:request_id", g.Admin(), handler.GetRetrievalExecutionTrace)
 		sessions.GET("/:id", handler.GetSession)
 		sessions.GET("", handler.GetSessionsByTenant)
 		sessions.PUT("/:id", handler.UpdateSession)

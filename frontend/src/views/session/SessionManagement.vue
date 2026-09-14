@@ -161,6 +161,72 @@
             <template #total="{ row }"><strong>{{ usageValue(row, 'total_tokens') }}</strong></template>
           </t-table>
         </div>
+
+        <div class="session-management__detail-heading session-management__trace-heading">
+          <h2>{{ t('sessionManagement.executionTraces') }}</h2>
+        </div>
+        <div v-if="tracesLoading" class="session-management__drawer-state">
+          <t-loading size="small" />
+          <span>{{ t('sessionManagement.loadingTraces') }}</span>
+        </div>
+        <div v-else-if="tracesError" class="session-management__drawer-state session-management__drawer-state--error">
+          <t-icon name="error-circle" />
+          <span>{{ tracesError }}</span>
+        </div>
+        <div v-else-if="traces.length" class="data-table-shell session-management__details-table">
+          <t-table row-key="request_id" :data="traces" :columns="traceColumns" size="medium" hover>
+            <template #created_at="{ row }"><time :datetime="row.created_at">{{ formatDate(row.created_at) }}</time></template>
+            <template #status="{ row }"><t-tag size="small" variant="light">{{ row.status }}</t-tag></template>
+            <template #query="{ row }"><span class="session-management__query">{{ row.original_query }}</span></template>
+            <template #actions="{ row }">
+              <t-button size="small" variant="text" @click="openTrace(row)">{{ t('sessionManagement.viewTrace') }}</t-button>
+            </template>
+          </t-table>
+        </div>
+        <div v-else class="session-management__empty-trace">{{ t('sessionManagement.noTraces') }}</div>
+
+        <section v-if="selectedTrace" class="session-management__trace-detail">
+          <div class="session-management__detail-heading">
+            <h2>{{ t('sessionManagement.traceDetail') }}</h2>
+            <code>{{ selectedTrace.request_id }}</code>
+          </div>
+          <p class="session-management__trace-query"><span>{{ t('sessionManagement.columns.query') }}</span>{{ selectedTrace.trace.original_query }}</p>
+          <details v-for="step in selectedTrace.trace.steps" :key="step.sequence" class="session-management__trace-step" open>
+            <summary>
+              <strong>#{{ step.sequence }} · {{ step.kind }}</strong>
+              <t-tag size="small" variant="light">{{ step.status }}</t-tag>
+            </summary>
+            <div class="session-management__trace-step-content">
+              <p v-if="step.query"><span>{{ t('sessionManagement.columns.query') }}</span>{{ step.query }}</p>
+              <p v-if="step.rewritten_query"><span>{{ t('sessionManagement.rewrittenQuery') }}</span>{{ step.rewritten_query }}</p>
+              <p v-if="step.expansion_queries?.length"><span>{{ t('sessionManagement.expansionQueries') }}</span>{{ step.expansion_queries.join(' · ') }}</p>
+              <p v-if="step.error_summary" class="session-management__trace-error">{{ step.error_summary }}</p>
+              <template v-if="step.retrieval">
+                <p>
+                  <span>{{ t('sessionManagement.columns.knowledgeBase') }}</span>{{ step.retrieval.knowledge_base_name || step.retrieval.knowledge_base_id || '--' }}
+                  <span>{{ t('sessionManagement.recalledCount') }}</span>{{ step.retrieval.returned_count }}
+                  <span v-if="step.retrieval.truncated" class="session-management__trace-error">{{ t('sessionManagement.truncated') }}</span>
+                </p>
+                <t-table v-if="step.retrieval.candidates?.length" row-key="chunk_id" :data="step.retrieval.candidates" :columns="retrievalColumns" size="small">
+                  <template #retrieval_score="{ row }">{{ formatScore(row.retrieval_score) }}</template>
+                </t-table>
+              </template>
+              <template v-if="step.rerank">
+                <p>
+                  <span>{{ t('sessionManagement.columns.model') }}</span>{{ step.rerank.model_name || step.rerank.model_id || '--' }}
+                  <span>{{ t('sessionManagement.threshold') }}</span>{{ formatScore(step.rerank.threshold) }}
+                  <span v-if="step.rerank.truncated" class="session-management__trace-error">{{ t('sessionManagement.truncated') }}</span>
+                </p>
+                <t-table v-if="step.rerank.candidates?.length" row-key="chunk_id" :data="step.rerank.candidates" :columns="rerankColumns" size="small">
+                  <template #retrieval_score="{ row }">{{ formatScore(row.retrieval_score) }}</template>
+                  <template #model_score="{ row }">{{ scoreOrDash(row.model_score) }}</template>
+                  <template #final_score="{ row }">{{ scoreOrDash(row.final_score) }}</template>
+                  <template #selected="{ row }">{{ row.selected ? t('sessionManagement.selected') : '--' }}</template>
+                </t-table>
+              </template>
+            </div>
+          </details>
+        </section>
       </template>
     </SettingDrawer>
   </main>
@@ -172,7 +238,11 @@ import { useI18n } from 'vue-i18n'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 import {
   getSessionUsage,
+  getRetrievalExecutionTrace,
+  listRetrievalExecutionTraces,
   listSessionUsage,
+  type RetrievalExecutionTrace,
+  type RetrievalTraceSummary,
   type SessionTokenUsage,
   type SessionUsageSource,
   type SessionUsageDetail,
@@ -194,6 +264,10 @@ const detailsLoading = ref(false)
 const detailsError = ref('')
 const selectedSummary = ref<SessionUsageSummary | null>(null)
 const details = ref<SessionUsageDetail[]>([])
+const traces = ref<RetrievalTraceSummary[]>([])
+const tracesLoading = ref(false)
+const tracesError = ref('')
+const selectedTrace = ref<RetrievalExecutionTrace | null>(null)
 
 const sourceOptions = computed(() => [
   { label: t('sessionManagement.allChannels'), value: 'all' },
@@ -224,6 +298,30 @@ const detailColumns = computed(() => [
   { colKey: 'output', title: t('sessionManagement.columns.output'), width: 104, align: 'right' },
   { colKey: 'cache', title: t('sessionManagement.columns.cacheRead'), width: 112, align: 'right' },
   { colKey: 'total', title: t('sessionManagement.columns.total'), width: 104, align: 'right' },
+])
+
+const traceColumns = computed(() => [
+  { colKey: 'created_at', title: t('sessionManagement.columns.time'), width: 158 },
+  { colKey: 'status', title: t('sessionManagement.columns.status'), width: 108 },
+  { colKey: 'query', title: t('sessionManagement.columns.query'), ellipsis: true },
+  { colKey: 'step_count', title: t('sessionManagement.columns.steps'), width: 80, align: 'right' },
+  { colKey: 'actions', title: '', width: 92, align: 'center' },
+])
+
+const retrievalColumns = computed(() => [
+  { colKey: 'knowledge_base_name', title: t('sessionManagement.columns.knowledgeBase'), width: 170, ellipsis: true },
+  { colKey: 'knowledge_name', title: t('sessionManagement.columns.document'), width: 220, ellipsis: true },
+  { colKey: 'knowledge_id', title: t('sessionManagement.columns.documentId'), width: 150, ellipsis: true },
+  { colKey: 'chunk_id', title: t('sessionManagement.columns.chunk'), width: 150, ellipsis: true },
+  { colKey: 'retrieval_score', title: t('sessionManagement.columns.retrievalScore'), width: 118, align: 'right' },
+])
+
+const rerankColumns = computed(() => [
+  ...retrievalColumns.value.slice(0, 4),
+  { colKey: 'retrieval_score', title: t('sessionManagement.columns.retrievalScore'), width: 116, align: 'right' },
+  { colKey: 'model_score', title: t('sessionManagement.columns.modelScore'), width: 104, align: 'right' },
+  { colKey: 'final_score', title: t('sessionManagement.columns.finalScore'), width: 104, align: 'right' },
+  { colKey: 'selected', title: t('sessionManagement.columns.selected'), width: 82, align: 'center' },
 ])
 
 async function loadSessions() {
@@ -262,6 +360,9 @@ function onPageChange(context: any) {
 async function openDetails(summary: SessionUsageSummary) {
   selectedSummary.value = summary
   details.value = []
+  traces.value = []
+  tracesError.value = ''
+  selectedTrace.value = null
   detailsError.value = ''
   detailsVisible.value = true
   detailsLoading.value = true
@@ -273,6 +374,31 @@ async function openDetails(summary: SessionUsageSummary) {
     detailsError.value = err?.message || t('sessionManagement.loadDetailsFailed')
   } finally {
     detailsLoading.value = false
+  }
+  if (!detailsError.value) void loadTraces(summary.session_id)
+}
+
+async function loadTraces(sessionId: string) {
+  tracesLoading.value = true
+  tracesError.value = ''
+  try {
+    const response = await listRetrievalExecutionTraces(sessionId)
+    traces.value = response.data || []
+  } catch (err: any) {
+    traces.value = []
+    tracesError.value = err?.message || t('sessionManagement.loadTracesFailed')
+  } finally {
+    tracesLoading.value = false
+  }
+}
+
+async function openTrace(summary: RetrievalTraceSummary) {
+  if (!selectedSummary.value) return
+  try {
+    const response = await getRetrievalExecutionTrace(selectedSummary.value.session_id, summary.request_id)
+    selectedTrace.value = response.data
+  } catch (err: any) {
+    tracesError.value = err?.message || t('sessionManagement.loadTraceFailed')
   }
 }
 
@@ -305,6 +431,12 @@ function usageValue(detail: SessionUsageDetail, key: keyof SessionTokenUsage) {
   return formatTokens(Number(detail.usage[key] || 0))
 }
 
+function formatScore(value: number | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(4) : '--'
+}
+
+function scoreOrDash(value: number | undefined) { return formatScore(value) }
+
 onMounted(() => { void loadSessions() })
 </script>
 
@@ -336,5 +468,15 @@ onMounted(() => { void loadSessions() })
 .session-management__detail-heading h2 { margin: 0; color: var(--td-text-color-primary); font-size: 16px; font-weight: 600; }
 .session-management__detail-heading span { color: var(--td-text-color-secondary); font-size: 13px; }
 .session-management__details-table { overflow-x: auto; border: 1px solid var(--td-component-stroke); border-radius: 6px; }
+.session-management__trace-heading { margin-top: 28px; }
+.session-management__empty-trace { padding: 20px; border: 1px dashed var(--td-component-stroke); border-radius: 6px; color: var(--td-text-color-secondary); font-size: 13px; }
+.session-management__query { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-management__trace-detail { margin-top: 24px; }
+.session-management__trace-query, .session-management__trace-step-content p { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; color: var(--td-text-color-primary); font-size: 13px; line-height: 1.55; }
+.session-management__trace-query span, .session-management__trace-step-content p span { color: var(--td-text-color-secondary); }
+.session-management__trace-step { margin-top: 10px; border: 1px solid var(--td-component-stroke); border-radius: 6px; background: var(--td-bg-color-container); }
+.session-management__trace-step summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; cursor: pointer; }
+.session-management__trace-step-content { padding: 0 14px 14px; }
+.session-management__trace-error { color: var(--td-error-color); }
 @media (max-width: 760px) { .session-management { padding: 22px 18px; } .session-management__toolbar { width: 100%; } .session-management__summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; } .session-management__table-shell > .data-table-shell__pager { align-items: flex-end; flex-direction: column; } }
 </style>

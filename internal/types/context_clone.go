@@ -115,6 +115,10 @@ var contextCloneAcrossDetach = map[ContextKey]bool{
 	// request context inside the embed handler that authenticated it; nothing
 	// downstream of a detach reads it.
 	EmbedChannelContextKey: false,
+	// A handler-local authorization marker for synchronous, tenant-wide
+	// session-management reads. Detached work must retain the caller's normal
+	// identity and role instead of inheriting this narrow administrative bypass.
+	SessionManagementReadContextKey: false,
 }
 
 // ContextKeysClonedAcrossDetach returns the keys logger.CloneContext carries

@@ -8,6 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
@@ -22,6 +23,7 @@ func (p *PluginSearch) runQueryExpansion(ctx context.Context, chatManage *types.
 	if len(expansions) == 0 {
 		return nil
 	}
+	retrievaltrace.RecordExpansion(ctx, chatManage.RewriteQuery, expansions)
 
 	pipelineInfo(ctx, "Search", "expansion_start", map[string]interface{}{
 		"variants": len(expansions),
@@ -77,12 +79,14 @@ func (p *PluginSearch) runQueryExpansion(ctx context.Context, chatManage *types.
 				}
 				res, err := p.knowledgeBaseService.HybridSearch(ctx, t.KnowledgeBaseID, paramsExp)
 				if err != nil {
+					retrievaltrace.RecordRetrieval(ctx, "query_expansion", q, t.KnowledgeBaseID, nil, err)
 					pipelineWarn(ctx, "Search", "expansion_error", map[string]interface{}{
 						"kb_id": t.KnowledgeBaseID,
 						"error": err.Error(),
 					})
 					return
 				}
+				retrievaltrace.RecordRetrieval(ctx, "query_expansion", q, t.KnowledgeBaseID, res, nil)
 				if len(res) > 0 {
 					for _, r := range res {
 						r.KnowledgeBaseID = t.KnowledgeBaseID

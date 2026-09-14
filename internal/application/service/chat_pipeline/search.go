@@ -8,6 +8,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/logger"
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/searchutil"
 	"github.com/Tencent/WeKnora/internal/tracing/langfuse"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -478,12 +479,18 @@ func (p *PluginSearch) searchByTargets(
 					}
 					res, err := p.knowledgeBaseService.HybridSearch(ctx, fullKBIDs[0], params)
 					if err != nil {
+						for _, kbID := range fullKBIDs {
+							retrievaltrace.RecordRetrieval(ctx, "rag", queryText, kbID, nil, err)
+						}
 						pipelineWarn(ctx, "Search", "combined_kb_search_error", map[string]interface{}{
 							"kb_ids": fullKBIDs,
 							"error":  err.Error(),
 						})
 						recordError(err)
 						return
+					}
+					for _, kbID := range fullKBIDs {
+						retrievaltrace.RecordRetrieval(ctx, "rag", queryText, kbID, resultsForKnowledgeBase(res, kbID), nil)
 					}
 					pipelineInfo(ctx, "Search", "combined_kb_result", map[string]interface{}{
 						"kb_ids":    fullKBIDs,
@@ -560,6 +567,7 @@ func (p *PluginSearch) searchSingleTarget(
 	}
 	res, err := p.knowledgeBaseService.HybridSearch(ctx, t.KnowledgeBaseID, params)
 	if err != nil {
+		retrievaltrace.RecordRetrieval(ctx, "rag", queryText, t.KnowledgeBaseID, nil, err)
 		pipelineWarn(ctx, "Search", "kb_search_error", map[string]interface{}{
 			"kb_id":       t.KnowledgeBaseID,
 			"target_type": t.Type,
@@ -568,6 +576,7 @@ func (p *PluginSearch) searchSingleTarget(
 		})
 		return err
 	}
+	retrievaltrace.RecordRetrieval(ctx, "rag", queryText, t.KnowledgeBaseID, res, nil)
 	pipelineInfo(ctx, "Search", "kb_result", map[string]interface{}{
 		"kb_id":       t.KnowledgeBaseID,
 		"target_type": t.Type,
@@ -577,6 +586,16 @@ func (p *PluginSearch) searchSingleTarget(
 	*results = append(*results, res...)
 	mu.Unlock()
 	return nil
+}
+
+func resultsForKnowledgeBase(results []*types.SearchResult, knowledgeBaseID string) []*types.SearchResult {
+	filtered := make([]*types.SearchResult, 0, len(results))
+	for _, result := range results {
+		if result != nil && result.KnowledgeBaseID == knowledgeBaseID {
+			filtered = append(filtered, result)
+		}
+	}
+	return filtered
 }
 
 // searchWebIfEnabled executes web search when enabled and returns converted results

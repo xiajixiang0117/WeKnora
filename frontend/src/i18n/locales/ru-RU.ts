@@ -5121,7 +5121,9 @@ export default {
     empty: 'Подходящих сессий нет', untitled: 'Сессия без названия', unknownAgent: 'Агент не записан',
     viewDetails: 'Показать ответы', detailsTitle: 'Детали использования сессии', loadingDetails: 'Загрузка ответов…',
     loadFailed: 'Не удалось загрузить использование сессии', loadDetailsFailed: 'Не удалось загрузить детали сессии', summary: 'Сводка сессии', responseDetails: 'Детали ответов',
-    columns: { session: 'Сессия', channel: 'Канал', agent: 'Агент', answers: 'Ответы', model: 'Модель', time: 'Время', input: 'Ввод', output: 'Вывод', cacheRead: 'Чтение кеша', total: 'Всего Token', updatedAt: 'Последнее обновление' },
+    executionTraces: 'Трассировка выполнения', loadingTraces: 'Загрузка трассировки выполнения…', loadTracesFailed: 'Не удалось загрузить трассировку выполнения', loadTraceFailed: 'Не удалось загрузить сведения трассировки',
+    noTraces: 'Для этого сеанса нет записей выполнения', viewTrace: 'Открыть трассировку', traceDetail: 'Сведения трассировки выполнения', rewrittenQuery: 'Улучшенный запрос:', expansionQueries: 'Расширенные запросы:', recalledCount: 'Найдено:', threshold: 'Порог:', truncated: 'Список кандидатов сокращён', selected: 'Выбрано',
+    columns: { session: 'Сессия', channel: 'Канал', agent: 'Агент', answers: 'Ответы', model: 'Модель', time: 'Время', input: 'Ввод', output: 'Вывод', cacheRead: 'Чтение кеша', total: 'Всего Token', updatedAt: 'Последнее обновление', status: 'Статус', query: 'Запрос', steps: 'Шаги', knowledgeBase: 'База знаний', document: 'Документ', documentId: 'ID документа', chunk: 'ID фрагмента', retrievalScore: 'Оценка поиска', modelScore: 'Оценка модели', finalScore: 'Итоговая оценка', selected: 'Выбрано' },
     channels: { web: 'Веб', api: 'API', embed: 'Веб-встраивание', wecom: 'WeCom', wechat: 'WeChat', feishu: 'Feishu', lark: 'Lark', dingtalk: 'DingTalk', slack: 'Slack', telegram: 'Telegram', mattermost: 'Mattermost', qqbot: 'QQ Bot', yunzhijia: 'Yunzhijia', other: '{channel}' }
   },
   vectorStoreSettings: {

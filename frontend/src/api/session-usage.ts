@@ -56,6 +56,81 @@ export interface SessionUsageDetailsResponse {
   }
 }
 
+export interface RetrievalTraceSummary {
+  request_id: string
+  user_message_id?: string
+  assistant_message_id?: string
+  status: string
+  original_query: string
+  step_count: number
+  created_at: string
+}
+
+export interface RetrievalTraceCandidate {
+  knowledge_base_id?: string
+  knowledge_base_name?: string
+  knowledge_id?: string
+  knowledge_name?: string
+  chunk_id: string
+  retrieval_score: number
+  model_score?: number
+  final_score?: number
+  selected: boolean
+}
+
+export interface RetrievalTraceStep {
+  sequence: number
+  kind: string
+  source?: string
+  status: string
+  created_at: string
+  query?: string
+  rewritten_query?: string
+  expansion_queries?: string[]
+  retrieval?: {
+    knowledge_base_id?: string
+    knowledge_base_name?: string
+    returned_count: number
+    captured_count: number
+    truncated?: boolean
+    candidates?: RetrievalTraceCandidate[]
+  }
+  rerank?: {
+    model_id?: string
+    model_name?: string
+    threshold: number
+    candidate_count: number
+    captured_count: number
+    truncated?: boolean
+    candidates?: RetrievalTraceCandidate[]
+  }
+  error_summary?: string
+}
+
+export interface RetrievalExecutionTrace {
+  id: string
+  request_id: string
+  user_message_id?: string
+  assistant_message_id?: string
+  status: string
+  created_at: string
+  trace: {
+    trace_version: number
+    original_query: string
+    steps: RetrievalTraceStep[]
+  }
+}
+
+export interface RetrievalTraceListResponse {
+  success: boolean
+  data: RetrievalTraceSummary[]
+}
+
+export interface RetrievalTraceResponse {
+  success: boolean
+  data: RetrievalExecutionTrace
+}
+
 export function listSessionUsage(params: {
   page: number
   pageSize: number
@@ -73,4 +148,14 @@ export function listSessionUsage(params: {
 
 export function getSessionUsage(sessionId: string) {
   return get<SessionUsageDetailsResponse>(`/api/v1/sessions/${encodeURIComponent(sessionId)}/usage`)
+}
+
+export function listRetrievalExecutionTraces(sessionId: string) {
+  return get<RetrievalTraceListResponse>(`/api/v1/sessions/${encodeURIComponent(sessionId)}/retrieval-execution-traces`)
+}
+
+export function getRetrievalExecutionTrace(sessionId: string, requestId: string) {
+  return get<RetrievalTraceResponse>(
+    `/api/v1/sessions/${encodeURIComponent(sessionId)}/retrieval-execution-traces/${encodeURIComponent(requestId)}`,
+  )
 }

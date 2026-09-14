@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Tencent/WeKnora/internal/models/rerank"
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/searchutil"
 	"github.com/Tencent/WeKnora/internal/tracing/langfuse"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -135,6 +136,7 @@ func (p *PluginRerank) OnEvent(ctx context.Context,
 				"candidate_cnt": len(candidatesToRerank),
 			})
 			chatManage.SearchResult = candidatesToRerank
+			retrievaltrace.RecordRerank(ctx, "rag", chatManage.RewriteQuery, chatManage.RerankModelID, "", originalThreshold, candidatesToRerank, nil, candidatesToRerank, "fallback", rerankErr)
 			spanOutput = map[string]interface{}{
 				"stage":           "api_error_fallback",
 				"candidate_count": len(candidatesToRerank),
@@ -167,6 +169,7 @@ func (p *PluginRerank) OnEvent(ctx context.Context,
 					"candidate_cnt": len(candidatesToRerank),
 				})
 				chatManage.SearchResult = candidatesToRerank
+				retrievaltrace.RecordRerank(ctx, "rag", chatManage.RewriteQuery, chatManage.RerankModelID, "", originalThreshold, candidatesToRerank, nil, candidatesToRerank, "fallback", rerankErr)
 				spanOutput = map[string]interface{}{
 					"stage":              "api_error_fallback",
 					"candidate_count":    len(candidatesToRerank),
@@ -235,6 +238,7 @@ func (p *PluginRerank) OnEvent(ctx context.Context,
 	}
 
 	if len(chatManage.RerankResult) == 0 {
+		retrievaltrace.RecordRerank(ctx, "rag", chatManage.RewriteQuery, chatManage.RerankModelID, "", chatManage.RerankThreshold, candidatesToRerank, rerankScoresByChunk(candidatesToRerank, rawRerankResp), nil, "empty", nil)
 		pipelineWarn(ctx, "Rerank", "output", map[string]interface{}{
 			"filtered_cnt": 0,
 		})
@@ -259,10 +263,21 @@ func (p *PluginRerank) OnEvent(ctx context.Context,
 		chatManage,
 		thresholdDegraded,
 	)
+	retrievaltrace.RecordRerank(ctx, "rag", chatManage.RewriteQuery, chatManage.RerankModelID, "", chatManage.RerankThreshold, candidatesToRerank, rerankScoresByChunk(candidatesToRerank, rawRerankResp), chatManage.RerankResult, "completed", nil)
 	pipelineInfo(ctx, "Rerank", "output", map[string]interface{}{
 		"filtered_cnt": len(chatManage.RerankResult),
 	})
 	return next()
+}
+
+func rerankScoresByChunk(candidates []*types.SearchResult, ranks []rerank.RankResult) map[string]float64 {
+	scores := make(map[string]float64, len(ranks))
+	for _, rank := range ranks {
+		if rank.Index >= 0 && rank.Index < len(candidates) && candidates[rank.Index] != nil {
+			scores[candidates[rank.Index].ID] = rank.RelevanceScore
+		}
+	}
+	return scores
 }
 
 func buildRerankSpanOutput(
