@@ -2086,6 +2086,35 @@ export default {
       saveFailed: 'Failed to save configuration: {message}'
     }
   },
+  sessionManagement: {
+    title: 'Session Management',
+    description: 'Review main chat-model token usage for each session in this workspace. Embedding, reranking, title generation, and other auxiliary calls are excluded.',
+    refresh: 'Refresh',
+    search: 'Search',
+    searchLabel: 'Search sessions',
+    searchPlaceholder: 'Search by session title or session ID',
+    retry: 'Retry',
+    empty: 'No matching sessions',
+    untitled: 'Untitled session',
+    unknownAgent: 'Agent not recorded',
+    total: '{count} sessions',
+    viewDetails: 'View response details',
+    detailsTitle: 'Session usage details',
+    loadingDetails: 'Loading response details…',
+    loadFailed: 'Failed to load session usage',
+    loadDetailsFailed: 'Failed to load session details',
+    summary: 'Session summary',
+    responseDetails: 'Response details',
+    columns: {
+      session: 'Session', channel: 'Channel', agent: 'Agent', answers: 'Responses', model: 'Model', time: 'Time',
+      input: 'Input', output: 'Output', cacheRead: 'Cache read', total: 'Total tokens', updatedAt: 'Last updated'
+    },
+    channels: {
+      web: 'Web', api: 'API', embed: 'Web embed', wecom: 'WeCom', wechat: 'WeChat', feishu: 'Feishu',
+      lark: 'Lark', dingtalk: 'DingTalk', slack: 'Slack', telegram: 'Telegram', mattermost: 'Mattermost',
+      qqbot: 'QQ Bot', yunzhijia: 'Yunzhijia', other: '{channel}'
+    }
+  },
   retrievalSettings: {
     title: 'Search Settings',
     description: 'Configure global retrieval parameters for knowledge search and message search',

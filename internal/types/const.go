@@ -39,6 +39,11 @@ const (
 	// so that stateful sandbox backends (notably CubeSandbox) can route script
 	// execution to the persistent, per-session MicroVM instance.
 	SessionIDContextKey ContextKey = "SessionID"
+	// SessionManagementReadContextKey grants a tenant admin access to read every
+	// conversation in the active tenant while producing the session-management
+	// usage report. It is set only by the server-side management handler; normal
+	// session reads remain constrained to the caller's owner scope.
+	SessionManagementReadContextKey ContextKey = "SessionManagementRead"
 	// SandboxTenantIDContextKey carries the tenant that owns the session whose
 	// sandbox is being addressed, which is NOT always the tenant in
 	// TenantIDContextKey: a shared agent runs under the agent owner's tenant so

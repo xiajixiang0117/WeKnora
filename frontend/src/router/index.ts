@@ -175,6 +175,12 @@ const router = createRouter({
           meta: { requiresInit: true, requiresAuth: true }
         },
         {
+          path: "session-management",
+          name: "sessionManagement",
+          component: () => import("../views/session/SessionManagement.vue"),
+          meta: { requiresInit: true, requiresAuth: true }
+        },
+        {
           path: "organizations",
           name: "organizationList",
           component: () => import("../views/organization/OrganizationList.vue"),

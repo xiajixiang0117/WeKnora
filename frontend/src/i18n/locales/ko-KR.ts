@@ -5114,6 +5114,16 @@ export default {
       saveFailed: '설정 저장 실패: {message}'
     }
   },
+  sessionManagement: {
+    title: '세션 관리',
+    description: '이 워크스페이스의 각 세션에서 사용한 메인 채팅 모델 Token을 확인합니다. Embedding, 리랭킹, 제목 생성 등의 보조 호출은 제외됩니다.',
+    refresh: '새로 고침', search: '검색', searchLabel: '세션 검색', searchPlaceholder: '세션 제목 또는 ID로 검색', retry: '다시 시도',
+    empty: '일치하는 세션이 없습니다', untitled: '제목 없는 세션', unknownAgent: '에이전트 기록 없음', total: '총 {count}개 세션',
+    viewDetails: '응답 상세 보기', detailsTitle: '세션 사용량 상세', loadingDetails: '응답 상세를 불러오는 중…',
+    loadFailed: '세션 사용량을 불러오지 못했습니다', loadDetailsFailed: '세션 상세를 불러오지 못했습니다', summary: '세션 요약', responseDetails: '응답 상세',
+    columns: { session: '세션', channel: '채널', agent: '에이전트', answers: '응답 수', model: '모델', time: '시간', input: '입력', output: '출력', cacheRead: '캐시 읽기', total: '총 Token', updatedAt: '최근 업데이트' },
+    channels: { web: '웹', api: 'API', embed: '웹 임베드', wecom: 'WeCom', wechat: 'WeChat', feishu: 'Feishu', lark: 'Lark', dingtalk: 'DingTalk', slack: 'Slack', telegram: 'Telegram', mattermost: 'Mattermost', qqbot: 'QQ Bot', yunzhijia: 'Yunzhijia', other: '{channel}' }
+  },
   vectorStoreSettings: {
     title: '벡터 데이터베이스 엔진',
     description: '지식 베이스 검색을 위한 벡터 데이터베이스 인스턴스를 등록하고 관리합니다.',

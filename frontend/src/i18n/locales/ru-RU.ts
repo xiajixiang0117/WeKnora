@@ -5114,6 +5114,16 @@ export default {
       saveFailed: 'Не удалось сохранить конфигурацию: {message}'
     }
   },
+  sessionManagement: {
+    title: 'Управление сессиями',
+    description: 'Просматривайте использование Token основной чат-моделью для каждой сессии рабочего пространства. Embedding, реранжирование, генерация заголовков и другие вспомогательные вызовы исключены.',
+    refresh: 'Обновить', search: 'Поиск', searchLabel: 'Поиск сессий', searchPlaceholder: 'Поиск по названию или ID сессии', retry: 'Повторить',
+    empty: 'Подходящих сессий нет', untitled: 'Сессия без названия', unknownAgent: 'Агент не записан', total: 'Всего сессий: {count}',
+    viewDetails: 'Показать ответы', detailsTitle: 'Детали использования сессии', loadingDetails: 'Загрузка ответов…',
+    loadFailed: 'Не удалось загрузить использование сессии', loadDetailsFailed: 'Не удалось загрузить детали сессии', summary: 'Сводка сессии', responseDetails: 'Детали ответов',
+    columns: { session: 'Сессия', channel: 'Канал', agent: 'Агент', answers: 'Ответы', model: 'Модель', time: 'Время', input: 'Ввод', output: 'Вывод', cacheRead: 'Чтение кеша', total: 'Всего Token', updatedAt: 'Последнее обновление' },
+    channels: { web: 'Веб', api: 'API', embed: 'Веб-встраивание', wecom: 'WeCom', wechat: 'WeChat', feishu: 'Feishu', lark: 'Lark', dingtalk: 'DingTalk', slack: 'Slack', telegram: 'Telegram', mattermost: 'Mattermost', qqbot: 'QQ Bot', yunzhijia: 'Yunzhijia', other: '{channel}' }
+  },
   vectorStoreSettings: {
     title: 'Движок векторной базы данных',
     description: 'Регистрация и управление экземплярами векторных баз данных для поиска по базе знаний.',

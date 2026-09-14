@@ -173,7 +173,9 @@ func (r *sessionRepository) QueryPaged(
 			types.SkillMaintenanceSessionMarker+"%",
 		)
 		if kw := strings.TrimSpace(q.Keyword); kw != "" {
-			db = db.Where(titleLikeExpr, "%"+escapeLikeKeyword(kw)+"%")
+			// Session management accepts either a human-readable title fragment or
+			// the exact session ID copied from a trace/log entry.
+			db = db.Where("("+titleLikeExpr+" OR s.id = ?)", "%"+escapeLikeKeyword(kw)+"%", kw)
 		}
 		return db
 	}

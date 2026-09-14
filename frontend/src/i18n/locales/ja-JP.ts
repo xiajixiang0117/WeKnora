@@ -2086,6 +2086,16 @@ export default {
       saveFailed: '設定の保存に失敗しました: {message}'
     }
   },
+  sessionManagement: {
+    title: 'セッション管理',
+    description: 'このワークスペースの各セッションにおけるメインチャットモデルの Token 使用量を確認します。Embedding、リランキング、タイトル生成などの補助呼び出しは含みません。',
+    refresh: '更新', search: '検索', searchLabel: 'セッションを検索', searchPlaceholder: 'セッション名または ID で検索', retry: '再試行',
+    empty: '一致するセッションはありません', untitled: '無題のセッション', unknownAgent: 'エージェント未記録', total: '{count} 件のセッション',
+    viewDetails: '回答の詳細を表示', detailsTitle: 'セッション使用量の詳細', loadingDetails: '回答の詳細を読み込み中…',
+    loadFailed: 'セッション使用量の読み込みに失敗しました', loadDetailsFailed: 'セッション詳細の読み込みに失敗しました', summary: 'セッション集計', responseDetails: '回答の詳細',
+    columns: { session: 'セッション', channel: 'チャネル', agent: 'エージェント', answers: '回答数', model: 'モデル', time: '時刻', input: '入力', output: '出力', cacheRead: 'キャッシュ読取', total: '合計 Token', updatedAt: '最終更新' },
+    channels: { web: 'Web', api: 'API', embed: 'Web 埋め込み', wecom: 'WeCom', wechat: 'WeChat', feishu: 'Feishu', lark: 'Lark', dingtalk: 'DingTalk', slack: 'Slack', telegram: 'Telegram', mattermost: 'Mattermost', qqbot: 'QQ Bot', yunzhijia: 'Yunzhijia', other: '{channel}' }
+  },
   retrievalSettings: {
     title: '検索設定',
     description: 'ナレッジベース検索とメッセージ検索に共通する検索パラメータを設定します',

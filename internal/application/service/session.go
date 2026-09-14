@@ -66,6 +66,19 @@ func loadSessionForRead(
 	ownerID, sessionID string,
 ) (*types.Session, error) {
 	isAdmin := types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleAdmin)
+	// Session management is the only tenant-wide transcript reader. Its route
+	// is Admin+ guarded and the context marker is server-created, so ordinary
+	// chat/message handlers retain their stricter owner-scoped behaviour.
+	if isAdmin && types.IsSessionManagementRead(ctx) {
+		session, err := repo.GetByID(ctx, tenantID, sessionID)
+		if err != nil {
+			return session, err
+		}
+		if imPlatform, platformErr := repo.GetIMPlatform(ctx, tenantID, sessionID); platformErr == nil {
+			session.IMPlatform = imPlatform
+		}
+		return session, nil
+	}
 
 	session, err := repo.Get(ctx, tenantID, ownerID, sessionID)
 	if err == nil {
@@ -337,11 +350,18 @@ func (s *sessionService) ListSessions(
 		query = &types.SessionListQuery{}
 	}
 	query.TenantID = types.MustTenantIDFromContext(ctx)
-	// API / IM / embed source filters are tenant-wide admin views over channel
-	// traffic. Gate them behind Admin+ and drop the per-user owner scope so an
-	// Owner/admin can observe sessions that are otherwise isolated per key,
-	// visitor, or IM identity; everyone else stays scoped to their own principal.
-	if types.SessionListSourceRequiresAdmin(query.Source) {
+	if query.TenantWide {
+		if !types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleAdmin) {
+			return nil, apperrors.NewForbiddenError(
+				"listing tenant-wide session usage requires tenant admin or owner role",
+			)
+		}
+		query.UserID = ""
+		// API / IM / embed source filters are tenant-wide admin views over channel
+		// traffic. Gate them behind Admin+ and drop the per-user owner scope so an
+		// Owner/admin can observe sessions that are otherwise isolated per key,
+		// visitor, or IM identity; everyone else stays scoped to their own principal.
+	} else if types.SessionListSourceRequiresAdmin(query.Source) {
 		if !types.TenantRoleFromContext(ctx).HasPermission(types.TenantRoleAdmin) {
 			return nil, apperrors.NewForbiddenError(
 				"listing channel sessions requires tenant admin or owner role",

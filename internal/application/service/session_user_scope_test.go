@@ -84,6 +84,33 @@ func TestGetSessionIsScopedToCurrentUser(t *testing.T) {
 	require.Equal(t, legacySession.ID, got.ID)
 }
 
+func TestSessionManagementReadLetsAdminReadAnyTenantSession(t *testing.T) {
+	svc, db := newTestSessionService(t)
+	aliceSession := &types.Session{
+		TenantID: 1,
+		UserID:   "alice",
+		Title:    "alice private session",
+	}
+	require.NoError(t, db.Create(aliceSession).Error)
+
+	adminCtx := context.WithValue(
+		testSessionScopeContext(1, "admin"),
+		types.TenantRoleContextKey,
+		types.TenantRoleAdmin,
+	)
+	got, err := svc.GetSession(types.WithSessionManagementRead(adminCtx), aliceSession.ID)
+	require.NoError(t, err)
+	require.Equal(t, aliceSession.ID, got.ID)
+
+	viewerCtx := context.WithValue(
+		testSessionScopeContext(1, "viewer"),
+		types.TenantRoleContextKey,
+		types.TenantRoleViewer,
+	)
+	_, err = svc.GetSession(types.WithSessionManagementRead(viewerCtx), aliceSession.ID)
+	require.ErrorIs(t, err, apperrors.ErrSessionNotFound)
+}
+
 func TestUpdateSessionIsScopedToCurrentUserAndAllowsNoOp(t *testing.T) {
 	svc, db := newTestSessionService(t)
 	aliceSession := &types.Session{

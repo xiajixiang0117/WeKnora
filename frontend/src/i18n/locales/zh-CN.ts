@@ -5119,6 +5119,35 @@ export default {
       saveFailed: '保存配置失败: {message}'
     }
   },
+  sessionManagement: {
+    title: '会话管理',
+    description: '查看当前空间每个会话的聊天主模型 Token 用量。统计不包含 Embedding、Rerank、标题生成等辅助调用。',
+    refresh: '刷新',
+    search: '搜索',
+    searchLabel: '搜索会话',
+    searchPlaceholder: '按会话标题或会话 ID 搜索',
+    retry: '重试',
+    empty: '没有匹配的会话',
+    untitled: '未命名会话',
+    unknownAgent: '未记录智能体',
+    total: '共 {count} 个会话',
+    viewDetails: '查看回答明细',
+    detailsTitle: '会话用量明细',
+    loadingDetails: '正在加载回答明细…',
+    loadFailed: '加载会话用量失败',
+    loadDetailsFailed: '加载会话明细失败',
+    summary: '会话汇总',
+    responseDetails: '回答明细',
+    columns: {
+      session: '会话', channel: '渠道', agent: '智能体', answers: '回答数', model: '模型', time: '时间',
+      input: '输入', output: '输出', cacheRead: '缓存读取', total: '总 Token', updatedAt: '最近更新'
+    },
+    channels: {
+      web: '网页', api: 'API', embed: '网页嵌入', wecom: '企微', wechat: '微信', feishu: '飞书',
+      lark: 'Lark', dingtalk: '钉钉', slack: 'Slack', telegram: 'Telegram', mattermost: 'Mattermost',
+      qqbot: 'QQ 机器人', yunzhijia: '云之家', other: '{channel}'
+    }
+  },
   vectorStoreSettings: {
     title: '向量数据库引擎',
     description: '注册和管理用于知识库搜索的向量数据库实例。',

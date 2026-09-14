@@ -96,6 +96,10 @@
           <t-icon :name="SKILL_ICON" class="menu-icon" />
           <span>{{ $t('settings.skills.title') }}</span>
         </div>
+        <div v-if="canManageSessions" class="menu-item" @click="handleSessionManagement">
+          <t-icon name="chart-bar" class="menu-icon" />
+          <span>{{ $t('sessionManagement.title') }}</span>
+        </div>
         <div class="menu-divider"></div>
         <div class="menu-item" @click="handleSettings">
           <t-icon name="setting" class="menu-icon" />
@@ -266,6 +270,11 @@ const canManageSkills = computed(() =>
   authStore.isSystemAdmin ||
   authStore.hasRole(SETTINGS_MANAGEMENT_SHORTCUT_MIN_ROLE.skills),
 )
+const canManageSessions = computed(() =>
+  authStore.canAccessAllTenants ||
+  authStore.isSystemAdmin ||
+  authStore.hasRole('admin'),
+)
 
 const menuRef = ref<HTMLElement>()
 const tenantMenuItemRef = ref<HTMLElement>()
@@ -307,6 +316,12 @@ const handleSettings = () => {
   menuVisible.value = false
   uiStore.openSettings()
   router.push('/platform/settings')
+}
+
+const handleSessionManagement = () => {
+  menuVisible.value = false
+  uiStore.closeSettings()
+  router.push('/platform/session-management')
 }
 
 // Open the platform administration group inside the standard Settings

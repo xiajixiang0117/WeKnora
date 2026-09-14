@@ -52,6 +52,11 @@ func RegisterSessionRoutes(
 	{
 		sessions.POST("", handler.CreateSession)
 		sessions.DELETE("/batch", handler.BatchDeleteSessions)
+		// Tenant-wide usage reporting can reveal other users' conversation
+		// metadata, so it is deliberately separate from the owner-scoped
+		// session list and requires Admin+.
+		sessions.GET("/usage", g.Admin(), handler.ListSessionUsage)
+		sessions.GET("/:id/usage", g.Admin(), handler.GetSessionUsage)
 		sessions.GET("/:id", handler.GetSession)
 		sessions.GET("", handler.GetSessionsByTenant)
 		sessions.PUT("/:id", handler.UpdateSession)

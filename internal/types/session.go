@@ -214,11 +214,14 @@ func SanitizeClientSessionDescription(incoming, existing string) string {
 type SessionListQuery struct {
 	TenantID uint64
 	UserID   string
-	Keyword  string
-	Source   string
-	AgentID  string
-	Page     int
-	PageSize int
+	// TenantWide is reserved for admin-only management reports. When false,
+	// ListSessions derives the regular per-owner scope from the request context.
+	TenantWide bool
+	Keyword    string
+	Source     string
+	AgentID    string
+	Page       int
+	PageSize   int
 }
 
 // SessionListItem is a session row enriched with its IM origin (when any).

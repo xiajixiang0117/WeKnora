@@ -62,6 +62,21 @@ func WithWikiEditSource(ctx context.Context, source string) context.Context {
 	return context.WithValue(ctx, WikiEditSourceContextKey, NormalizeWikiEditSource(source))
 }
 
+// WithSessionManagementRead marks an internal request as a tenant-wide,
+// read-only session-management query. Callers still need an Admin+ role; the
+// marker only lets the service layer distinguish this report from normal chat
+// history reads, which are intentionally owner-scoped.
+func WithSessionManagementRead(ctx context.Context) context.Context {
+	return context.WithValue(ctx, SessionManagementReadContextKey, true)
+}
+
+// IsSessionManagementRead reports whether ctx was created by the
+// session-management usage handler.
+func IsSessionManagementRead(ctx context.Context) bool {
+	v, _ := ctx.Value(SessionManagementReadContextKey).(bool)
+	return v
+}
+
 // WikiEditSourceFromContext returns the wiki edit source carried by ctx,
 // defaulting to WikiEditSourcePipeline when absent.
 func WikiEditSourceFromContext(ctx context.Context) string {
