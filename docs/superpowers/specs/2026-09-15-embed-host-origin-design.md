@@ -17,9 +17,9 @@
 1. Embed 页面沿用已有的 `postMessage` 信任链；优先使用已验证的父窗口 Origin，初始化阶段没有消息时使用 iframe 的 `document.referrer` Origin。
 2. Embed 前端为所有 `/api/v1/embed/:channel_id/...` 请求附加 `X-Embed-Parent-Origin`。
 3. `EmbedAuth` 优先使用该头并以渠道 `allowed_origins` 校验。缺少该头时，仅对 `/exchange` 使用请求的 `Origin`，兼容安全模式的业务后端调用；其他公开 Embed API 缺少父 Origin 时拒绝。
-4. CORS 允许 `X-Embed-Parent-Origin` 请求头。
+4. `X-Embed-Parent-Origin` 只允许由 B 上的 iframe 通过同源 API 请求发送，不加入全局 CORS 允许头。否则任意第三方页面都能跨域伪造一个白名单内的 A。当前默认 Nginx、独立 Embed 子域和 Vite 开发代理均保持 B 与 `/api` 同源。
 5. Go 直接托管前端时已有的 `frame-ancestors` 中间件继续使用同一宿主白名单，作为浏览器侧的额外防护；默认 Nginx 静态部署依赖 API 层父 Origin 校验。
-6. 管理端预览继续走短时预览会话；预览 iframe 会显式标记为预览请求，后端只对该受管理的会话放行管理端父 Origin，不改变公开渠道白名单语义。
+6. 管理端预览继续走短时预览会话（`ems_preview_` 前缀）；后端只对该受管理的会话放行管理端父 Origin。Lite 模式的 `frame-ancestors` 始终包含 `'self'` 以允许同源管理预览，不使用可伪造的查询参数关闭 CSP。
 
 ## 兼容与迁移
 

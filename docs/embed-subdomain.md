@@ -12,6 +12,8 @@
 | **B. Embed 页面源站** | `https://app.example.com` 或 `https://embed.example.com` | 提供 `embed.html`、`weknora-widget.js`；聊天 iframe 加载自这里 |
 | **C. WeKnora API** | 通常与 B 同域，如 `https://app.example.com/api` | 后端接口 |
 
+B 与 C 必须保持同源。父页面 Origin 证明头只允许由 B 内的 iframe 同源发送，不对第三方站点开放跨域请求。
+
 **默认（推荐入门）**：B 和主站管理后台都在 `https://app.example.com`，A 可以是任意第三方域名。
 
 ```
@@ -75,17 +77,14 @@ window.__RUNTIME_CONFIG__ = {
 
 ### 3. 域名白名单填什么？
 
-渠道里的「域名白名单」校验的是 **API 请求的 `Origin` 头**，不是「允许哪些网站粘贴脚本」的抽象概念。
+渠道里的「域名白名单」校验的是 **嵌入宿主页面的 Origin**，也就是哪个网站（A）有权把聊天 iframe 放进自己的页面；不是提供 iframe 的 WeKnora 域名（B）。
 
 实际要填：
 
-1. **Embed 页面源站**（必填）——聊天 iframe 内发 API 时浏览器会带这个 Origin  
-   - 同域部署：`https://app.example.com`  
-   - 独立子域：`https://embed.example.com`
-2. **你的业务后端源站**（安全模式时建议填）——你自己写的「取令牌接口」在服务端调用 `POST .../exchange` 时，需带与白名单一致的 `Origin` 头（见 [embed-secure-mode.md](./embed-secure-mode.md)）
+1. **业务站点（宿主 A）**（必填）——例如实际粘贴 iframe 的 `https://shop.example.com`。
+2. **安全模式下的 Exchange 来源**（按实际情况填写）——如果你的业务后端调用 `POST .../exchange` 时手动设置 `Origin: https://shop.example.com`，就是 A；如果设置的是另一个后端来源，则填写那个来源（见 [embed-secure-mode.md](./embed-secure-mode.md)）。
 
-第三方商城 `https://shop.example.com` **通常不用**进白名单（它只是加载脚本，不直接调 embed API）。  
-若你把 embed 反代到商城同域路径下（少见），才需要填商城域名。
+WeKnora 的 Embed 页面源站 B（例如 `https://app.example.com` 或 `https://embed.example.com`）**不需要因为 iframe API 请求而加入白名单**；iframe 会单独携带已确认的宿主 Origin 供 API 校验。
 
 ## Widget 跨域与 sandbox
 
@@ -98,7 +97,8 @@ A 与 B 同域时保持默认即可，无需 `data-sandbox`。
 - [ ] `EMBED_BASE_URL` 与真实访问地址一致（含 `https`）
 - [ ] embed 子域能打开 `/embed/<渠道ID>` 和 `/weknora-widget.js`
 - [ ] embed 子域 `/api/` 能连到后端
-- [ ] 渠道白名单包含 embed 源站（及安全模式下的业务后端源站）
+- [ ] 渠道白名单包含实际嵌入页面的宿主 Origin
+- [ ] 安全模式下，白名单包含 Exchange 请求使用的 Origin
 - [ ] 管理端复制的 snippet 里 URL 已变为 embed 子域
 
 ## 相关文档

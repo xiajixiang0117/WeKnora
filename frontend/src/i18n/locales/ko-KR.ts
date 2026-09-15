@@ -4303,7 +4303,7 @@ export default {
     welcomeMessageDesc: '방문자가 임베드 채팅을 열고 첫 메시지를 보내기 전에 표시됩니다. 비우면 표시하지 않습니다',
     showSuggestedQuestions: '추천 질문',
     showSuggestedQuestionsDesc: '방문자 첫 메시지 전에 빠른 질문을 표시합니다(에이전트 설정 및 연결된 지식베이스에서 가져옴)',
-    originsHint: '한 줄에 하나의 전체 출처(예: https://shop.example.com), 최소 1개; *.example.com 서브도메인 와일드카드 지원',
+    originsHint: '한 줄에 하나의 임베드 호스트 출처(예: https://shop.example.com), 최소 1개; *.example.com 서브도메인 와일드카드 지원',
     originsRequired: '허용 도메인을 최소 1개 입력하세요',
     originsInvalid: '잘못된 도메인: {origin}',
     originsWildcardProd: '프로덕션에서는 와일드카드 \'*\'를 사용할 수 없습니다',

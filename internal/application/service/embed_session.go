@@ -17,22 +17,22 @@ import (
 
 const (
 	embedSessionTokenPrefix = "ems_"
+	embedPreviewTokenPrefix = "ems_preview_"
 	embedSessionRedisPrefix = "embed:session:"
 	embedSessionTTL         = 30 * time.Minute
 )
 
 var ErrEmbedSessionUnavailable = errors.New("embed session tokens unavailable")
 
-func generateEmbedSessionToken() (string, error) {
+func generateEmbedSessionToken(prefix string) (string, error) {
 	buf := make([]byte, embedTokenBytes)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
 	}
-	return embedSessionTokenPrefix + base64.RawURLEncoding.EncodeToString(buf), nil
+	return prefix + base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-// IssueSessionToken mints a short-lived session token bound to channelID.
-func (s *embedChannelService) IssueSessionToken(ctx context.Context, channelID string) (string, int, error) {
+func (s *embedChannelService) issueSessionToken(ctx context.Context, channelID, prefix string) (string, int, error) {
 	if s.redis == nil {
 		return "", 0, ErrEmbedSessionUnavailable
 	}
@@ -40,7 +40,7 @@ func (s *embedChannelService) IssueSessionToken(ctx context.Context, channelID s
 	if channelID == "" {
 		return "", 0, ErrEmbedTokenInvalid
 	}
-	token, err := generateEmbedSessionToken()
+	token, err := generateEmbedSessionToken(prefix)
 	if err != nil {
 		return "", 0, err
 	}
@@ -49,6 +49,11 @@ func (s *embedChannelService) IssueSessionToken(ctx context.Context, channelID s
 		return "", 0, err
 	}
 	return token, int(embedSessionTTL.Seconds()), nil
+}
+
+// IssueSessionToken mints a short-lived session token bound to channelID.
+func (s *embedChannelService) IssueSessionToken(ctx context.Context, channelID string) (string, int, error) {
+	return s.issueSessionToken(ctx, channelID, embedSessionTokenPrefix)
 }
 
 // ResolveSessionToken returns the channel ID stored for a session token.
@@ -98,6 +103,13 @@ func IsEmbedSessionToken(token string) bool {
 	return strings.HasPrefix(strings.TrimSpace(token), embedSessionTokenPrefix)
 }
 
+// IsEmbedPreviewSessionToken reports whether token belongs to the management
+// UI's short-lived preview flow. Preview tokens may be used from the
+// management origin and are never included in published snippets.
+func IsEmbedPreviewSessionToken(token string) bool {
+	return strings.HasPrefix(strings.TrimSpace(token), embedPreviewTokenPrefix)
+}
+
 // SignEmbedSessionHandle binds a chat session id to its embed channel with an
 // HMAC keyed by the channel's (server-only) publish token. The handle is handed
 // to the widget at session-creation time and must be presented on every history
@@ -139,5 +151,5 @@ func (s *embedChannelService) IssuePreviewSession(
 	if !ch.Enabled {
 		return "", 0, ErrEmbedChannelDisabled
 	}
-	return s.IssueSessionToken(ctx, ch.ID)
+	return s.issueSessionToken(ctx, ch.ID, embedPreviewTokenPrefix)
 }

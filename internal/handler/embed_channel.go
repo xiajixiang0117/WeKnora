@@ -92,10 +92,10 @@ func stringOrEmpty(v *string) string {
 }
 
 // validateAllowedOrigins enforces that a public embed channel declares an
-// explicit origin allowlist. An empty list means "allow any origin" in the
-// auth middleware, which is unsafe for a publicly reachable widget, so it is
-// rejected. In production a wildcard ("*") is also rejected; each entry must be
-// a well-formed http(s) origin (optionally a "*." subdomain wildcard).
+// explicit allowlist of embedding host-page origins. An empty list is rejected
+// because a publicly reachable widget must not be usable from an arbitrary
+// parent page. In production a wildcard ("*") is also rejected; each entry
+// must be a well-formed http(s) origin (optionally a "*." subdomain wildcard).
 func validateAllowedOrigins(origins []string) error {
 	cleaned := make([]string, 0, len(origins))
 	for _, o := range origins {

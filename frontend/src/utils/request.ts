@@ -9,6 +9,7 @@ import {
   isEmbedPage,
   refreshAccessTokenShared,
 } from './authRefresh';
+import { embedParentOriginHeaders } from '@/api/embedParentOrigin';
 
 export { forceReloginRedirect, refreshAccessTokenShared };
 
@@ -73,6 +74,13 @@ instance.interceptors.request.use(
     const existingAuth = config.headers?.Authorization ?? config.headers?.authorization;
     const isEmbedAuth = typeof existingAuth === 'string' && existingAuth.startsWith('Embed ');
     const isEmbedPath = typeof config.url === 'string' && config.url.includes('/api/v1/embed/');
+
+    // Embed API requests execute inside the B-origin iframe, so the browser's
+    // normal Origin header is B. Carry the already trusted parent-page Origin
+    // (A) separately so the backend can enforce the channel host allowlist.
+    if (isEmbedPath) {
+      Object.assign(config.headers, embedParentOriginHeaders());
+    }
 
     // 嵌入渠道使用 Embed token；勿用本地 JWT 覆盖（否则调试页会 401）
     if (!isEmbedAuth) {

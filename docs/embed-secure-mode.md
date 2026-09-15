@@ -149,10 +149,10 @@ func embedTokenHandler(w http.ResponseWriter, r *http.Request) {
 
 | 要放行的请求来源 | 白名单示例 |
 |------------------|------------|
-| 聊天 iframe 所在源站（embed 页面） | `https://app.example.com` 或 `https://embed.example.com` |
-| 你的取令牌后端（exchange 时带的 Origin） | `https://shop.example.com` |
+| 允许嵌入聊天 iframe 的宿主页面 A | `https://shop.example.com` |
+| 取令牌后端调用 exchange 时显式设置的 Origin | 通常也是 `https://shop.example.com` |
 
-若 embed 使用[独立子域](./embed-subdomain.md)，**两条都要加**（embed 源站 + 业务后端源站）。
+如果两者相同只填一条；如果 Exchange 使用另一个来源，则按实际 `Origin` 再加一条。Embed 页面源站 B 不需要仅因为 iframe 内 API 请求而加入白名单。
 
 开发环境可临时使用 `*`；**生产环境禁止 `*`**。
 
@@ -161,7 +161,7 @@ func embedTokenHandler(w http.ResponseWriter, r *http.Request) {
 - [ ] 发布 Token 仅通过环境变量 / 密钥服务注入，未提交到 Git、未打进前端静态包
 - [ ] 取令牌接口校验访客身份
 - [ ] 全链路 HTTPS
-- [ ] 白名单已包含 embed 源站与 exchange 使用的 Origin
+- [ ] 白名单已包含宿主页面 Origin 与 exchange 使用的 Origin
 - [ ] 已配置限流；敏感智能体不要用普通模式把 Token 暴露在网页里
 - [ ] 轮换发布 Token 后，同步更新服务端环境变量
 

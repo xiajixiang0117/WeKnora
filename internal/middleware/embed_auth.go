@@ -22,6 +22,7 @@ import (
 const (
 	embedRateLimitKeyPrefix      = "embed:ratelimit:"
 	embedDailyRateLimitKeyPrefix = "embed:ratelimit:day:"
+	embedParentOriginHeader      = "X-Embed-Parent-Origin"
 
 	// embedGlobalMinuteFactor derives a channel-wide per-minute cap from the
 	// per-IP cap. The publish token is publicly visible, so a single attacker
@@ -116,9 +117,12 @@ func EmbedAuth(
 			return
 		}
 
-		origin := requestOrigin(c)
-		if !originAllowed(origin, ch.AllowedOriginsList()) {
-			logger.Warnf(c.Request.Context(), "[embed_auth] origin %q not allowed for channel %s", origin, channelID)
+		origin, originSource := embedAuthorizationOrigin(c)
+		// Preview sessions are minted by the authenticated management API and are
+		// intentionally usable from the management UI's own origin. Public
+		// publish/session tokens must prove the embedding page's origin instead.
+		if !service.IsEmbedPreviewSessionToken(token) && !originAllowed(origin, ch.AllowedOriginsList()) {
+			logger.Warnf(c.Request.Context(), "[embed_auth] %s %q not allowed for channel %s", originSource, origin, channelID)
 			c.JSON(http.StatusForbidden, gin.H{"error": "origin not allowed"})
 			c.Abort()
 			return
@@ -172,6 +176,22 @@ func EmbedAuth(
 		})
 		c.Next()
 	}
+}
+
+// embedAuthorizationOrigin returns the origin that the channel allowlist is
+// meant to authorize. Embed API calls execute inside the B-origin iframe, so
+// their normal Origin header is B; the frontend supplies the verified parent
+// page Origin (A) in a separate header. The server-side secure-mode exchange
+// has no parent iframe header, so it intentionally falls back to its explicit
+// Origin header on the exchange endpoint.
+func embedAuthorizationOrigin(c *gin.Context) (string, string) {
+	if parent := strings.TrimSpace(c.GetHeader(embedParentOriginHeader)); parent != "" {
+		return parent, "parent origin"
+	}
+	if strings.HasSuffix(c.Request.URL.Path, "/exchange") {
+		return requestOrigin(c), "exchange origin"
+	}
+	return "", "missing parent origin"
 }
 
 func extractEmbedToken(c *gin.Context) string {

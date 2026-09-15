@@ -336,9 +336,10 @@ func embedChannelIDFromPath(path string) string {
 }
 
 // embedFrameAncestorsMiddleware sets a per-channel `frame-ancestors` CSP on the
-// embed SPA page so it can only be framed by the channel's allowed origins.
-// When the channel declares no origins (or "*"), no restriction is applied,
-// matching the API allowlist semantics. Only GET/HEAD page loads are handled.
+// embed SPA page so it can only be framed by the channel's allowed host origins.
+// The management UI is same-origin in Lite deployments, so 'self' is always
+// included for its short-lived preview flow. When the channel declares "*",
+// no framing restriction is applied. Only GET/HEAD page loads are handled.
 func embedFrameAncestorsMiddleware(svc interfaces.EmbedChannelService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
@@ -356,7 +357,8 @@ func embedFrameAncestorsMiddleware(svc interfaces.EmbedChannelService) gin.Handl
 			return
 		}
 		origins := ch.AllowedOriginsList()
-		sources := make([]string, 0, len(origins))
+		sources := make([]string, 0, len(origins)+1)
+		sources = append(sources, "'self'")
 		wildcard := false
 		for _, o := range origins {
 			o = strings.TrimSpace(o)
@@ -369,8 +371,9 @@ func embedFrameAncestorsMiddleware(svc interfaces.EmbedChannelService) gin.Handl
 			}
 			sources = append(sources, o)
 		}
-		// No explicit origins or a wildcard => do not constrain framing here.
-		if wildcard || len(sources) == 0 {
+		// A wildcard is permitted only outside production and intentionally
+		// disables this browser-side restriction.
+		if wildcard {
 			c.Next()
 			return
 		}

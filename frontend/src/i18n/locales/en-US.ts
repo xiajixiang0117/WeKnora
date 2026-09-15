@@ -2629,7 +2629,7 @@ export default {
     welcomeMessageDesc: 'Shown in the embed chat before the visitor sends their first message; leave blank to hide',
     showSuggestedQuestions: 'Suggested questions',
     showSuggestedQuestionsDesc: 'Show starter prompts before the first visitor message, from agent config and linked knowledge bases',
-    originsHint: 'One full origin per line (e.g. https://shop.example.com), at least one required; *.example.com subdomain wildcards supported',
+    originsHint: 'One allowed host origin per line (e.g. https://shop.example.com), at least one required; *.example.com subdomain wildcards supported',
     originsRequired: 'At least one allowed origin is required',
     originsInvalid: 'Invalid origin: {origin}',
     originsWildcardProd: 'Wildcard origin \'*\' is not allowed in production',

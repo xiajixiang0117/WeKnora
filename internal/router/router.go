@@ -111,14 +111,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 	// 实际只对未来改为回显具体 Origin 时才生效；当前认证全部走显式的
 	// Authorization / X-API-Key 头，不依赖 ambient 凭据。若引入 cookie
 	// 认证，必须先把 AllowOrigins 换成受控清单。
-	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key", "X-Request-ID", "X-Tenant-ID", "X-Embed-Session", "X-External-User-ID", "X-External-User-Token"},
-		ExposeHeaders:    []string{"Content-Length", "Access-Control-Allow-Origin"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
+	r.Use(cors.New(routerCORSConfig()))
 
 	// 基础中间件（不需要认证）
 	r.Use(middleware.RequestID())
@@ -145,9 +138,9 @@ func NewRouter(params RouterParams) *gin.Engine {
 
 	// Embed page framing policy: emit a per-channel `frame-ancestors` CSP so the
 	// embed SPA page (/embed/:channelId) can only be iframed by the channel's
-	// allowed origins. This is the page-level counterpart to the API Origin
-	// allowlist enforced in EmbedAuth. Registered before the static handler so
-	// it runs for the embed HTML response.
+	// allowed host origins. This is the browser-side counterpart to the parent
+	// Origin allowlist enforced in EmbedAuth. Registered before the static
+	// handler so it runs for the embed HTML response.
 	if params.EmbedChannelService != nil {
 		r.Use(embedFrameAncestorsMiddleware(params.EmbedChannelService))
 	}
@@ -309,6 +302,20 @@ func NewRouter(params RouterParams) *gin.Engine {
 	}
 
 	return r
+}
+
+func routerCORSConfig() cors.Config {
+	return cors.Config{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		// X-Embed-Parent-Origin is deliberately absent. It is produced by the
+		// trusted B-origin iframe and must remain a same-origin-only header;
+		// allowing it in CORS would let any website spoof an allowed parent A.
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key", "X-Request-ID", "X-Tenant-ID", "X-Embed-Session", "X-External-User-ID", "X-External-User-Token"},
+		ExposeHeaders:    []string{"Content-Length", "Access-Control-Allow-Origin"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}
 }
 
 // trustedProxies returns the proxy CIDRs/IPs whose X-Forwarded-For headers

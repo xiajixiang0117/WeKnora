@@ -295,7 +295,8 @@ func TestEmbedAuthSessionTokenPath(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/embed/"+channelID+"/config", nil)
 	req.Header.Set("Authorization", "Embed ems_valid")
-	req.Header.Set("Origin", "https://app.example.com")
+	req.Header.Set("Origin", "https://embed.example.com")
+	req.Header.Set("X-Embed-Parent-Origin", "https://app.example.com")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -339,7 +340,8 @@ func TestEmbedAuthPublishTokenValid(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/embed/"+channelID+"/config", nil)
 	req.Header.Set("Authorization", "Embed "+publishToken)
-	req.Header.Set("Origin", "https://app.example.com")
+	req.Header.Set("Origin", "https://embed.example.com")
+	req.Header.Set("X-Embed-Parent-Origin", "https://app.example.com")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -374,6 +376,98 @@ func TestEmbedAuthPublishTokenInvalid(t *testing.T) {
 
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d, body = %s", w.Code, http.StatusUnauthorized, w.Body.String())
+	}
+}
+
+func TestEmbedAuthRejectsUnlistedParentOrigin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	const channelID = "ch-parent-origin"
+	svc := &fakeEmbedChannelService{
+		channels: map[string]*types.EmbedChannel{
+			channelID: {
+				ID:                 channelID,
+				TenantID:           11,
+				Enabled:            true,
+				PublishToken:       "em_parent_origin",
+				AllowedOrigins:     []byte(`["https://shop.example.com"]`),
+				RateLimitPerMinute: 0,
+			},
+		},
+	}
+	handler := EmbedAuth(svc, &fakeTenantService{tenant: &types.Tenant{ID: 11}}, nil)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/embed/"+channelID+"/config", nil)
+	c.Request.Header.Set("Authorization", "Embed em_parent_origin")
+	c.Request.Header.Set("Origin", "https://embed.example.com")
+	c.Request.Header.Set("X-Embed-Parent-Origin", "https://evil.example.com")
+	c.Params = gin.Params{{Key: "channel_id", Value: channelID}}
+	handler(c)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d, body = %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestEmbedAuthRequiresParentOriginForEmbedAPI(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	const channelID = "ch-parent-required"
+	svc := &fakeEmbedChannelService{
+		channels: map[string]*types.EmbedChannel{
+			channelID: {
+				ID:                 channelID,
+				TenantID:           11,
+				Enabled:            true,
+				PublishToken:       "em_parent_required",
+				AllowedOrigins:     []byte(`["https://shop.example.com"]`),
+				RateLimitPerMinute: 0,
+			},
+		},
+	}
+	handler := EmbedAuth(svc, &fakeTenantService{tenant: &types.Tenant{ID: 11}}, nil)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/embed/"+channelID+"/config", nil)
+	c.Request.Header.Set("Authorization", "Embed em_parent_required")
+	c.Request.Header.Set("Origin", "https://embed.example.com")
+	c.Params = gin.Params{{Key: "channel_id", Value: channelID}}
+	handler(c)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d, body = %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
+func TestEmbedAuthPreviewSessionMayUseManagementOrigin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	const channelID = "ch-preview-origin"
+	svc := &fakeEmbedChannelService{
+		channels: map[string]*types.EmbedChannel{
+			channelID: {
+				ID:                 channelID,
+				TenantID:           11,
+				Enabled:            true,
+				AllowedOrigins:     []byte(`["https://shop.example.com"]`),
+				RateLimitPerMinute: 0,
+			},
+		},
+		sessions: map[string]string{"ems_preview_token": channelID},
+	}
+	handler := EmbedAuth(svc, &fakeTenantService{tenant: &types.Tenant{ID: 11}}, nil)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/embed/"+channelID+"/config", nil)
+	c.Request.Header.Set("Authorization", "Embed ems_preview_token")
+	c.Request.Header.Set("Origin", "https://weknora.example.com")
+	c.Request.Header.Set("X-Embed-Parent-Origin", "https://weknora.example.com")
+	c.Params = gin.Params{{Key: "channel_id", Value: channelID}}
+	handler(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body = %s", w.Code, http.StatusOK, w.Body.String())
 	}
 }
 

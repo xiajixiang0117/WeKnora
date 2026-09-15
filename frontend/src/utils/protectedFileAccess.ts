@@ -11,6 +11,8 @@
  * 这里把该决策收敛成单一真相源，渲染组件只需声明作用域，不再各自拼 URL。
  */
 
+import { embedParentOriginHeaders } from '../api/embedParentOrigin.ts';
+
 export const PROVIDER_SCHEME_PATTERN = 'resource|local|minio|cos|tos|s3|oss|ks3|obs';
 
 const PROVIDER_FILE_SCHEME_RE = new RegExp(`^(${PROVIDER_SCHEME_PATTERN}):\\/\\/\\S+$`, 'i');
@@ -151,7 +153,10 @@ export function buildProtectedFileRequest(
     if (!channelId || !token) return null;
     return {
       url: `/api/v1/embed/${encodeURIComponent(channelId)}/files?${query}`,
-      headers: { Authorization: `Embed ${token}` },
+      headers: {
+        Authorization: `Embed ${token}`,
+        ...embedParentOriginHeaders(),
+      },
     };
   }
 

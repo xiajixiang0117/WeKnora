@@ -13,6 +13,7 @@ import {
   refreshAccessTokenShared,
   runStreamWithAuthRetry,
 } from '@/utils/authRefresh';
+import { embedParentOriginHeaders } from '@/api/embedParentOrigin';
 
 interface StreamOptions {
   // 请求方法 (默认POST)
@@ -163,6 +164,7 @@ export function useStream() {
           "Authorization": embedToken ? `Embed ${embedToken}` : `Bearer ${authToken}`,
           "Accept-Language": i18n.global.locale?.value || localStorage.getItem('locale') || 'zh-CN',
           "X-Request-ID": requestID,
+          ...(embedToken ? embedParentOriginHeaders() : {}),
           ...(!embedToken && tenantIdHeader ? { "X-Tenant-ID": tenantIdHeader } : {}),
           ...(params.embed_session_sig ? { "X-Embed-Session": params.embed_session_sig } : {}),
           ...(params.embed_visitor_id ? { "X-Embed-Visitor": params.embed_visitor_id } : {}),

@@ -14,6 +14,9 @@ const RESOURCE = 'resource://AbCdEfGhIjKlMnOpQrStUv'
 
 test.afterEach(() => {
   setDefaultProtectedFileAccess(null)
+
+  Reflect.deleteProperty(globalThis, 'window')
+  Reflect.deleteProperty(globalThis, 'document')
 })
 
 test('tenant access routes through the tenant-scoped proxy', () => {
@@ -23,6 +26,16 @@ test('tenant access routes through the tenant-scoped proxy', () => {
 })
 
 test('embed access routes through the channel-scoped proxy with the Embed header', () => {
+
+  const parent = {}
+  const frameWindow: Record<string, unknown> = {}
+  frameWindow.parent = parent
+  Object.defineProperty(globalThis, 'window', { value: frameWindow, configurable: true })
+  Object.defineProperty(globalThis, 'document', {
+    value: { referrer: 'https://shop.example.com/products/42' },
+    configurable: true,
+  })
+
   const request = buildProtectedFileRequest(RESOURCE, {
     mode: 'embed',
     channelId: 'ch-1',
@@ -31,6 +44,7 @@ test('embed access routes through the channel-scoped proxy with the Embed header
 
   assert.equal(request?.url, `/api/v1/embed/ch-1/files?file_path=${encodeURIComponent(RESOURCE)}`)
   assert.equal(request?.headers.Authorization, 'Embed tok-1')
+  assert.equal(request?.headers['X-Embed-Parent-Origin'], 'https://shop.example.com')
 })
 
 test('knowledge-base access routes through the KB-scoped proxy', () => {

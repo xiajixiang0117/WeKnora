@@ -1,5 +1,10 @@
 import { get, post, put, del } from '@/utils/request'
 import { resolveEmbedBaseUrl } from '@/utils/embedBaseUrl'
+import {
+  EMBED_HOST_SOURCE,
+  getEmbedParentOrigin,
+  isTrustedEmbedParentMessage,
+} from '../embedParentOrigin'
 
 export interface EmbedChannel {
   id: string
@@ -437,44 +442,6 @@ export async function getEmbedMessageList(
 }
 
 const EMBED_MSG_SOURCE = 'weknora-embed'
-const EMBED_HOST_SOURCE = 'weknora-host'
-
-// The exact parent origin, learned from the first trusted host message
-// (trust-on-first-use). Once known, every inbound/outbound message is pinned to
-// it so conversation content is never broadcast to an unexpected window.
-let verifiedParentOrigin = ''
-
-function referrerParentOrigin(): string {
-  if (window.parent === window) return ''
-  try {
-    if (document.referrer) {
-      return new URL(document.referrer).origin
-    }
-  } catch {
-    // ignore malformed referrer
-  }
-  return ''
-}
-
-/** Best-known parent origin: verified handshake first, then referrer. */
-function knownParentOrigin(): string {
-  return verifiedParentOrigin || referrerParentOrigin()
-}
-
-function isTrustedParentMessage(event: MessageEvent): boolean {
-  if (window.parent === window) return false
-  if (event.source !== window.parent) return false
-  if (!event.data || event.data.source !== EMBED_HOST_SOURCE) return false
-  if (typeof event.origin !== 'string' || event.origin === 'null') return false
-  const expected = knownParentOrigin()
-  if (expected) {
-    if (event.origin !== expected) return false
-  } else {
-    // First trusted handshake with no referrer hint: pin to this origin.
-    verifiedParentOrigin = event.origin
-  }
-  return true
-}
 
 /**
  * Post a message to the host page.
@@ -485,7 +452,7 @@ function isTrustedParentMessage(event: MessageEvent): boolean {
  */
 function postToParent(payload: Record<string, unknown>, opts?: { sensitive?: boolean }) {
   if (window.parent === window) return
-  const target = knownParentOrigin()
+  const target = getEmbedParentOrigin()
   if (!target) {
     if (opts?.sensitive) return
     window.parent.postMessage({ source: EMBED_MSG_SOURCE, ...payload }, '*')
@@ -727,7 +694,7 @@ export function buildSecureServerExamples(channelId: string, opts?: { baseUrl?: 
 /** Listen for context injected by the parent page (embed host). */
 export function onEmbedHostContext(handler: (payload: Record<string, unknown>) => void) {
   const listener = (e: MessageEvent) => {
-    if (!isTrustedParentMessage(e) || e.data.type !== 'set_context') return
+    if (!isTrustedEmbedParentMessage(e) || e.data.type !== 'set_context') return
     handler(e.data.payload || {})
   }
   window.addEventListener('message', listener)
@@ -737,7 +704,7 @@ export function onEmbedHostContext(handler: (payload: Record<string, unknown>) =
 /** Listen for a publish token provided by the parent host page. */
 export function onEmbedHostToken(handler: (token: string, channelId?: string) => void) {
   const listener = (e: MessageEvent) => {
-    if (!isTrustedParentMessage(e) || e.data.type !== 'provide_token') return
+    if (!isTrustedEmbedParentMessage(e) || e.data.type !== 'provide_token') return
     const token = String(e.data.token || '').trim()
     if (!token) return
     handler(token, e.data.channel_id)
@@ -749,7 +716,7 @@ export function onEmbedHostToken(handler: (token: string, channelId?: string) =>
 /** Listen for locale changes from the parent host page. */
 export function onEmbedHostLocale(handler: (locale: string) => void) {
   const listener = (e: MessageEvent) => {
-    if (!isTrustedParentMessage(e) || e.data.type !== 'set_locale') return
+    if (!isTrustedEmbedParentMessage(e) || e.data.type !== 'set_locale') return
     const locale = String(e.data.payload?.locale || e.data.locale || '').trim()
     if (!locale) return
     handler(locale)
@@ -761,7 +728,7 @@ export function onEmbedHostLocale(handler: (locale: string) => void) {
 /** Listen for a pre-filled query from the parent host page. */
 export function onEmbedHostOpenWithQuery(handler: (query: string) => void) {
   const listener = (e: MessageEvent) => {
-    if (!isTrustedParentMessage(e) || e.data.type !== 'open_with_query') return
+    if (!isTrustedEmbedParentMessage(e) || e.data.type !== 'open_with_query') return
     const query = String(e.data.payload?.query || e.data.query || '').trim()
     if (!query) return
     handler(query)

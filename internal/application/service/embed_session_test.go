@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/Tencent/WeKnora/internal/types"
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 )
 
 func TestEmbedSessionHandleSignVerify(t *testing.T) {
@@ -57,6 +60,47 @@ func TestIsEmbedSessionToken(t *testing.T) {
 	}
 	if IsEmbedSessionToken("") {
 		t.Fatal("empty token must not match")
+	}
+}
+
+func TestIsEmbedPreviewSessionToken(t *testing.T) {
+	if !IsEmbedPreviewSessionToken("ems_preview_abc123") {
+		t.Fatal("expected ems_preview_ prefix to be preview session token")
+	}
+	if IsEmbedPreviewSessionToken("ems_abc123") {
+		t.Fatal("ordinary session token must not be treated as preview token")
+	}
+	if IsEmbedPreviewSessionToken("em_abc123") {
+		t.Fatal("publish token must not be treated as preview token")
+	}
+}
+
+func TestIssuePreviewSessionUsesDistinctTokenPrefix(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	svc := &embedChannelService{
+		repo: &stubEmbedChannelRepo{ch: &types.EmbedChannel{
+			ID:       "ch-preview",
+			TenantID: 42,
+			Enabled:  true,
+		}},
+		redis: rdb,
+	}
+	token, expiresIn, err := svc.IssuePreviewSession(context.Background(), 42, "ch-preview")
+	if err != nil {
+		t.Fatalf("IssuePreviewSession() error = %v", err)
+	}
+	if !strings.HasPrefix(token, "ems_preview_") {
+		t.Fatalf("preview token = %q, want ems_preview_ prefix", token)
+	}
+	if expiresIn != int(embedSessionTTL.Seconds()) {
+		t.Fatalf("expiresIn = %d, want %d", expiresIn, int(embedSessionTTL.Seconds()))
+	}
+	resolved, err := svc.ResolveSessionToken(context.Background(), token)
+	if err != nil || resolved != "ch-preview" {
+		t.Fatalf("ResolveSessionToken() = %q, %v; want ch-preview, nil", resolved, err)
 	}
 }
 

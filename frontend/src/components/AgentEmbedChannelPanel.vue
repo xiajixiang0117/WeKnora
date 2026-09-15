@@ -1000,14 +1000,14 @@ async function openPreviewForChannel(
     if (agentId) {
       clearEmbedStoredChatSessionIfAgentMismatch(ch.id, agentId)
     }
-    let token = tokenFor(ch)
+    // Preview must use its dedicated short-lived token. A published token is
+    // authorized against the configured customer host, while this iframe is
+    // intentionally opened by the management UI's own origin.
+    const res = await issueEmbedPreviewSession(ch.id)
+    const token = res?.data?.session_token || ''
     if (!token) {
-      const res = await issueEmbedPreviewSession(ch.id)
-      token = res?.data?.session_token || ''
-      if (!token) {
-        MessagePlugin.warning(t('embedPublish.previewUnavailable'))
-        return
-      }
+      MessagePlugin.warning(t('embedPublish.previewUnavailable'))
+      return
     }
     previewMode.value = opts?.mode ?? 'iframe'
     previewChannel.value = {
