@@ -3,12 +3,15 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/Tencent/WeKnora/internal/application/access"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 	"github.com/Tencent/WeKnora/internal/utils"
@@ -47,18 +50,27 @@ func TestProcessWebCrawlScanRechecksUnlinkedKnowledge(t *testing.T) {
 				require.Equal(t, "# Previously imported content", change.PreviousContent)
 				require.Equal(t, 1, fixture.pages.scan.ItemsMissing)
 				require.Zero(t, fixture.pages.scan.ItemsFailed)
+				require.Equal(t, types.WebCrawlApplyApplied, change.ApplyStatus)
+				require.Equal(t, types.WebCrawlDecisionApply, change.Decision)
+				require.Equal(t, "delete", change.Action)
+				require.Equal(t, []string{knowledge.ID}, fixture.knowledge.hardDeletedIDs)
+				require.Equal(t, "deleted", fixture.pages.pages[knowledge.Source].Status)
+				require.Empty(t, fixture.pages.pages[knowledge.Source].KnowledgeID)
+				require.Equal(t, types.WebCrawlScanStatusCompleted, fixture.pages.scan.Status)
+				require.Equal(t, 1, fixture.pages.scan.ItemsApplied)
 			} else {
 				require.Equal(t, types.WebCrawlChangeFailed, change.ChangeType)
 				require.Zero(t, fixture.pages.scan.ItemsMissing)
 				require.Equal(t, 1, fixture.pages.scan.ItemsFailed)
+				require.Empty(t, fixture.knowledge.deletedIDs)
+				require.Equal(t, "active", page.Status)
+				afterKnowledge, err := json.Marshal(knowledge)
+				require.NoError(t, err)
+				require.JSONEq(t, string(originalKnowledge), string(afterKnowledge), "temporary failures must preserve imported knowledge")
+				require.Equal(t, types.WebCrawlScanStatusPartialFailed, fixture.pages.scan.Status)
 			}
 			require.Equal(t, "applied-hash", page.LastAppliedHash)
 			require.Equal(t, "# Previously imported content", page.LastAppliedContent)
-			require.Equal(t, "active", page.Status)
-			afterKnowledge, err := json.Marshal(knowledge)
-			require.NoError(t, err)
-			require.JSONEq(t, string(originalKnowledge), string(afterKnowledge), "reviewing a missing source must not mutate imported knowledge")
-			require.Equal(t, types.WebCrawlScanStatusReviewReady, fixture.pages.scan.Status)
 		})
 	}
 }
@@ -93,7 +105,9 @@ func TestProcessWebCrawlScanReconcilesHistoricalKnowledge(t *testing.T) {
 
 			page := fixture.pages.pages[canonicalURL]
 			require.NotNil(t, page)
-			require.Equal(t, knowledge.ID, page.KnowledgeID, "the baseline must refer to the current imported knowledge")
+			require.Equal(t, []string{knowledge.ID}, fixture.knowledge.hardDeletedIDs, "delete the current knowledge instead of the stale baseline ID")
+			require.Empty(t, page.KnowledgeID)
+			require.Equal(t, "deleted", page.Status)
 			require.Equal(t, wantHash, page.LastAppliedHash)
 			require.Len(t, fixture.pages.changes, 1)
 			change := fixture.pages.changes[0]
@@ -136,7 +150,7 @@ func TestProcessWebCrawlScanRespectsKnowledgeDataSourceOwnership(t *testing.T) {
 
 			page := fixture.pages.pages[fixture.baseURL+"/docs/old.html"]
 			require.NotNil(t, page)
-			require.Equal(t, "owned", page.KnowledgeID, "the data source's import takes precedence over a legacy URL import")
+			require.Equal(t, []string{"owned"}, fixture.knowledge.hardDeletedIDs, "the data source's import takes precedence over a legacy URL import")
 			require.NotContains(t, fixture.pages.pages, foreign.Source)
 			require.Zero(t, foreignRequests.Load(), "knowledge owned by another data source must not expand this scan")
 			require.Len(t, fixture.pages.changes, 1)
@@ -220,6 +234,188 @@ func TestProcessWebCrawlScanNewBrokenLinkIsFailedWithoutPage(t *testing.T) {
 	require.Equal(t, 1, fixture.pages.scan.ItemsFailed)
 }
 
+func TestProcessWebCrawlScanDeletesDisabledKnowledge(t *testing.T) {
+	fixture := newWebCrawlMissingFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/docs/old.html" {
+			http.NotFound(w, r)
+			return
+		}
+		writeWebCrawlIndex(w, "")
+	}, nil)
+	knowledge := fixture.addKnowledge("disabled-knowledge", "/docs/old.html")
+	knowledge.EnableStatus = "disabled"
+	fixture.addBaseline(knowledge.Source, knowledge.ID).Status = "disabled"
+	fixture.scan(t)
+	require.Equal(t, []string{knowledge.ID}, fixture.knowledge.hardDeletedIDs)
+	require.Equal(t, "deleted", fixture.pages.pages[knowledge.Source].Status)
+	require.Equal(t, types.WebCrawlScanStatusCompleted, fixture.pages.scan.Status)
+}
+
+func TestProcessWebCrawlScanDeletionFailureCanBeRetried(t *testing.T) {
+	fixture := newWebCrawlMissingFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/docs/old.html" {
+			http.NotFound(w, r)
+			return
+		}
+		writeWebCrawlIndex(w, "")
+	}, nil)
+	knowledge := fixture.addKnowledge("knowledge-old", "/docs/old.html")
+	fixture.addBaseline(knowledge.Source, knowledge.ID)
+	fixture.knowledge.deleteErr = errors.New("index unavailable")
+	fixture.scan(t)
+	require.Len(t, fixture.pages.changes, 1)
+	change := fixture.pages.changes[0]
+	require.Equal(t, "delete", change.Action)
+	require.Equal(t, types.WebCrawlApplyFailed, change.ApplyStatus)
+	require.Contains(t, change.ErrorMessage, "index unavailable")
+	require.Empty(t, fixture.knowledge.hardDeletedIDs)
+	require.False(t, knowledge.DeletedAt.Valid)
+	require.Equal(t, knowledge.ID, fixture.pages.pages[knowledge.Source].KnowledgeID)
+	require.Equal(t, types.WebCrawlScanStatusPartialFailed, fixture.pages.scan.Status)
+	require.Zero(t, fixture.pages.scan.ItemsApplied)
+
+	fixture.knowledge.deleteErr = nil
+	enqueuer := &webCrawlRetryEnqueuer{}
+	fixture.svc.taskEnqueuer = enqueuer
+	fixture.svc.webCrawlerRepo = &webCrawlMissingApplyRepo{webCrawlStateRepo: fixture.pages}
+	require.NoError(t, fixture.svc.RetryWebCrawlChanges(context.Background(), fixture.pages.scan.ID, []string{change.ID}))
+	require.Len(t, enqueuer.tasks, 1)
+	require.Equal(t, types.WebCrawlApplyQueued, change.ApplyStatus)
+	require.Equal(t, "delete", change.Action)
+	require.NoError(t, fixture.svc.ProcessWebCrawlApply(context.Background(), enqueuer.tasks[0]))
+	require.Equal(t, types.WebCrawlApplyApplied, change.ApplyStatus)
+	require.Empty(t, change.ErrorMessage)
+	require.NotNil(t, change.AppliedAt)
+	require.Equal(t, []string{knowledge.ID}, fixture.knowledge.hardDeletedIDs)
+	require.Equal(t, types.WebCrawlScanStatusCompleted, fixture.pages.scan.Status)
+	require.Equal(t, 1, fixture.pages.scan.ItemsApplied)
+	// Redelivery of the apply task must not delete or count the page twice.
+	require.NoError(t, fixture.svc.ProcessWebCrawlApply(context.Background(), enqueuer.tasks[0]))
+	require.Len(t, fixture.knowledge.hardDeletedIDs, 1)
+	require.Equal(t, 1, fixture.pages.scan.ItemsApplied)
+}
+
+type webCrawlRetryEnqueuer struct{ tasks []*asynq.Task }
+
+func (e *webCrawlRetryEnqueuer) Enqueue(task *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
+	e.tasks = append(e.tasks, task)
+	return &asynq.TaskInfo{}, nil
+}
+
+func TestProcessWebCrawlApplyKeepsPendingContentReviewableAfterDeletionRetry(t *testing.T) {
+	fixture := newWebCrawlMissingFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/docs/old.html":
+			http.NotFound(w, r)
+		case "/docs/index.html":
+			writeWebCrawlIndex(w, `<a href="/docs/new.html">New page</a>`)
+		default:
+			writeWebCrawlIndex(w, "")
+		}
+	}, map[string]interface{}{"max_pages": 2})
+	knowledge := fixture.addKnowledge("knowledge-old", "/docs/old.html")
+	fixture.addBaseline(knowledge.Source, knowledge.ID)
+	fixture.knowledge.deleteErr = errors.New("temporary deletion failure")
+	fixture.scan(t)
+	require.Len(t, fixture.pages.changes, 2)
+	var deletion, addition *types.WebCrawlChange
+	for _, change := range fixture.pages.changes {
+		if change.ChangeType == types.WebCrawlChangeMissing {
+			deletion = change
+		} else if change.ChangeType == types.WebCrawlChangeAdded {
+			addition = change
+		}
+	}
+	require.NotNil(t, deletion)
+	require.NotNil(t, addition)
+	fixture.knowledge.deleteErr = nil
+	enqueuer := &webCrawlRetryEnqueuer{}
+	fixture.svc.taskEnqueuer = enqueuer
+	fixture.svc.webCrawlerRepo = &webCrawlMissingApplyRepo{webCrawlStateRepo: fixture.pages}
+	require.NoError(t, fixture.svc.RetryWebCrawlChanges(context.Background(), fixture.pages.scan.ID, []string{deletion.ID}))
+	require.Len(t, enqueuer.tasks, 1)
+	require.NoError(t, fixture.svc.ProcessWebCrawlApply(context.Background(), enqueuer.tasks[0]))
+	require.Equal(t, types.WebCrawlApplyApplied, deletion.ApplyStatus)
+	require.Equal(t, types.WebCrawlApplyPending, addition.ApplyStatus)
+	require.Equal(t, types.WebCrawlScanStatusReviewReady, fixture.pages.scan.Status)
+	require.NoError(t, fixture.svc.ApplyWebCrawlChanges(context.Background(), fixture.pages.scan.ID, []string{addition.ID}, nil))
+	require.Equal(t, types.WebCrawlApplyQueued, addition.ApplyStatus)
+	require.Len(t, enqueuer.tasks, 2)
+}
+
+func TestProcessWebCrawlScanResumesDeletionAfterResultSaveFailure(t *testing.T) {
+	var requests atomic.Int32
+	fixture := newWebCrawlMissingFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.URL.Path == "/docs/old.html" {
+			http.NotFound(w, r)
+			return
+		}
+		writeWebCrawlIndex(w, "")
+	}, nil)
+	knowledge := fixture.addKnowledge("knowledge-old", "/docs/old.html")
+	fixture.addBaseline(knowledge.Source, knowledge.ID)
+	repo := &webCrawlInterruptedDeleteRepo{webCrawlStateRepo: fixture.pages, failSave: true}
+	fixture.svc.webCrawlerRepo = repo
+	payload, err := json.Marshal(types.WebCrawlScanPayload{TenantID: fixture.ds.TenantID, DataSourceID: fixture.ds.ID, ScanID: fixture.pages.scan.ID})
+	require.NoError(t, err)
+	task := asynq.NewTask(types.TypeWebCrawlScan, payload)
+	require.ErrorContains(t, fixture.svc.ProcessWebCrawlScan(context.Background(), task), "save interrupted")
+	require.Equal(t, types.WebCrawlScanStatusPartialFailed, fixture.pages.scan.Status)
+	require.Equal(t, []string{knowledge.ID}, fixture.knowledge.hardDeletedIDs)
+	require.Equal(t, types.WebCrawlApplyQueued, repo.persisted[0].ApplyStatus)
+	require.Zero(t, fixture.pages.scan.ItemsApplied)
+	fetched := requests.Load()
+	repo.failSave = false
+	for i := 0; i < 2; i++ {
+		require.NoError(t, fixture.svc.ProcessWebCrawlScan(context.Background(), task))
+		require.Equal(t, fetched, requests.Load(), "resume the saved deletion rather than append another scan")
+		require.Len(t, repo.persisted, 1)
+		require.Equal(t, types.WebCrawlApplyApplied, repo.persisted[0].ApplyStatus)
+		require.Empty(t, repo.persisted[0].ErrorMessage)
+		require.Equal(t, 1, fixture.pages.scan.ItemsApplied)
+		require.Len(t, fixture.knowledge.hardDeletedIDs, 1)
+		require.Equal(t, types.WebCrawlScanStatusPartialFailed, fixture.pages.scan.Status, "unprocessed URLs still require a fresh scan")
+	}
+}
+
+type webCrawlInterruptedDeleteRepo struct {
+	*webCrawlStateRepo
+	persisted []*types.WebCrawlChange
+	failSave  bool
+}
+
+func (r *webCrawlInterruptedDeleteRepo) CreateChange(ctx context.Context, change *types.WebCrawlChange) error {
+	if err := r.webCrawlStateRepo.CreateChange(ctx, change); err != nil {
+		return err
+	}
+	copy := *change
+	r.persisted = append(r.persisted, &copy)
+	return nil
+}
+
+func (r *webCrawlInterruptedDeleteRepo) UpdateChange(_ context.Context, change *types.WebCrawlChange) error {
+	if r.failSave {
+		return errors.New("save interrupted")
+	}
+	for i, previous := range r.persisted {
+		if previous.ID == change.ID {
+			copy := *change
+			r.persisted[i] = &copy
+		}
+	}
+	return nil
+}
+
+func (r *webCrawlInterruptedDeleteRepo) ListChanges(context.Context, string, string, string, string, int, int) ([]*types.WebCrawlChange, error) {
+	var copies []*types.WebCrawlChange
+	for _, change := range r.persisted {
+		copy := *change
+		copies = append(copies, &copy)
+	}
+	return copies, nil
+}
+
 func TestProcessWebCrawlApplyRetainsScanFailure(t *testing.T) {
 	for _, test := range []struct {
 		name        string
@@ -232,11 +428,12 @@ func TestProcessWebCrawlApplyRetainsScanFailure(t *testing.T) {
 		{name: "success", wantStatus: types.WebCrawlScanStatusCompleted},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			scan := &types.WebCrawlScan{ID: "scan-1", Status: types.WebCrawlScanStatusApplying, ErrorMessage: test.scanError, ItemsFailed: test.itemsFailed}
+			ds := &types.DataSource{ID: "datasource-1", TenantID: 17, KnowledgeBaseID: "kb-1", Type: types.ConnectorTypeWebCrawler}
+			scan := &types.WebCrawlScan{ID: "scan-1", DataSourceID: ds.ID, TenantID: ds.TenantID, Status: types.WebCrawlScanStatusApplying, ErrorMessage: test.scanError, ItemsFailed: test.itemsFailed}
 			change := &types.WebCrawlChange{ID: "change-1", ScanID: scan.ID, ChangeType: types.WebCrawlChangeMissing, Action: "keep", ApplyStatus: types.WebCrawlApplyQueued}
 			repo := &webCrawlMissingApplyRepo{webCrawlStateRepo: &webCrawlStateRepo{scan: scan, changes: []*types.WebCrawlChange{change}}}
-			svc := &DataSourceService{webCrawlerRepo: repo, dsRepo: &webCrawlTestDataSourceRepo{ds: &types.DataSource{ID: "datasource-1", TenantID: 17}}}
-			payload, err := json.Marshal(types.WebCrawlApplyPayload{DataSourceID: "datasource-1", ScanID: scan.ID, ChangeIDs: []string{change.ID}})
+			svc := &DataSourceService{webCrawlerRepo: repo, dsRepo: &webCrawlTestDataSourceRepo{ds: ds}, kbService: &webCrawlTestKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}}}
+			payload, err := json.Marshal(types.WebCrawlApplyPayload{TenantID: ds.TenantID, DataSourceID: ds.ID, ScanID: scan.ID, ChangeIDs: []string{change.ID}})
 			require.NoError(t, err)
 
 			require.NoError(t, svc.ProcessWebCrawlApply(context.Background(), asynq.NewTask(types.TypeWebCrawlApply, payload)))
@@ -272,9 +469,9 @@ func newWebCrawlMissingFixture(t *testing.T, handler http.HandlerFunc, settings 
 	config, err := json.Marshal(map[string]interface{}{"settings": configSettings})
 	require.NoError(t, err)
 	ds := &types.DataSource{ID: "datasource-1", TenantID: 17, KnowledgeBaseID: "kb-1", Type: types.ConnectorTypeWebCrawler, Config: config}
-	pages := &webCrawlStateRepo{scan: &types.WebCrawlScan{ID: "scan-1", DataSourceID: ds.ID, Status: types.WebCrawlScanStatusScanning}, pages: make(map[string]*types.WebCrawlPage)}
+	pages := &webCrawlStateRepo{scan: &types.WebCrawlScan{ID: "scan-1", DataSourceID: ds.ID, TenantID: ds.TenantID, Status: types.WebCrawlScanStatusScanning}, pages: make(map[string]*types.WebCrawlPage)}
 	knowledge := &webCrawlMissingKnowledgeRepo{t: t, ds: ds}
-	svc := &DataSourceService{dsRepo: &webCrawlTestDataSourceRepo{ds: ds}, webCrawlerRepo: pages, knowledgeService: &webCrawlBaselineKnowledgeService{repo: knowledge}}
+	svc := &DataSourceService{dsRepo: &webCrawlTestDataSourceRepo{ds: ds}, webCrawlerRepo: pages, knowledgeService: &webCrawlMissingKnowledgeService{repo: knowledge}, kbService: &webCrawlTestKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}}}
 	fixture := &webCrawlMissingFixture{svc: svc, ds: ds, pages: pages, knowledge: knowledge, baseURL: server.URL}
 	fixture.addKnowledge("index-knowledge", "/docs/index.html")
 	return fixture
@@ -306,9 +503,12 @@ func writeWebCrawlIndex(w http.ResponseWriter, links string) {
 
 type webCrawlMissingKnowledgeRepo struct {
 	interfaces.KnowledgeRepository
-	t          *testing.T
-	ds         *types.DataSource
-	knowledges []*types.Knowledge
+	t              *testing.T
+	ds             *types.DataSource
+	knowledges     []*types.Knowledge
+	deletedIDs     []string
+	hardDeletedIDs []string
+	deleteErr      error
 }
 
 func (r *webCrawlMissingKnowledgeRepo) ListKnowledgeByKnowledgeBaseID(_ context.Context, tenantID uint64, kbID string) ([]*types.Knowledge, error) {
@@ -316,11 +516,59 @@ func (r *webCrawlMissingKnowledgeRepo) ListKnowledgeByKnowledgeBaseID(_ context.
 	require.Equal(r.t, r.ds.KnowledgeBaseID, kbID)
 	var matches []*types.Knowledge
 	for _, knowledge := range r.knowledges {
-		if knowledge.TenantID == tenantID && knowledge.KnowledgeBaseID == kbID {
+		if knowledge.TenantID == tenantID && knowledge.KnowledgeBaseID == kbID && !knowledge.DeletedAt.Valid {
 			matches = append(matches, knowledge)
 		}
 	}
 	return matches, nil
+}
+
+func (r *webCrawlMissingKnowledgeRepo) GetKnowledgeBatch(_ context.Context, tenantID uint64, ids []string) ([]*types.Knowledge, error) {
+	var matches []*types.Knowledge
+	for _, knowledge := range r.knowledges {
+		for _, id := range ids {
+			if knowledge.ID == id && knowledge.TenantID == tenantID && !knowledge.DeletedAt.Valid {
+				matches = append(matches, knowledge)
+			}
+		}
+	}
+	return matches, nil
+}
+
+func (r *webCrawlMissingKnowledgeRepo) HardDeleteKnowledge(_ context.Context, tenantID uint64, id string) error {
+	require.Equal(r.t, r.ds.TenantID, tenantID)
+	r.hardDeletedIDs = append(r.hardDeletedIDs, id)
+	for i, knowledge := range r.knowledges {
+		if knowledge.ID == id {
+			r.knowledges = append(r.knowledges[:i], r.knowledges[i+1:]...)
+			break
+		}
+	}
+	return nil
+}
+
+type webCrawlMissingKnowledgeService struct {
+	interfaces.KnowledgeService
+	repo *webCrawlMissingKnowledgeRepo
+}
+
+func (s *webCrawlMissingKnowledgeService) GetRepository() interfaces.KnowledgeRepository {
+	return s.repo
+}
+
+func (s *webCrawlMissingKnowledgeService) DeleteKnowledge(ctx context.Context, id string) error {
+	require.NoError(s.repo.t, access.RequireKBWrite(ctx, &types.KnowledgeBase{ID: s.repo.ds.KnowledgeBaseID, TenantID: s.repo.ds.TenantID}))
+	s.repo.deletedIDs = append(s.repo.deletedIDs, id)
+	if s.repo.deleteErr != nil {
+		return s.repo.deleteErr
+	}
+	for _, knowledge := range s.repo.knowledges {
+		if knowledge.ID == id {
+			knowledge.DeletedAt.Time = time.Now()
+			knowledge.DeletedAt.Valid = true
+		}
+	}
+	return nil
 }
 
 func (r *webCrawlMissingKnowledgeRepo) FindByDataSourceExternalID(ctx context.Context, tenantID uint64, kbID, dsID, externalID string) (*types.Knowledge, error) {
@@ -350,8 +598,17 @@ type webCrawlMissingApplyRepo struct {
 	*webCrawlStateRepo
 }
 
-func (r *webCrawlMissingApplyRepo) ListChangesByIDs(context.Context, string, []string) ([]*types.WebCrawlChange, error) {
-	return r.changes, nil
+func (r *webCrawlMissingApplyRepo) ListChangesByIDs(_ context.Context, _ string, ids []string) ([]*types.WebCrawlChange, error) {
+	var changes []*types.WebCrawlChange
+	for _, change := range r.changes {
+		for _, id := range ids {
+			if change.ID == id {
+				changes = append(changes, change)
+				break
+			}
+		}
+	}
+	return changes, nil
 }
 
 func (r *webCrawlMissingApplyRepo) ListChanges(_ context.Context, _ string, _, _, applyStatus string, _, _ int) ([]*types.WebCrawlChange, error) {

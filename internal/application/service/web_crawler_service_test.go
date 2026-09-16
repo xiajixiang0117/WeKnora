@@ -91,18 +91,19 @@ func TestProcessWebCrawlScanAdoptsAnAppliedKnowledgeWithoutBaseline(t *testing.T
 		Type:            types.ConnectorTypeWebCrawler,
 		Config:          types.JSON(`{"settings":{"seed_urls":["` + server.URL + `/root/"],"max_pages":1,"respect_robots":false}}`),
 	}
-	scan := &types.WebCrawlScan{ID: "scan-1", DataSourceID: dataSourceID, Status: types.WebCrawlScanStatusScanning}
+	scan := &types.WebCrawlScan{ID: "scan-1", DataSourceID: dataSourceID, TenantID: ds.TenantID, Status: types.WebCrawlScanStatusScanning}
 	pages := &webCrawlStateRepo{scan: scan, pages: map[string]*types.WebCrawlPage{}}
 	knowledge := &types.Knowledge{ID: knowledgeID, Type: "url", Source: canonicalURL, FolderPath: ""}
 	svc := &DataSourceService{
 		dsRepo:         &webCrawlTestDataSourceRepo{ds: ds},
+		kbService:      &webCrawlTestKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}},
 		webCrawlerRepo: pages,
 		knowledgeService: &webCrawlBaselineKnowledgeService{repo: &webCrawlBaselineKnowledgeRepo{
 			knowledge: knowledge,
 		}},
 	}
 
-	payload, err := json.Marshal(types.WebCrawlScanPayload{DataSourceID: dataSourceID, ScanID: scan.ID})
+	payload, err := json.Marshal(types.WebCrawlScanPayload{TenantID: ds.TenantID, DataSourceID: dataSourceID, ScanID: scan.ID})
 	require.NoError(t, err)
 	require.NoError(t, svc.ProcessWebCrawlScan(context.Background(), asynq.NewTask(types.TypeWebCrawlScan, payload)))
 
@@ -142,18 +143,19 @@ func TestProcessWebCrawlScanAdoptsExistingURLKnowledgeWithoutDataSourceMetadata(
 		Type:            types.ConnectorTypeWebCrawler,
 		Config:          types.JSON(`{"settings":{"seed_urls":["` + server.URL + `/root/"],"max_pages":1,"respect_robots":false}}`),
 	}
-	scan := &types.WebCrawlScan{ID: "scan-1", DataSourceID: dataSourceID, Status: types.WebCrawlScanStatusScanning}
+	scan := &types.WebCrawlScan{ID: "scan-1", DataSourceID: dataSourceID, TenantID: ds.TenantID, Status: types.WebCrawlScanStatusScanning}
 	pages := &webCrawlStateRepo{scan: scan, pages: map[string]*types.WebCrawlPage{}}
 	knowledge := &types.Knowledge{ID: knowledgeID, Type: "url", Source: canonicalURL, FolderPath: ""}
 	svc := &DataSourceService{
 		dsRepo:         &webCrawlTestDataSourceRepo{ds: ds},
+		kbService:      &webCrawlTestKBService{kb: &types.KnowledgeBase{ID: ds.KnowledgeBaseID, TenantID: ds.TenantID}},
 		webCrawlerRepo: pages,
 		knowledgeService: &webCrawlBaselineKnowledgeService{repo: &webCrawlBaselineKnowledgeRepo{
 			sourceKnowledge: knowledge,
 		}},
 	}
 
-	payload, err := json.Marshal(types.WebCrawlScanPayload{DataSourceID: dataSourceID, ScanID: scan.ID})
+	payload, err := json.Marshal(types.WebCrawlScanPayload{TenantID: ds.TenantID, DataSourceID: dataSourceID, ScanID: scan.ID})
 	require.NoError(t, err)
 	require.NoError(t, svc.ProcessWebCrawlScan(context.Background(), asynq.NewTask(types.TypeWebCrawlScan, payload)))
 
@@ -220,7 +222,20 @@ func (r *webCrawlStateRepo) UpdatePage(_ context.Context, page *types.WebCrawlPa
 }
 
 func (r *webCrawlStateRepo) CreateChange(_ context.Context, change *types.WebCrawlChange) error {
+	if change.ID == "" {
+		change.ID = "change-" + change.CanonicalURL
+	}
+	if change.ApplyStatus == "" {
+		change.ApplyStatus = types.WebCrawlApplyPending
+	}
+	if change.Decision == "" {
+		change.Decision = types.WebCrawlDecisionPending
+	}
 	r.changes = append(r.changes, change)
+	return nil
+}
+
+func (r *webCrawlStateRepo) UpdateChange(context.Context, *types.WebCrawlChange) error {
 	return nil
 }
 
@@ -232,6 +247,15 @@ type webCrawlBaselineKnowledgeRepo struct {
 	interfaces.KnowledgeRepository
 	knowledge       *types.Knowledge
 	sourceKnowledge *types.Knowledge
+}
+
+type webCrawlTestKBService struct {
+	interfaces.KnowledgeBaseService
+	kb *types.KnowledgeBase
+}
+
+func (s *webCrawlTestKBService) GetKnowledgeBaseByID(context.Context, string) (*types.KnowledgeBase, error) {
+	return s.kb, nil
 }
 
 func (r *webCrawlBaselineKnowledgeRepo) ListKnowledgeByKnowledgeBaseID(context.Context, uint64, string) ([]*types.Knowledge, error) {

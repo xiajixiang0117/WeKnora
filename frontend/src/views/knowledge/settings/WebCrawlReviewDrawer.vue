@@ -30,7 +30,10 @@ const displayedScanStatus = computed(() => {
     : scan?.status
 })
 const isScanning = computed(() => activeScan.value?.status === 'scanning')
-const visibleChanges = computed(() => activeFilter.value === 'all' ? changes.value : changes.value.filter(change => change.change_type === activeFilter.value))
+const failedChangeCount = computed(() => changes.value.filter(change => change.change_type === 'failed' || change.apply_status === 'failed').length)
+const visibleChanges = computed(() => activeFilter.value === 'all' ? changes.value : changes.value.filter(change => activeFilter.value === 'failed'
+  ? change.change_type === 'failed' || change.apply_status === 'failed'
+  : change.change_type === activeFilter.value))
 const selectedVisibleIDs = computed(() => selected.value.filter(id => visibleChanges.value.some(change => change.id === id)))
 const selectableVisibleChanges = computed(() => visibleChanges.value.filter(change => change.change_type !== 'failed' && change.apply_status === 'pending'))
 const allVisibleSelected = computed(() => selectableVisibleChanges.value.length > 0 && selectableVisibleChanges.value.every(change => selected.value.includes(change.id)))
@@ -115,6 +118,14 @@ async function retryFailed() {
 }
 function changeLabel(type: string) { return t(`datasource.webCrawler.change.${type}`) }
 function statusLabel(status?: string) { return status ? t(`datasource.webCrawler.status.${status}`) : '--' }
+function applyStatusLabel(change: WebCrawlChange) {
+  if (change.change_type === 'missing' && change.action === 'delete') {
+    if (change.apply_status === 'applied') return t('datasource.webCrawler.deleted')
+    if (change.apply_status === 'failed') return t('datasource.deleteFailed')
+    if (change.apply_status === 'queued') return t('datasource.webCrawler.status.applying')
+  }
+  return change.apply_status
+}
 function toggle(id: string) { selected.value = selected.value.includes(id) ? selected.value.filter(v => v !== id) : [...selected.value, id] }
 function toggleSelectAll() {
   const ids = selectableVisibleChanges.value.map(change => change.id)
@@ -148,11 +159,11 @@ onBeforeUnmount(stopPolling)
       <div class="web-crawl-summary">
         <t-tag theme="primary" variant="light">{{ statusLabel(displayedScanStatus) }}</t-tag>
         <div class="web-crawl-filters">
-          <button type="button" :class="{ active: activeFilter === 'all' }" @click="setFilter('all')">{{ t('datasource.webCrawler.summary', { total: activeScan.items_total, added: activeScan.items_added, updated: activeScan.items_updated, missing: activeScan.items_missing, failed: activeScan.items_failed }) }}</button>
+          <button type="button" :class="{ active: activeFilter === 'all' }" @click="setFilter('all')">{{ t('datasource.webCrawler.summary', { total: activeScan.items_total, added: activeScan.items_added, updated: activeScan.items_updated, missing: activeScan.items_missing, failed: failedChangeCount }) }}</button>
           <button type="button" :class="{ active: activeFilter === 'added' }" @click="setFilter('added')">{{ t('datasource.webCrawler.change.added') }} {{ activeScan.items_added }}</button>
           <button type="button" :class="{ active: activeFilter === 'updated' }" @click="setFilter('updated')">{{ t('datasource.webCrawler.change.updated') }} {{ activeScan.items_updated }}</button>
           <button type="button" :class="{ active: activeFilter === 'missing' }" @click="setFilter('missing')">{{ t('datasource.webCrawler.change.missing') }} {{ activeScan.items_missing }}</button>
-          <button type="button" :class="{ active: activeFilter === 'failed' }" @click="setFilter('failed')">{{ t('datasource.webCrawler.change.failed') }} {{ activeScan.items_failed }}</button>
+          <button type="button" :class="{ active: activeFilter === 'failed' }" @click="setFilter('failed')">{{ t('datasource.webCrawler.change.failed') }} {{ failedChangeCount }}</button>
         </div>
       </div>
       <div v-if="isScanning" class="web-crawl-loading"><t-loading size="36px" /></div>
@@ -161,8 +172,19 @@ onBeforeUnmount(stopPolling)
         <div v-for="change in visibleChanges" :key="change.id" class="web-crawl-change">
           <input v-if="change.change_type !== 'failed' && change.apply_status === 'pending'" type="checkbox" :checked="selected.includes(change.id)" @change="toggle(change.id)">
           <span class="change-type" :class="`change-type--${change.change_type}`">{{ changeLabel(change.change_type) }}</span>
-          <div class="change-main"><strong :title="change.canonical_url">{{ change.title || change.canonical_url }}</strong><small>{{ change.canonical_url }}</small><span>{{ change.summary }}</span><t-select v-if="change.change_type === 'missing'" v-model="missingActions[change.id]" size="small" class="missing-action"><t-option value="keep" :label="t('datasource.webCrawler.change.missing')" /><t-option value="disable" :label="t('datasource.pause')" /><t-option value="delete" :label="t('datasource.delete')" /></t-select><details v-if="change.previous_content || change.new_content" class="change-diff"><summary>{{ t('datasource.logs') }}</summary><div class="diff-columns"><pre>{{ change.previous_content || t('common.noData') }}</pre><pre>{{ change.new_content || t('common.noData') }}</pre></div></details></div>
-          <t-tag v-if="change.apply_status !== 'pending'" size="small" variant="light">{{ change.apply_status }}</t-tag>
+          <div class="change-main">
+            <strong :title="change.canonical_url">{{ change.title || change.canonical_url }}</strong>
+            <small>{{ change.canonical_url }}</small>
+            <span>{{ change.summary }}</span>
+            <span v-if="change.apply_status === 'failed' && change.error_message" class="change-error">{{ change.error_message }}</span>
+            <t-select v-if="change.change_type === 'missing' && change.apply_status === 'pending'" v-model="missingActions[change.id]" size="small" class="missing-action">
+              <t-option value="keep" :label="t('datasource.webCrawler.keep')" />
+              <t-option value="disable" :label="t('datasource.pause')" />
+              <t-option value="delete" :label="t('datasource.delete')" />
+            </t-select>
+            <details v-if="change.previous_content || change.new_content" class="change-diff"><summary>{{ t('datasource.logs') }}</summary><div class="diff-columns"><pre>{{ change.previous_content || t('common.noData') }}</pre><pre>{{ change.new_content || t('common.noData') }}</pre></div></details>
+          </div>
+          <t-tag v-if="change.apply_status !== 'pending'" size="small" variant="light" :theme="change.apply_status === 'failed' ? 'danger' : 'default'">{{ applyStatusLabel(change) }}</t-tag>
         </div>
       </div>
     </template>
@@ -195,4 +217,5 @@ onBeforeUnmount(stopPolling)
 .change-type { flex:none; min-width:44px; font-size:12px; font-weight:600; }
 .change-type--added { color:var(--td-success-color); }.change-type--updated { color:var(--td-brand-color); }.change-type--missing,.change-type--failed { color:var(--td-error-color); }
 .change-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }.change-main strong,.change-main small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.change-main small { color:var(--td-text-color-placeholder); }.change-main span { color:var(--td-text-color-secondary); font-size:12px; }
+.change-main .change-error { color:var(--td-error-color); overflow-wrap:anywhere; }
 </style>

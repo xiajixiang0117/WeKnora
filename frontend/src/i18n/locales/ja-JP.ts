@@ -6307,7 +6307,7 @@ export default {
       maxPages: 'スキャンあたりの最大ページ数',
       respectRobots: 'robots.txt を尊重する',
       batchHintTitle: 'ページはバッチで処理されます',
-      batchHint: '保存後に「更新を確認」をクリックし、差分を確認してから50ページ単位の低優先度バッチでインポートします。',
+      batchHint: '保存後に「更新を確認」をクリックします。追加・更新は確認後に50ページ単位でインポートし、404/410が確認されたページに対応するナレッジは自動で削除します。',
       reviewTitle: 'ウェブサイト更新の確認',
       manualSync: '手動同期',
       checkUpdates: '更新を確認',
@@ -6320,14 +6320,16 @@ export default {
       selectAll: 'すべて選択',
       clearSelection: '選択を解除',
       applySelected: '選択した項目を適用 ({count})',
-      applyConfirm: '{count}件の項目をインポートしますか？',
+      keep: '保持',
+      deleted: '削除済み',
+      applyConfirm: '選択した{count}件の変更を適用しますか？',
       noChanges: 'このスキャンでは変更は見つかりませんでした',
       noScan: 'まだスキャンはありません',
-      summary: '{total}ページ・追加 {added}・更新 {updated}・欠落 {missing}・失敗 {failed}',
+      summary: '{total}ページ・追加 {added}・更新 {updated}・無効 {missing}・失敗 {failed}',
       change: {
         added: '追加',
         updated: '更新',
-        missing: '欠落',
+        missing: '無効',
         failed: '失敗'
       },
       status: {

@@ -207,6 +207,10 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 	if err != nil {
 		return err
 	}
+	if scan.Status != types.WebCrawlScanStatusScanning &&
+		!(scan.Status == types.WebCrawlScanStatusPartialFailed && scan.ErrorMessage != "") {
+		return nil
+	}
 	defer func() {
 		if processErr == nil || scan == nil || scan.Status != types.WebCrawlScanStatusScanning {
 			return
@@ -225,6 +229,13 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 	}
 	config, err := ds.ParseConfig()
 	if err != nil {
+		return err
+	}
+	ctx, err = s.webCrawlTaskContext(ctx, ds, scan, payload.TenantID)
+	if err != nil {
+		return err
+	}
+	if resumed, err := s.resumeInterruptedWebCrawlDeletions(ctx, ds, scan); err != nil || resumed {
 		return err
 	}
 	pages, failures, crawlErr := webcrawler.NewConnector().Crawl(ctx, config)
@@ -248,7 +259,7 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 	}
 	var recheckURLs []string
 	for _, page := range baseline {
-		if page.Status == "active" && (page.KnowledgeID != "" || page.LastAppliedHash != "") &&
+		if page.Status != "deleted" && (page.KnowledgeID != "" || page.LastAppliedHash != "") &&
 			!checked[page.CanonicalURL] && webcrawler.AllowedURL(page.CanonicalURL, cfg) {
 			recheckURLs = append(recheckURLs, page.CanonicalURL)
 		}
@@ -346,17 +357,21 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 		}
 		scan.ItemsUpdated++
 	}
+	deletionsFailed := false
 	for _, failure := range failures {
 		change := &types.WebCrawlChange{ScanID: scan.ID, CanonicalURL: failure.URL, ChangeType: types.WebCrawlChangeFailed, SourceStatus: failure.SourceStatus, ErrorMessage: failure.Error(), Summary: "fetch failed"}
 		if page := baseline[failure.URL]; page != nil {
 			change.PageID = page.ID
 			change.Title = page.Title
-			if page.Status == "active" && (page.KnowledgeID != "" || page.LastAppliedHash != "") &&
+			if page.Status != "deleted" && (page.KnowledgeID != "" || page.LastAppliedHash != "") &&
 				(failure.SourceStatus == http.StatusNotFound || failure.SourceStatus == http.StatusGone) {
 				change.ChangeType = types.WebCrawlChangeMissing
 				change.OldHash = page.LastAppliedHash
 				change.PreviousContent = page.LastAppliedContent
 				change.Summary = fmt.Sprintf("source page is unavailable (HTTP %d)", failure.SourceStatus)
+				change.Action = "delete"
+				change.Decision = types.WebCrawlDecisionApply
+				change.ApplyStatus = types.WebCrawlApplyQueued
 			}
 		}
 		if err := s.webCrawlerRepo.CreateChange(ctx, change); err != nil {
@@ -364,15 +379,80 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 		}
 		if change.ChangeType == types.WebCrawlChangeMissing {
 			scan.ItemsMissing++
+			// The scan has confirmed removal at the source. Persist the action
+			// before deleting so both success and retryable failure stay visible.
+			if err := s.finishAutomaticWebCrawlDeletion(ctx, ds, change); err != nil {
+				return err
+			}
+			if change.ApplyStatus == types.WebCrawlApplyFailed {
+				deletionsFailed = true
+			} else {
+				scan.ItemsApplied++
+			}
 		} else {
 			scan.ItemsFailed++
 		}
 	}
 	scan.Status = types.WebCrawlScanStatusReviewReady
+	if scan.ItemsFailed > 0 || deletionsFailed {
+		scan.Status = types.WebCrawlScanStatusPartialFailed
+	} else if scan.ItemsAdded == 0 && scan.ItemsUpdated == 0 {
+		scan.Status = types.WebCrawlScanStatusCompleted
+	}
 	scan.ErrorMessage = ""
 	scan.FinishedAt = timePtr(time.Now().UTC())
 	scan.UpdatedAt = time.Now().UTC()
 	return s.webCrawlerRepo.UpdateScan(ctx, scan)
+}
+
+func (s *DataSourceService) finishAutomaticWebCrawlDeletion(ctx context.Context, ds *types.DataSource, change *types.WebCrawlChange) error {
+	if err := s.applyWebCrawlChange(ctx, ds, change, nil); err != nil {
+		change.ApplyStatus = types.WebCrawlApplyFailed
+		change.ErrorMessage = fmt.Sprintf("delete source knowledge: %v", err)
+	} else {
+		change.ApplyStatus = types.WebCrawlApplyApplied
+		change.ErrorMessage = ""
+		change.AppliedAt = timePtr(time.Now().UTC())
+	}
+	change.UpdatedAt = time.Now().UTC()
+	return s.webCrawlerRepo.UpdateChange(ctx, change)
+}
+
+// A result-save error can leave a queued deletion without an apply task. Resume
+// these persisted actions on scan redelivery instead of duplicating the scan's
+// snapshots. Keep the scan failure visible: URLs after the interruption may
+// still need a fresh check, even when every recorded deletion is now complete.
+func (s *DataSourceService) resumeInterruptedWebCrawlDeletions(ctx context.Context, ds *types.DataSource, scan *types.WebCrawlScan) (bool, error) {
+	if scan.Status != types.WebCrawlScanStatusPartialFailed || scan.ErrorMessage == "" {
+		return false, nil
+	}
+	changes, err := s.webCrawlerRepo.ListChanges(ctx, scan.ID, "", "", "", 10000, 0)
+	if err != nil {
+		return false, err
+	}
+	resumed := false
+	applied := 0
+	for _, change := range changes {
+		if change.ChangeType == types.WebCrawlChangeMissing && change.Action == "delete" &&
+			change.Decision == types.WebCrawlDecisionApply &&
+			(change.SourceStatus == http.StatusNotFound || change.SourceStatus == http.StatusGone) {
+			resumed = true
+			if change.ApplyStatus == types.WebCrawlApplyQueued {
+				if err := s.finishAutomaticWebCrawlDeletion(ctx, ds, change); err != nil {
+					return true, err
+				}
+			}
+		}
+		if change.ApplyStatus == types.WebCrawlApplyApplied && change.Decision == types.WebCrawlDecisionApply {
+			applied++
+		}
+	}
+	if resumed {
+		scan.ItemsApplied = applied
+		scan.UpdatedAt = time.Now().UTC()
+		return true, s.webCrawlerRepo.UpdateScan(ctx, scan)
+	}
+	return false, nil
 }
 
 // webCrawlBaseline includes older URL imports even if their links have already
@@ -423,8 +503,11 @@ func (s *DataSourceService) webCrawlBaseline(ctx context.Context, ds *types.Data
 	}
 	for canonical, knowledge := range byURL {
 		if page := baseline[canonical]; page != nil {
-			if page.Status == "active" && page.KnowledgeID != knowledge.ID {
+			if page.KnowledgeID != knowledge.ID {
 				page.KnowledgeID = knowledge.ID
+				if page.Status == "deleted" {
+					page.Status = "active"
+				}
 				page.UpdatedAt = time.Now().UTC()
 				if err := s.webCrawlerRepo.UpdatePage(ctx, page); err != nil {
 					return nil, err
@@ -499,13 +582,9 @@ func (s *DataSourceService) ProcessWebCrawlApply(ctx context.Context, task *asyn
 	if err != nil {
 		return err
 	}
-	ctx = context.WithValue(ctx, types.TenantIDContextKey, ds.TenantID)
-	if s.tenantRepo != nil {
-		tenant, tenantErr := s.tenantRepo.GetTenantByID(ctx, ds.TenantID)
-		if tenantErr != nil {
-			return tenantErr
-		}
-		ctx = context.WithValue(ctx, types.TenantInfoContextKey, tenant)
+	ctx, err = s.webCrawlTaskContext(ctx, ds, scan, payload.TenantID)
+	if err != nil {
+		return err
 	}
 	changes, err := s.webCrawlerRepo.ListChangesByIDs(ctx, payload.ScanID, payload.ChangeIDs)
 	if err != nil {
@@ -522,6 +601,7 @@ func (s *DataSourceService) ProcessWebCrawlApply(ctx context.Context, task *asyn
 			logger.Warnf(ctx, "web crawl change %s failed: %v", change.ID, applyErr)
 		} else {
 			change.ApplyStatus = types.WebCrawlApplyApplied
+			change.ErrorMessage = ""
 			change.AppliedAt = timePtr(time.Now().UTC())
 			scan.ItemsApplied++
 		}
@@ -543,6 +623,16 @@ func (s *DataSourceService) ProcessWebCrawlApply(ctx context.Context, task *asyn
 			scan.Status = types.WebCrawlScanStatusPartialFailed
 		} else {
 			scan.Status = types.WebCrawlScanStatusCompleted
+			pendingChanges, err := s.webCrawlerRepo.ListChanges(ctx, payload.ScanID, "", "", types.WebCrawlApplyPending, 10000, 0)
+			if err != nil {
+				return err
+			}
+			for _, pending := range pendingChanges {
+				if pending.ChangeType != types.WebCrawlChangeFailed && pending.Decision != types.WebCrawlDecisionIgnore {
+					scan.Status = types.WebCrawlScanStatusReviewReady
+					break
+				}
+			}
 		}
 		scan.FinishedAt = timePtr(time.Now().UTC())
 	}
@@ -574,20 +664,7 @@ func (s *DataSourceService) applyWebCrawlChange(ctx context.Context, ds *types.D
 			page.UpdatedAt = time.Now().UTC()
 			return s.webCrawlerRepo.UpdatePage(ctx, page)
 		case "delete":
-			page, err := s.webCrawlerRepo.FindPage(ctx, ds.ID, change.CanonicalURL)
-			if err != nil || page == nil || page.KnowledgeID == "" {
-				return err
-			}
-			if err := s.knowledgeService.DeleteKnowledge(ctx, page.KnowledgeID); err != nil {
-				return err
-			}
-			if err := s.knowledgeService.GetRepository().HardDeleteKnowledge(ctx, ds.TenantID, page.KnowledgeID); err != nil {
-				return err
-			}
-			page.Status = "deleted"
-			page.KnowledgeID = ""
-			page.UpdatedAt = time.Now().UTC()
-			return s.webCrawlerRepo.UpdatePage(ctx, page)
+			return s.deleteWebCrawlPage(ctx, ds, change)
 		default:
 			return fmt.Errorf("invalid missing action %q", action)
 		}
