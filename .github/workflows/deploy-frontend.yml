@@ -1,0 +1,218 @@
+name: Build and Deploy Frontend UI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Docker image tag to build and deploy (e.g. main)"
+        required: true
+        default: "main"
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  ACR_PUBLIC_REGISTRY: crpi-4pzouvp8dkxkmnbw.cn-shanghai.personal.cr.aliyuncs.com
+  ACR_VPC_REGISTRY: crpi-4pzouvp8dkxkmnbw-vpc.cn-shanghai.personal.cr.aliyuncs.com
+  ACR_NAMESPACE: crpi-4pzouvp8dkxkmnbw
+
+jobs:
+  build-ui:
+    name: Build and push frontend image
+    runs-on: ubuntu-latest
+    environment: shared-server
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Prepare version info
+        id: version
+        run: |
+          if [ -x "./scripts/get_version.sh" ]; then
+            eval "$(./scripts/get_version.sh env)"
+            echo "commit_id=$COMMIT_ID" >> "$GITHUB_OUTPUT"
+          else
+            echo "commit_id=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Alibaba Cloud Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ secrets.ACR_REGISTRY || env.ACR_PUBLIC_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.ACR_PUBLIC_REGISTRY }}/${{ env.ACR_NAMESPACE }}/weknora-ui
+          tags: |
+            type=raw,value=${{ inputs.version }}
+            type=ref,event=branch
+            type=sha,prefix=
+
+      - name: Build and push UI Image
+        uses: docker/build-push-action@v7
+        with:
+          push: true
+          platforms: linux/amd64,linux/arm64
+          file: frontend/Dockerfile
+          context: ./frontend
+          build-args: |
+            VITE_FRONTEND_COMMIT=${{ steps.version.outputs.commit_id }}
+          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          # Alibaba Cloud personal ACR does not accept BuildKit OCI attestations.
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=build-ui
+          cache-to: type=gha,scope=build-ui,mode=max
+
+  deploy-ui:
+    name: Deploy frontend to shared server
+    needs: build-ui
+    runs-on: [self-hosted, weknora-shared-server]
+    environment: shared-server
+    timeout-minutes: 15
+    concurrency:
+      group: shared-weknora-deployment
+      cancel-in-progress: false
+    steps:
+      - name: Validate deployment checkout
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          [ -n "$DEPLOY_PATH" ] || { echo "DEPLOY_PATH is not configured." >&2; exit 1; }
+          [ -d "$DEPLOY_PATH" ] || { echo "DEPLOY_PATH does not exist: $DEPLOY_PATH" >&2; exit 1; }
+          [ -f "$DEPLOY_PATH/docker-compose.yml" ] || { echo "docker-compose.yml was not found in DEPLOY_PATH." >&2; exit 1; }
+          [ -f "$DEPLOY_PATH/.env" ] || { echo "The deployment .env is missing." >&2; exit 1; }
+
+      - name: Login to Alibaba Cloud Container Registry
+        id: acr-login
+        env:
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [ -n "${ACR_USERNAME:-}" ] && [ -n "${ACR_PASSWORD:-}" ] || {
+            echo "ACR_USERNAME and ACR_PASSWORD are required." >&2
+            exit 1
+          }
+          vpc_registry="${{ env.ACR_VPC_REGISTRY }}"
+          public_registry="${{ env.ACR_PUBLIC_REGISTRY }}"
+          namespace="${{ env.ACR_NAMESPACE }}"
+          registry="$vpc_registry"
+          image_prefix="$vpc_registry/$namespace"
+
+          if ! printf '%s' "$ACR_PASSWORD" | timeout 30s docker login "$vpc_registry" \
+            --username "$ACR_USERNAME" --password-stdin; then
+            echo "VPC ACR is unreachable; falling back to the public ACR endpoint." >&2
+            registry="$public_registry"
+            image_prefix="$public_registry/$namespace"
+            printf '%s' "$ACR_PASSWORD" | docker login "$public_registry" \
+              --username "$ACR_USERNAME" --password-stdin
+          fi
+
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+          echo "image_prefix=$image_prefix" >> "$GITHUB_OUTPUT"
+
+      - name: Pull and update frontend service
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          IMAGE_PREFIX: ${{ steps.acr-login.outputs.image_prefix }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          command -v flock >/dev/null || { echo "flock is required on the deployment host." >&2; exit 1; }
+          mkdir -p "$DEPLOY_PATH/.ci"
+          exec 9>"$DEPLOY_PATH/.ci/registry-compose-deploy.lock"
+          flock -n 9 || { echo "Another deployment is already running." >&2; exit 1; }
+
+          compose() {
+            (
+              cd "$DEPLOY_PATH"
+              docker compose \
+                -f docker-compose.yml \
+                -f docker-compose.override.yml \
+                "$@"
+            )
+          }
+
+          print_diagnostics() {
+            local exit_code="$?"
+            trap - ERR
+            set +e
+            echo "Frontend deployment failed; collecting Compose diagnostics." >&2
+            compose ps >&2
+            compose logs --tail=100 frontend >&2
+            exit "$exit_code"
+          }
+          trap print_diagnostics ERR
+
+          export WEKNORA_VERSION="$VERSION"
+          export WEKNORA_IMAGE_PREFIX="$IMAGE_PREFIX"
+
+          echo "Validating Compose configuration for frontend..."
+          compose config -q
+
+          echo "Pulling frontend image: ${WEKNORA_IMAGE_PREFIX}/weknora-ui:${WEKNORA_VERSION}..."
+          compose pull frontend
+
+          echo "Updating frontend container (without restarting backend services)..."
+          compose up -d --no-build --no-deps frontend
+
+          echo "Waiting for frontend HTTP to be reachable..."
+          frontend_port="$(compose port frontend 80 | awk -F: 'NR == 1 { print $NF }')"
+          [[ "$frontend_port" =~ ^[0-9]+$ ]] || { echo "Could not resolve frontend host port." >&2; exit 1; }
+
+          healthy=false
+          for ((attempt = 1; attempt <= 48; attempt++)); do
+            if curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:${frontend_port}/" >/dev/null; then
+              echo "Frontend is reachable at localhost:${frontend_port}."
+              healthy=true
+              break
+            fi
+            sleep 5
+          done
+
+          if [ "$healthy" != "true" ]; then
+            echo "ERROR: Timed out waiting for frontend HTTP." >&2
+            exit 1
+          fi
+
+          deployment_time="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          printf 'registry_prefix=%s\nversion=%s\nservice=frontend\ndeployed_at=%s\n' \
+            "$WEKNORA_IMAGE_PREFIX" "$WEKNORA_VERSION" "$deployment_time" \
+            >"$DEPLOY_PATH/.ci/current-frontend-deployment.env"
+          echo "Frontend deployment succeeded: ${WEKNORA_IMAGE_PREFIX}/weknora-ui:${WEKNORA_VERSION}."
+
+      - name: Logout from Alibaba Cloud Container Registry
+        if: always()
+        env:
+          ACR_REGISTRY: ${{ steps.acr-login.outputs.registry }}
+        run: |
+          if [ -n "${ACR_REGISTRY:-}" ]; then docker logout "$ACR_REGISTRY" || true; fi
+
+      - name: Write deployment summary
+        if: always()
+        env:
+          IMAGE_PREFIX: ${{ steps.acr-login.outputs.image_prefix }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          {
+            echo '## Shared-server Frontend Deployment Summary'
+            echo
+            echo "- **Service**: \`frontend\` (\`weknora-ui\`)"
+            echo "- **Image Tag**: \`${VERSION}\`"
+            echo "- **Registry Prefix**: \`${IMAGE_PREFIX:-unknown}\`"
+            echo "- **Deployed at**: \`$(date -u '+%Y-%m-%d %H:%M:%S UTC')\`"
+          } >> "$GITHUB_STEP_SUMMARY"

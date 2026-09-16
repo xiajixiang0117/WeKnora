@@ -42,6 +42,8 @@
         :agent-image-upload-enabled="config.agent_image_upload_enabled === true"
         :use-session-header-title="useSessionHeaderTitle"
         :host-context="hostContext"
+        :agent-avatar="config.agent_avatar"
+        :agent-name="config.agent_name"
         @session-title="sessionTitle = $event"
         @messages-state="chatHasMessages = $event"
       />

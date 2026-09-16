@@ -35,6 +35,9 @@
   var DEFAULT_WIDTH = 400;
   var DEFAULT_HEIGHT = 600;
 
+  var CHAT_ICON_SVG = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
+  var CLOSE_ICON_SVG = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
   var instance = null;
   var listeners = {};
 
@@ -154,10 +157,13 @@
     var iframeReady = false;
     var iframeOrigin = '';
 
+    var isBottom = position.indexOf('bottom') >= 0;
+    var isRight = position.indexOf('right') >= 0;
+
     var launcher = document.createElement('button');
     launcher.type = 'button';
     launcher.setAttribute('aria-label', title);
-    launcher.textContent = '💬';
+    launcher.innerHTML = CHAT_ICON_SVG;
     launcher.style.cssText = [
       'position:fixed',
       'z-index:2147483000',
@@ -166,14 +172,26 @@
       'border-radius:50%',
       'border:none',
       'cursor:pointer',
-      'font-size:24px',
-      'box-shadow:0 4px 16px rgba(0,0,0,.18)',
+      'box-shadow:0 8px 24px rgba(0,0,0,.15), 0 2px 6px rgba(0,0,0,.06)',
       'background:' + primaryColor,
       'color:#fff',
-      'opacity:0.92',
-      'transition:opacity .2s',
+      'display:flex',
+      'align-items:center',
+      'justify-content:center',
+      'opacity:0.96',
+      'transition:transform .2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow .2s ease, opacity .2s ease',
+      'outline:none',
       positionStyles(position, 'launcher'),
     ].join(';');
+
+    launcher.addEventListener('mouseenter', function () {
+      launcher.style.transform = 'scale(1.06)';
+      launcher.style.boxShadow = '0 10px 28px rgba(0,0,0,.18), 0 3px 8px rgba(0,0,0,.08)';
+    });
+    launcher.addEventListener('mouseleave', function () {
+      launcher.style.transform = 'scale(1)';
+      launcher.style.boxShadow = '0 8px 24px rgba(0,0,0,.15), 0 2px 6px rgba(0,0,0,.06)';
+    });
 
     var panel = document.createElement('div');
     panel.style.cssText = [
@@ -183,11 +201,16 @@
       'max-width:calc(100vw - 32px)',
       'height:' + panelHeight + 'px',
       'max-height:calc(100vh - 100px)',
-      'border-radius:12px',
+      'border-radius:16px',
       'overflow:hidden',
-      'box-shadow:0 8px 32px rgba(0,0,0,.2)',
+      'box-shadow:0 16px 48px -6px rgba(0,0,0,.16), 0 4px 16px rgba(0,0,0,.06)',
+      'border:1px solid rgba(0,0,0,.08)',
       'display:none',
       'background:#fff',
+      'opacity:0',
+      'transform:scale(0.95) translateY(' + (isBottom ? '12px' : '-12px') + ')',
+      'transform-origin:' + (isBottom ? 'bottom' : 'top') + ' ' + (isRight ? 'right' : 'left'),
+      'transition:transform .24s cubic-bezier(0.16, 1, 0.3, 1), opacity .2s ease',
       positionStyles(position, 'panel'),
     ].join(';');
 
@@ -330,15 +353,32 @@
       }
     }
 
+    var panelAnimTimer = null;
     function setOpen(next) {
       panelOpen = !!next;
-      panel.style.display = panelOpen ? 'block' : 'none';
-      launcher.textContent = panelOpen ? '✕' : '💬';
+      if (panelAnimTimer) clearTimeout(panelAnimTimer);
+      launcher.innerHTML = panelOpen ? CLOSE_ICON_SVG : CHAT_ICON_SVG;
       if (panelOpen) {
+        panel.style.display = 'block';
+        // Force reflow for smooth CSS transition
+        void panel.offsetHeight;
+        panel.style.opacity = '1';
+        panel.style.transform = 'scale(1) translateY(0)';
         emit('open', { channelId: channelId });
       } else {
+        panel.style.opacity = '0';
+        panel.style.transform = 'scale(0.95) translateY(' + (isBottom ? '12px' : '-12px') + ')';
+        panelAnimTimer = setTimeout(function () {
+          if (!panelOpen) panel.style.display = 'none';
+        }, 240);
         emit('close', { channelId: channelId });
       }
+    }
+
+    function onDocumentClick(e) {
+      if (!panelOpen) return;
+      if (panel.contains(e.target) || launcher.contains(e.target)) return;
+      setOpen(false);
     }
 
     function open() { setOpen(true); }
@@ -348,8 +388,10 @@
     function destroy() {
       if (destroyed) return;
       destroyed = true;
+      if (panelAnimTimer) clearTimeout(panelAnimTimer);
       if (refreshTimer) clearTimeout(refreshTimer);
       global.removeEventListener('message', onMessage);
+      global.removeEventListener('click', onDocumentClick, true);
       if (launcher.parentNode) launcher.parentNode.removeChild(launcher);
       if (panel.parentNode) panel.parentNode.removeChild(panel);
       listeners = {};
@@ -367,6 +409,7 @@
     document.body.appendChild(launcher);
     document.body.appendChild(panel);
     global.addEventListener('message', onMessage);
+    global.addEventListener('click', onDocumentClick, true);
 
     return {
       open: open,
