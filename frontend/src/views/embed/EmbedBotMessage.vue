@@ -217,8 +217,7 @@ onMounted(() => {
 .embed-bot-msg {
   border-radius: 4px;
   color: var(--td-text-color-primary);
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 16px;
   margin-right: auto;
   max-width: 100%;
   box-sizing: border-box;
@@ -244,60 +243,9 @@ onMounted(() => {
 
 .markdown-content {
   // Chat Markdown visual styles are centralized in chat-markdown.less.
+  // Do not add element-level Markdown rules here; update the shared mixin.
   .chat-markdown-typography();
   .chat-citation-pills();
-
-  // Fine-tune typography scale for the compact embed viewport
-  font-size: 14px;
-  line-height: 1.55;
-
-  :deep(p) {
-    font-size: 14px;
-    line-height: 1.55;
-    margin: 0 0 0.35em;
-
-    + p {
-      margin-top: 0.6em;
-    }
-  }
-
-  :deep(h1) { font-size: 17px; margin: 0.8em 0 0.35em; line-height: 1.4; }
-  :deep(h2) { font-size: 15.5px; margin: 0.7em 0 0.3em; line-height: 1.4; }
-  :deep(h3) { font-size: 14.5px; margin: 0.6em 0 0.25em; line-height: 1.4; }
-  :deep(h4, h5, h6) { font-size: 14px; margin: 0.5em 0 0.2em; line-height: 1.4; }
-
-  :deep(pre) {
-    margin: 0.5em 0;
-    padding: 10px 12px;
-    border-radius: 8px;
-    font-size: 12.5px;
-    line-height: 1.45;
-  }
-
-  :deep(code:not(pre code)) {
-    font-size: 12.5px;
-    padding: 1.5px 5px;
-  }
-
-  :deep(table) {
-    font-size: 13px;
-    margin: 0.5em 0;
-  }
-
-  :deep(th, td) {
-    padding: 5px 9px;
-  }
-
-  :deep(ul, ol) {
-    padding-left: 18px;
-    margin: 0.35em 0;
-    font-size: 14px;
-    line-height: 1.55;
-
-    li {
-      margin: 0.18em 0;
-    }
-  }
 }
 
 .embed-citation-float {

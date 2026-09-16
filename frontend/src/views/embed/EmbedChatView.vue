@@ -15,8 +15,6 @@
     :agent-image-upload-enabled="agentImageUploadEnabled"
     :use-session-header-title="useSessionHeaderTitle"
     :host-context="hostContext"
-    :agent-avatar="agentAvatar"
-    :agent-name="agentName"
     @session-title="(title: string) => emit('session-title', title)"
     @messages-state="(has: boolean) => emit('messages-state', has)"
   />
@@ -43,8 +41,6 @@ defineProps<{
   agentImageUploadEnabled?: boolean
   useSessionHeaderTitle?: boolean
   hostContext?: Record<string, unknown>
-  agentAvatar?: string
-  agentName?: string
 }>()
 
 const emit = defineEmits<{

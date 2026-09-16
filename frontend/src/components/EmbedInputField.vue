@@ -24,7 +24,7 @@
       class="embed-input-box__textarea"
       :class="{ 'has-images': uploadedImages.length > 0 }"
       :placeholder="t('input.placeholder')"
-      :autosize="{ minRows: 1, maxRows: 5 }"
+      :autosize="{ minRows: 2, maxRows: 6 }"
       @keydown="onKeydown"
       @compositionstart="isComposing = true"
       @compositionend="isComposing = false"
@@ -269,27 +269,26 @@ onUnmounted(() => {
   margin: 0 auto;
   background: var(--td-bg-color-container, #fff);
   border-radius: 12px;
-  border: 1px solid var(--td-component-stroke, #e7e7e7);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  border: 0.5px solid var(--td-component-border, #e7e7e7);
+  box-shadow: 0 6px 6px rgba(0, 0, 0, 0.04), 0 12px 12px -1px rgba(0, 0, 0, 0.08);
+  transition: border-color 0.15s ease;
 
   &:focus-within {
     border-color: var(--embed-primary, var(--td-brand-color, #07c05f));
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
   }
 
   &__files {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    padding: 10px 14px 0;
+    padding: 12px 16px 0;
   }
 
   &__images {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    padding: 10px 14px 0;
+    padding: 12px 16px 0;
   }
 
   &__textarea {
@@ -299,22 +298,22 @@ onUnmounted(() => {
       border: none;
       box-shadow: none;
       background: transparent;
-      padding: 10px 14px 44px;
+      padding: 14px 16px 52px;
       font-size: 14px;
-      line-height: 1.45;
+      line-height: 1.5;
       resize: none;
     }
 
     &.has-images :deep(.t-textarea__inner) {
-      padding-top: 6px;
+      padding-top: 8px;
     }
   }
 
   &__bar {
     position: absolute;
-    left: 10px;
-    right: 10px;
-    bottom: 8px;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -428,35 +427,27 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   background: var(--embed-primary, var(--td-brand-color, #07c05f));
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--embed-primary, #07c05f) 30%, transparent);
-  transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+  transition: background 0.15s ease, opacity 0.15s ease;
 
   &:hover:not(.disabled) {
-    filter: brightness(0.92);
-    transform: scale(1.04);
-    box-shadow: 0 3px 8px color-mix(in srgb, var(--embed-primary, #07c05f) 40%, transparent);
-  }
-
-  &:active:not(.disabled) {
-    transform: scale(0.96);
+    filter: brightness(0.94);
   }
 
   &.disabled {
     cursor: not-allowed;
-    opacity: 0.38;
-    box-shadow: none;
+    opacity: 0.45;
   }
 
   img {
-    width: 15px;
-    height: 15px;
+    width: 16px;
+    height: 16px;
   }
 }
 
@@ -464,23 +455,17 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-secondarycontainer);
-  transition: background 0.15s ease, transform 0.15s ease;
 
   &:hover {
     background: var(--td-bg-color-component-hover);
-    transform: scale(1.04);
-  }
-
-  &:active {
-    transform: scale(0.96);
   }
 }
 </style>

@@ -157,9 +157,6 @@
     var iframeReady = false;
     var iframeOrigin = '';
 
-    var isBottom = position.indexOf('bottom') >= 0;
-    var isRight = position.indexOf('right') >= 0;
-
     var launcher = document.createElement('button');
     launcher.type = 'button';
     launcher.setAttribute('aria-label', title);
@@ -201,16 +198,11 @@
       'max-width:calc(100vw - 32px)',
       'height:' + panelHeight + 'px',
       'max-height:calc(100vh - 100px)',
-      'border-radius:16px',
+      'border-radius:12px',
       'overflow:hidden',
-      'box-shadow:0 16px 48px -6px rgba(0,0,0,.16), 0 4px 16px rgba(0,0,0,.06)',
-      'border:1px solid rgba(0,0,0,.08)',
+      'box-shadow:0 8px 32px rgba(0,0,0,.2)',
       'display:none',
       'background:#fff',
-      'opacity:0',
-      'transform:scale(0.95) translateY(' + (isBottom ? '12px' : '-12px') + ')',
-      'transform-origin:' + (isBottom ? 'bottom' : 'top') + ' ' + (isRight ? 'right' : 'left'),
-      'transition:transform .24s cubic-bezier(0.16, 1, 0.3, 1), opacity .2s ease',
       positionStyles(position, 'panel'),
     ].join(';');
 
@@ -353,32 +345,15 @@
       }
     }
 
-    var panelAnimTimer = null;
     function setOpen(next) {
       panelOpen = !!next;
-      if (panelAnimTimer) clearTimeout(panelAnimTimer);
+      panel.style.display = panelOpen ? 'block' : 'none';
       launcher.innerHTML = panelOpen ? CLOSE_ICON_SVG : CHAT_ICON_SVG;
       if (panelOpen) {
-        panel.style.display = 'block';
-        // Force reflow for smooth CSS transition
-        void panel.offsetHeight;
-        panel.style.opacity = '1';
-        panel.style.transform = 'scale(1) translateY(0)';
         emit('open', { channelId: channelId });
       } else {
-        panel.style.opacity = '0';
-        panel.style.transform = 'scale(0.95) translateY(' + (isBottom ? '12px' : '-12px') + ')';
-        panelAnimTimer = setTimeout(function () {
-          if (!panelOpen) panel.style.display = 'none';
-        }, 240);
         emit('close', { channelId: channelId });
       }
-    }
-
-    function onDocumentClick(e) {
-      if (!panelOpen) return;
-      if (panel.contains(e.target) || launcher.contains(e.target)) return;
-      setOpen(false);
     }
 
     function open() { setOpen(true); }
@@ -388,10 +363,8 @@
     function destroy() {
       if (destroyed) return;
       destroyed = true;
-      if (panelAnimTimer) clearTimeout(panelAnimTimer);
       if (refreshTimer) clearTimeout(refreshTimer);
       global.removeEventListener('message', onMessage);
-      global.removeEventListener('click', onDocumentClick, true);
       if (launcher.parentNode) launcher.parentNode.removeChild(launcher);
       if (panel.parentNode) panel.parentNode.removeChild(panel);
       listeners = {};
@@ -409,7 +382,6 @@
     document.body.appendChild(launcher);
     document.body.appendChild(panel);
     global.addEventListener('message', onMessage);
-    global.addEventListener('click', onDocumentClick, true);
 
     return {
       open: open,

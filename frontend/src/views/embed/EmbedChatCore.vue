@@ -13,22 +13,9 @@
 
         <div
           v-if="showWelcome"
-          class="embed-welcome-row"
+          class="embed-welcome-bubble"
         >
-          <div class="embed-bot-layout__avatar" aria-hidden="true">
-            <span v-if="agentAvatar" class="embed-avatar-emoji">{{ agentAvatar }}</span>
-            <span v-else class="embed-avatar-icon">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2 2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/>
-                <rect x="4" y="8" width="16" height="12" rx="4"/>
-                <line x1="9" y1="13" x2="9.01" y2="13"/>
-                <line x1="15" y1="13" x2="15.01" y2="13"/>
-              </svg>
-            </span>
-          </div>
-          <div class="embed-welcome-bubble">
-            <p class="embed-welcome-bubble__text">{{ welcomeText }}</p>
-          </div>
+          <p class="embed-welcome-bubble__text">{{ welcomeText }}</p>
         </div>
 
         <div
@@ -74,59 +61,32 @@
               :embed-token="token"
             />
           </div>
-          <div v-if="session.role === 'assistant' && shouldRenderAssistantMessage(session)" class="message-row message-row--bot">
-            <div class="embed-bot-layout">
-              <div class="embed-bot-layout__avatar" aria-hidden="true">
-                <span v-if="agentAvatar" class="embed-avatar-emoji">{{ agentAvatar }}</span>
-                <span v-else class="embed-avatar-icon">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2 2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/>
-                    <rect x="4" y="8" width="16" height="12" rx="4"/>
-                    <line x1="9" y1="13" x2="9.01" y2="13"/>
-                    <line x1="15" y1="13" x2="15.01" y2="13"/>
-                  </svg>
-                </span>
-              </div>
-              <div class="embed-bot-layout__body">
-                <EmbedBotMessage
-                  :content="String(session.content || '')"
-                  :session="session"
-                  :session-id="sessionId"
-                  :user-query="getUserQuery(index)"
-                  :embedded-mode="true"
-                  :embed-channel-id="channelId"
-                  :embed-token="token"
-                  :embed-session-sig="sessionSig"
-                  :embed-visitor-id="visitorId"
-                />
-                <FollowUpSuggestions v-if="!session.suggestionsDismissed"
-                  :suggestion-set="session.suggestionSet as any"
-                  :loading="Boolean(session.suggestionLoading)"
-                  :allow-regenerate="Boolean((session.suggestionSet as any)?.allow_regenerate)"
-                  @select="(item) => handleFollowUpSelect(session, item)"
-                  @regenerate="loadFollowUpSuggestions(session, true, true)"
-                  @impression="(set) => recordFollowUpEvent(set, 'impression')"
-                  @dismiss="(set) => dismissFollowUps(session, set)" />
-              </div>
-            </div>
+          <div v-if="session.role === 'assistant' && shouldRenderAssistantMessage(session)" class="message-row">
+            <EmbedBotMessage
+              :content="String(session.content || '')"
+              :session="session"
+              :session-id="sessionId"
+              :user-query="getUserQuery(index)"
+              :embedded-mode="true"
+              :embed-channel-id="channelId"
+              :embed-token="token"
+              :embed-session-sig="sessionSig"
+              :embed-visitor-id="visitorId"
+            />
+            <FollowUpSuggestions v-if="!session.suggestionsDismissed"
+              :suggestion-set="session.suggestionSet as any"
+              :loading="Boolean(session.suggestionLoading)"
+              :allow-regenerate="Boolean((session.suggestionSet as any)?.allow_regenerate)"
+              @select="(item) => handleFollowUpSelect(session, item)"
+              @regenerate="loadFollowUpSuggestions(session, true, true)"
+              @impression="(set) => recordFollowUpEvent(set, 'impression')"
+              @dismiss="(set) => dismissFollowUps(session, set)" />
           </div>
         </div>
 
-        <div v-if="showGlobalTypingIndicator" class="embed-typing-row">
-          <div class="embed-bot-layout__avatar" aria-hidden="true">
-            <span v-if="agentAvatar" class="embed-avatar-emoji">{{ agentAvatar }}</span>
-            <span v-else class="embed-avatar-icon">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2 2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/>
-                <rect x="4" y="8" width="16" height="12" rx="4"/>
-                <line x1="9" y1="13" x2="9.01" y2="13"/>
-                <line x1="15" y1="13" x2="15.01" y2="13"/>
-              </svg>
-            </span>
-          </div>
-          <div class="embed-chat__typing" role="status" :aria-label="t('chat.thinkingAlt')">
-            <span class="embed-chat__typing-spinner" aria-hidden="true"></span>
-          </div>
+        <div v-if="showGlobalTypingIndicator" class="embed-chat__typing" role="status"
+          :aria-label="t('chat.thinkingAlt')">
+          <span class="embed-chat__typing-spinner" aria-hidden="true"></span>
         </div>
       </div>
     </div>
@@ -196,8 +156,6 @@ const props = defineProps<{
   agentImageUploadEnabled?: boolean
   useSessionHeaderTitle?: boolean
   hostContext?: Record<string, unknown>
-  agentAvatar?: string
-  agentName?: string
 }>()
 
 const emit = defineEmits<{
@@ -474,8 +432,6 @@ watch(
 
 .embed-suggested {
   width: 100%;
-  padding-left: 38px;
-  box-sizing: border-box;
 
   &__title {
     margin: 0 0 8px;
@@ -525,82 +481,33 @@ watch(
   }
 }
 
-.embed-welcome-row,
-.embed-typing-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  width: 100%;
-}
-
-.embed-bot-layout {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  width: 100%;
-
-  &__avatar {
-    flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: color-mix(in srgb, var(--embed-primary, var(--td-brand-color)) 12%, var(--td-bg-color-container, #fff));
-    color: var(--embed-primary, var(--td-brand-color));
-    border: 1px solid color-mix(in srgb, var(--embed-primary, var(--td-brand-color)) 16%, transparent);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    margin-top: 2px;
-  }
-
-  &__body {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-  }
-}
-
-.embed-avatar-emoji {
-  font-size: 16px;
-  line-height: 1;
-}
-
-.embed-avatar-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .embed-welcome-bubble {
   display: flex;
   justify-content: flex-start;
-  flex: 1;
-  min-width: 0;
+  width: 100%;
   animation: welcome-in 0.28s ease both;
 
   &__text {
     margin: 0;
-    max-width: min(92%, 520px);
-    padding: 9px 13px;
+    max-width: min(88%, 520px);
+    padding: 10px 14px;
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 1.55;
     color: var(--td-text-color-primary);
     white-space: pre-wrap;
     word-break: break-word;
     background: color-mix(
       in srgb,
-      var(--embed-primary, var(--td-brand-color)) 8%,
+      var(--embed-primary, var(--td-brand-color)) 7%,
       var(--td-bg-color-container, #fff)
     );
     border: 1px solid color-mix(
       in srgb,
-      var(--embed-primary, var(--td-brand-color)) 16%,
+      var(--embed-primary, var(--td-brand-color)) 14%,
       var(--td-component-stroke, #e7e7e7)
     );
     border-radius: 4px 14px 14px 14px;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   }
 }
 
