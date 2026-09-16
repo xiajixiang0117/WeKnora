@@ -280,19 +280,11 @@ func (c *Connector) Crawl(ctx context.Context, config *types.DataSourceConfig) (
 				continue
 			}
 		}
-		body, status, headers, fetchErr := fetchBody(ctx, client, canonical, true)
-		if fetchErr != nil {
-			failures = append(failures, &PageError{URL: canonical, SourceStatus: status, Err: fetchErr})
+		page, links, failure := fetchPage(ctx, client, canonical, cfg)
+		if failure != nil {
+			failures = append(failures, failure)
 			continue
 		}
-		page, links, extractErr := extractPage(body, canonical, cfg)
-		if extractErr != nil {
-			failures = append(failures, &PageError{URL: canonical, SourceStatus: status, Err: extractErr})
-			continue
-		}
-		page.StatusCode = status
-		page.ETag = headers.Get("ETag")
-		page.LastModified = headers.Get("Last-Modified")
 		for _, link := range links {
 			if _, seen := visited[link]; !seen && AllowedURL(link, cfg) {
 				queue = append(queue, link)
@@ -304,6 +296,75 @@ func (c *Connector) Crawl(ctx context.Context, config *types.DataSourceConfig) (
 	return pages, failures, nil
 }
 
+// FetchPages rechecks a finite list of historical URLs without following links.
+// MaxPages only bounds discovery: applying it here would leave old URLs unchecked
+// whenever discovery fills that budget. The supplied list and context bound this
+// pass, while the normal scope, robots, request timeout and response limits apply.
+func (c *Connector) FetchPages(ctx context.Context, config *types.DataSourceConfig, urls []string) ([]Page, []*PageError, error) {
+	cfg, err := ParseConfig(config)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := c.Validate(ctx, config); err != nil {
+		return nil, nil, err
+	}
+	client := datasource.NewConnectorHTTPClient(defaultTimeout)
+	visited := make(map[string]struct{}, len(urls))
+	robots := make(map[string]*robotsRules)
+	pages := make([]Page, 0, len(urls))
+	failures := make([]*PageError, 0)
+	for _, raw := range urls {
+		if err := ctx.Err(); err != nil {
+			return pages, failures, err
+		}
+		canonical := CanonicalURL(raw)
+		if canonical == "" || !AllowedURL(canonical, cfg) {
+			continue
+		}
+		if _, ok := visited[canonical]; ok {
+			continue
+		}
+		visited[canonical] = struct{}{}
+		if cfg.RespectRobots {
+			allowed, rulesErr := allowedByRobots(ctx, client, canonical, robots)
+			if rulesErr != nil {
+				failures = append(failures, &PageError{URL: canonical, Err: rulesErr})
+				continue
+			}
+			if !allowed {
+				failures = append(failures, &PageError{URL: canonical, Err: fmt.Errorf("blocked by robots.txt")})
+				continue
+			}
+		}
+		page, _, failure := fetchPage(ctx, client, canonical, cfg)
+		if failure != nil {
+			failures = append(failures, failure)
+			continue
+		}
+		pages = append(pages, page)
+	}
+	if err := ctx.Err(); err != nil {
+		return pages, failures, err
+	}
+	assignFolderPaths(pages, cfg)
+	return pages, failures, nil
+}
+
+func fetchPage(ctx context.Context, client *http.Client, canonical string, cfg Config) (Page, []string, *PageError) {
+	body, status, headers, err := fetchBody(ctx, client, canonical, true)
+	if err != nil {
+		return Page{}, nil, &PageError{URL: canonical, SourceStatus: status, Err: err}
+	}
+	page, links, err := extractPage(body, canonical, cfg)
+	if err != nil {
+		return Page{}, nil, &PageError{URL: canonical, SourceStatus: status, Err: err}
+	}
+	page.StatusCode = status
+	page.ETag = headers.Get("ETag")
+	page.LastModified = headers.Get("Last-Modified")
+	return page, links, nil
+}
+
 // FileNameForPage returns the path-qualified filename used when a crawled page
 // is stored. The page title is a filename segment, not part of FolderPath, so
 // it must be sanitized before joining it to the crawler-derived directory.
@@ -313,6 +374,12 @@ func FileNameForPage(page Page) string {
 		return name
 	}
 	return page.FolderPath + "/" + name
+}
+
+// AssignFolderPaths resolves folders after discovery and historical rechecks
+// have been combined, so both passes share the discovered directory titles.
+func AssignFolderPaths(pages []Page, cfg Config) {
+	assignFolderPaths(pages, cfg)
 }
 
 // assignFolderPaths maps URL directories to the titles of their index pages.

@@ -2,9 +2,11 @@ package webcrawler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Tencent/WeKnora/internal/types"
@@ -311,5 +313,169 @@ func TestCrawlUsesConfiguredContentSelectors(t *testing.T) {
 	}
 	if pages[0].Content != "Keep this text" {
 		t.Fatalf("Content = %q, want selected content only", pages[0].Content)
+	}
+}
+
+func TestFetchPagesRechecksHistoricalURLsWithoutDiscoveryLimit(t *testing.T) {
+	t.Setenv("SSRF_WHITELIST", "127.0.0.1,localhost")
+	utils.ResetSSRFWhitelistForTest()
+	t.Cleanup(utils.ResetSSRFWhitelistForTest)
+	var mu sync.Mutex
+	requests := make(map[string]int)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests[r.URL.Path]++
+		mu.Unlock()
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		switch r.URL.Path {
+		case "/docs/hal/dsi.html":
+			http.NotFound(w, r)
+		case "/docs/gone.html":
+			w.WriteHeader(http.StatusGone)
+		case "/docs/unavailable.html":
+			w.WriteHeader(http.StatusInternalServerError)
+		case "/docs/quickstart/index.html":
+			_, _ = w.Write([]byte(`<html><body><div id="wanted"><h1>快速入门</h1><p>Index</p></div></body></html>`))
+		case "/docs/quickstart/guide.html":
+			w.Header().Set("ETag", `"guide-v1"`)
+			w.Header().Set("Last-Modified", "Wed, 16 Sep 2026 00:00:00 GMT")
+			_, _ = w.Write([]byte(`<html><body><h1>Guide</h1><div id="wanted"><p>Historical content</p><div class="remove">Discard</div><a href="../not-requested.html">Link</a></div><p>Outside selector</p></body></html>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	urls := []string{
+		server.URL + "/docs/hal/dsi.html",
+		server.URL + "/docs/gone.html",
+		server.URL + "/docs/unavailable.html",
+		server.URL + "/docs/quickstart/index.html",
+		server.URL + "/docs/quickstart/guide.html",
+	}
+	pages, failures, err := NewConnector().FetchPages(context.Background(), &types.DataSourceConfig{Settings: map[string]interface{}{
+		"seed_urls":             []string{server.URL + "/docs/index.html"},
+		"respect_robots":        false,
+		"max_pages":             1,
+		"web_content_selector":  "#wanted",
+		"web_exclude_selectors": []string{".remove"},
+	}}, urls)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pages) != 2 || len(failures) != 3 {
+		t.Fatalf("FetchPages() pages=%d failures=%d, want 2 pages and 3 failures beyond max_pages=1", len(pages), len(failures))
+	}
+	for i, status := range []int{http.StatusNotFound, http.StatusGone, http.StatusInternalServerError} {
+		if failures[i].URL != urls[i] || failures[i].SourceStatus != status {
+			t.Fatalf("failure[%d] = %#v, want URL %q status %d", i, failures[i], urls[i], status)
+		}
+	}
+	guide := pages[1]
+	if guide.CanonicalURL != urls[4] || guide.Title != "Guide" || guide.StatusCode != http.StatusOK || guide.ContentHash == "" {
+		t.Fatalf("historical page metadata = %#v", guide)
+	}
+	if guide.FolderPath != "快速入门" || guide.ETag != `"guide-v1"` || guide.LastModified != "Wed, 16 Sep 2026 00:00:00 GMT" {
+		t.Fatalf("historical page folder/HTTP metadata = %#v", guide)
+	}
+	if !strings.Contains(guide.Content, "Historical content") || strings.Contains(guide.Content, "Discard") || strings.Contains(guide.Content, "Outside selector") {
+		t.Fatalf("historical Content = %q, want configured extraction", guide.Content)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(requests) != len(urls) {
+		t.Fatalf("requests = %#v, want only explicitly supplied URLs", requests)
+	}
+	for _, raw := range urls {
+		if got := requests[strings.TrimPrefix(raw, server.URL)]; got != 1 {
+			t.Fatalf("requests for %q = %d, want 1", raw, got)
+		}
+	}
+}
+
+func TestFetchPagesRespectsScopeRobotsAndCanonicalDeduplication(t *testing.T) {
+	t.Setenv("SSRF_WHITELIST", "127.0.0.1,localhost")
+	utils.ResetSSRFWhitelistForTest()
+	t.Cleanup(utils.ResetSSRFWhitelistForTest)
+	var mu sync.Mutex
+	requests := make(map[string]int)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests[r.URL.Path]++
+		mu.Unlock()
+		if r.URL.Path == "/robots.txt" {
+			_, _ = w.Write([]byte("User-agent: *\nDisallow: /docs/blocked.html\n"))
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><main><h1>Allowed</h1><p>Content</p></main></body></html>`))
+	}))
+	defer server.Close()
+	pages, failures, err := NewConnector().FetchPages(context.Background(), &types.DataSourceConfig{Settings: map[string]interface{}{
+		"seed_urls":        []string{server.URL + "/docs/index.html"},
+		"respect_robots":   true,
+		"exclude_patterns": []string{`/excluded\.html$`},
+	}}, []string{
+		server.URL + "/docs/allowed.html",
+		server.URL + "/docs/allowed.html?utm_source=duplicate#part",
+		server.URL + "/docs/blocked.html",
+		server.URL + "/docs/blocked.html#duplicate",
+		server.URL + "/outside.html",
+		server.URL + "/docs/excluded.html",
+		"https://outside.invalid/docs/page.html",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pages) != 1 || len(failures) != 1 {
+		t.Fatalf("FetchPages() pages=%d failures=%d, want one page and one robots failure", len(pages), len(failures))
+	}
+	if failure := failures[0]; failure.URL != server.URL+"/docs/blocked.html" || failure.SourceStatus != 0 || failure.Err.Error() != "blocked by robots.txt" {
+		t.Fatalf("robots failure = %#v", failure)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(requests) != 2 || requests["/robots.txt"] != 1 || requests["/docs/allowed.html"] != 1 {
+		t.Fatalf("requests = %#v, want one robots request and one allowed page request", requests)
+	}
+}
+
+func TestFetchPagesPreservesDirectAndRedirectSSRFProtection(t *testing.T) {
+	t.Setenv("SSRF_WHITELIST", "127.0.0.1,localhost")
+	utils.ResetSSRFWhitelistForTest()
+	t.Cleanup(utils.ResetSSRFWhitelistForTest)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://169.254.169.254/latest/meta-data", http.StatusFound)
+	}))
+	defer server.Close()
+	pages, failures, err := NewConnector().FetchPages(context.Background(), &types.DataSourceConfig{Settings: map[string]interface{}{
+		"seed_urls":      []string{server.URL + "/index.html"},
+		"allowed_hosts":  []string{"127.0.0.1", "169.254.169.254"},
+		"respect_robots": false,
+	}}, []string{server.URL + "/redirect.html", "http://169.254.169.254/latest/meta-data"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pages) != 0 || len(failures) != 2 {
+		t.Fatalf("FetchPages() pages=%d failures=%d, want both SSRF attempts blocked", len(pages), len(failures))
+	}
+	for _, failure := range failures {
+		if failure.SourceStatus != 0 || !strings.Contains(failure.Error(), "SSRF validation failed") {
+			t.Fatalf("SSRF failure = %v (status %d)", failure, failure.SourceStatus)
+		}
+	}
+}
+
+func TestFetchPagesStopsWhenContextIsCanceled(t *testing.T) {
+	t.Setenv("SSRF_WHITELIST", "127.0.0.1,localhost")
+	utils.ResetSSRFWhitelistForTest()
+	t.Cleanup(utils.ResetSSRFWhitelistForTest)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _, err := NewConnector().FetchPages(ctx, &types.DataSourceConfig{Settings: map[string]interface{}{
+		"seed_urls":      []string{"http://127.0.0.1/docs/index.html"},
+		"respect_robots": false,
+	}}, []string{"http://127.0.0.1/docs/old.html"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("FetchPages() error = %v, want context.Canceled", err)
 	}
 }

@@ -23,6 +23,12 @@ const activeFilter = ref<'all' | 'added' | 'updated' | 'missing' | 'failed'>('al
 const loading = ref(false)
 const submitting = ref(false)
 const activeScan = computed(() => scans.value[0])
+const displayedScanStatus = computed(() => {
+  const scan = activeScan.value
+  return scan?.status === 'completed' && (scan.error_message || scan.items_failed > 0)
+    ? 'partial_failed'
+    : scan?.status
+})
 const isScanning = computed(() => activeScan.value?.status === 'scanning')
 const visibleChanges = computed(() => activeFilter.value === 'all' ? changes.value : changes.value.filter(change => change.change_type === activeFilter.value))
 const selectedVisibleIDs = computed(() => selected.value.filter(id => visibleChanges.value.some(change => change.id === id)))
@@ -133,8 +139,14 @@ onBeforeUnmount(stopPolling)
     </template>
     <div v-if="loading && !activeScan" class="web-crawl-loading"><t-loading /></div>
     <template v-else-if="activeScan">
+      <t-alert v-if="activeScan.error_message" theme="error" class="web-crawl-error">
+        <template #message>
+          <strong>{{ t('datasource.webCrawler.scanFailed') }}</strong>
+          <div>{{ activeScan.error_message }}</div>
+        </template>
+      </t-alert>
       <div class="web-crawl-summary">
-        <t-tag theme="primary" variant="light">{{ statusLabel(activeScan.status) }}</t-tag>
+        <t-tag theme="primary" variant="light">{{ statusLabel(displayedScanStatus) }}</t-tag>
         <div class="web-crawl-filters">
           <button type="button" :class="{ active: activeFilter === 'all' }" @click="setFilter('all')">{{ t('datasource.webCrawler.summary', { total: activeScan.items_total, added: activeScan.items_added, updated: activeScan.items_updated, missing: activeScan.items_missing, failed: activeScan.items_failed }) }}</button>
           <button type="button" :class="{ active: activeFilter === 'added' }" @click="setFilter('added')">{{ t('datasource.webCrawler.change.added') }} {{ activeScan.items_added }}</button>
@@ -144,7 +156,7 @@ onBeforeUnmount(stopPolling)
         </div>
       </div>
       <div v-if="isScanning" class="web-crawl-loading"><t-loading size="36px" /></div>
-      <div v-else-if="visibleChanges.length === 0" class="web-crawl-empty">{{ t('datasource.webCrawler.noChanges') }}</div>
+      <div v-else-if="visibleChanges.length === 0 && !activeScan.error_message" class="web-crawl-empty">{{ t('datasource.webCrawler.noChanges') }}</div>
       <div v-else class="web-crawl-changes">
         <div v-for="change in visibleChanges" :key="change.id" class="web-crawl-change">
           <input v-if="change.change_type !== 'failed' && change.apply_status === 'pending'" type="checkbox" :checked="selected.includes(change.id)" @change="toggle(change.id)">
@@ -172,6 +184,7 @@ onBeforeUnmount(stopPolling)
 .web-crawl-footer { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; }
 .web-crawl-footer-actions { display:flex; align-items:center; gap:8px; }
 .web-crawl-loading { display:flex; justify-content:center; padding:80px 0; }
+.web-crawl-error { margin-bottom:12px; overflow-wrap:anywhere; }
 .web-crawl-summary { display:flex; align-items:center; gap:10px; padding:12px 14px; margin-bottom:12px; background:var(--td-bg-color-container-hover); border-radius:8px; font-size:13px; color:var(--td-text-color-secondary); }
 .web-crawl-filters { display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
 .web-crawl-filters button { border:0; padding:3px 6px; background:transparent; color:inherit; cursor:pointer; font:inherit; border-radius:4px; }

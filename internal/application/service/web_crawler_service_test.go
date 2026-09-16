@@ -234,6 +234,17 @@ type webCrawlBaselineKnowledgeRepo struct {
 	sourceKnowledge *types.Knowledge
 }
 
+func (r *webCrawlBaselineKnowledgeRepo) ListKnowledgeByKnowledgeBaseID(context.Context, uint64, string) ([]*types.Knowledge, error) {
+	var knowledges []*types.Knowledge
+	if r.knowledge != nil {
+		knowledges = append(knowledges, r.knowledge)
+	}
+	if r.sourceKnowledge != nil {
+		knowledges = append(knowledges, r.sourceKnowledge)
+	}
+	return knowledges, nil
+}
+
 func (r *webCrawlBaselineKnowledgeRepo) FindByDataSourceExternalID(
 	context.Context, uint64, string, string, string,
 ) (*types.Knowledge, error) {

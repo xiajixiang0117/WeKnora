@@ -154,7 +154,13 @@ func (r *WebCrawlerRepository) CreateChange(ctx context.Context, change *types.W
 	if change == nil {
 		return errors.New("web crawl change is nil")
 	}
-	return r.db.WithContext(ctx).Create(change).Error
+	query := r.db.WithContext(ctx)
+	if change.PageID == "" {
+		// A failed fetch may not have a page baseline. Omit the nullable foreign
+		// key so the database stores NULL instead of an invalid empty page ID.
+		query = query.Omit("PageID")
+	}
+	return query.Create(change).Error
 }
 
 func (r *WebCrawlerRepository) FindChange(ctx context.Context, id string) (*types.WebCrawlChange, error) {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -230,13 +231,39 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 	if crawlErr != nil {
 		return crawlErr
 	}
-	baseline, err := s.webCrawlerRepo.ListPages(ctx, ds.ID)
+	cfg, err := webcrawler.ParseConfig(config)
 	if err != nil {
 		return err
 	}
-	seen := make(map[string]struct{}, len(pages))
+	baseline, err := s.webCrawlBaseline(ctx, ds, cfg, pages)
+	if err != nil {
+		return err
+	}
+	checked := make(map[string]bool, len(pages)+len(failures))
 	for _, page := range pages {
-		seen[page.CanonicalURL] = struct{}{}
+		checked[page.CanonicalURL] = true
+	}
+	for _, failure := range failures {
+		checked[failure.URL] = true
+	}
+	var recheckURLs []string
+	for _, page := range baseline {
+		if page.Status == "active" && (page.KnowledgeID != "" || page.LastAppliedHash != "") &&
+			!checked[page.CanonicalURL] && webcrawler.AllowedURL(page.CanonicalURL, cfg) {
+			recheckURLs = append(recheckURLs, page.CanonicalURL)
+		}
+	}
+	if len(recheckURLs) > 0 {
+		recheckedPages, recheckFailures, err := webcrawler.NewConnector().FetchPages(ctx, config, recheckURLs)
+		if err != nil {
+			return err
+		}
+		pages = append(pages, recheckedPages...)
+		failures = append(failures, recheckFailures...)
+		webcrawler.AssignFolderPaths(pages, cfg)
+	}
+	scan.ItemsTotal = len(pages) + len(failures)
+	for _, page := range pages {
 		now := time.Now().UTC()
 		existing, findErr := s.webCrawlerRepo.FindPage(ctx, ds.ID, page.CanonicalURL)
 		if findErr != nil {
@@ -319,34 +346,107 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 		}
 		scan.ItemsUpdated++
 	}
-	failedURLs := make(map[string]struct{}, len(failures))
 	for _, failure := range failures {
-		failedURLs[failure.URL] = struct{}{}
-		if err := s.webCrawlerRepo.CreateChange(ctx, &types.WebCrawlChange{ScanID: scan.ID, CanonicalURL: failure.URL, ChangeType: types.WebCrawlChangeFailed, SourceStatus: failure.SourceStatus, ErrorMessage: failure.Error(), Summary: "fetch failed"}); err != nil {
+		change := &types.WebCrawlChange{ScanID: scan.ID, CanonicalURL: failure.URL, ChangeType: types.WebCrawlChangeFailed, SourceStatus: failure.SourceStatus, ErrorMessage: failure.Error(), Summary: "fetch failed"}
+		if page := baseline[failure.URL]; page != nil {
+			change.PageID = page.ID
+			change.Title = page.Title
+			if page.Status == "active" && (page.KnowledgeID != "" || page.LastAppliedHash != "") &&
+				(failure.SourceStatus == http.StatusNotFound || failure.SourceStatus == http.StatusGone) {
+				change.ChangeType = types.WebCrawlChangeMissing
+				change.OldHash = page.LastAppliedHash
+				change.PreviousContent = page.LastAppliedContent
+				change.Summary = fmt.Sprintf("source page is unavailable (HTTP %d)", failure.SourceStatus)
+			}
+		}
+		if err := s.webCrawlerRepo.CreateChange(ctx, change); err != nil {
 			return err
 		}
-		scan.ItemsFailed++
+		if change.ChangeType == types.WebCrawlChangeMissing {
+			scan.ItemsMissing++
+		} else {
+			scan.ItemsFailed++
+		}
 	}
-	for _, page := range baseline {
-		if page.Status != "active" {
-			continue
-		}
-		if _, ok := seen[page.CanonicalURL]; ok {
-			continue
-		}
-		if _, failed := failedURLs[page.CanonicalURL]; failed {
-			continue
-		}
-		if err := s.webCrawlerRepo.CreateChange(ctx, &types.WebCrawlChange{ScanID: scan.ID, PageID: page.ID, CanonicalURL: page.CanonicalURL, Title: page.Title, ChangeType: types.WebCrawlChangeMissing, OldHash: page.LastAppliedHash, PreviousContent: page.LastAppliedContent, Summary: "page was not found in the scan"}); err != nil {
-			return err
-		}
-		scan.ItemsMissing++
-	}
-	scan.ItemsTotal = len(pages) + len(failures)
 	scan.Status = types.WebCrawlScanStatusReviewReady
+	scan.ErrorMessage = ""
 	scan.FinishedAt = timePtr(time.Now().UTC())
 	scan.UpdatedAt = time.Now().UTC()
 	return s.webCrawlerRepo.UpdateScan(ctx, scan)
+}
+
+// webCrawlBaseline includes older URL imports even if their links have already
+// disappeared from the site. Reconcile knowledge IDs here as re-importing a URL
+// can replace its knowledge row without changing the crawler's page identity.
+// Only crawler bookkeeping is updated; knowledge and applied content stay intact.
+func (s *DataSourceService) webCrawlBaseline(ctx context.Context, ds *types.DataSource, cfg webcrawler.Config, discovered []webcrawler.Page) (map[string]*types.WebCrawlPage, error) {
+	pages, err := s.webCrawlerRepo.ListPages(ctx, ds.ID)
+	if err != nil {
+		return nil, err
+	}
+	baseline := make(map[string]*types.WebCrawlPage, len(pages))
+	for _, page := range pages {
+		baseline[page.CanonicalURL] = page
+	}
+	knowledges, err := s.knowledgeService.GetRepository().ListKnowledgeByKnowledgeBaseID(ctx, ds.TenantID, ds.KnowledgeBaseID)
+	if err != nil {
+		return nil, err
+	}
+	byURL := make(map[string]*types.Knowledge)
+	for _, knowledge := range knowledges {
+		if knowledge == nil || knowledge.DeletedAt.Valid || knowledge.ParseStatus == types.ParseStatusDeleting {
+			continue
+		}
+		metadata := knowledge.GetMetadata()
+		owner := metadata["datasource_id"]
+		if owner != "" && owner != ds.ID {
+			continue
+		}
+		rawURL := knowledge.Source
+		if knowledge.Type != "url" {
+			if owner != ds.ID {
+				continue
+			}
+			rawURL = metadata["external_id"]
+		}
+		canonical := webcrawler.CanonicalURL(rawURL)
+		if canonical == "" || !webcrawler.AllowedURL(canonical, cfg) {
+			continue
+		}
+		if existing := byURL[canonical]; existing == nil || (existing.GetMetadata()["datasource_id"] == "" && owner == ds.ID) {
+			byURL[canonical] = knowledge
+		}
+	}
+	discoveredURLs := make(map[string]bool, len(discovered))
+	for _, page := range discovered {
+		discoveredURLs[page.CanonicalURL] = true
+	}
+	for canonical, knowledge := range byURL {
+		if page := baseline[canonical]; page != nil {
+			if page.Status == "active" && page.KnowledgeID != knowledge.ID {
+				page.KnowledgeID = knowledge.ID
+				page.UpdatedAt = time.Now().UTC()
+				if err := s.webCrawlerRepo.UpdatePage(ctx, page); err != nil {
+					return nil, err
+				}
+			}
+			continue
+		}
+		// Successful discoveries use the normal adoption path below so they
+		// can establish a content baseline when no prior hash was recorded.
+		if discoveredURLs[canonical] {
+			continue
+		}
+		page := &types.WebCrawlPage{DataSourceID: ds.ID, CanonicalURL: canonical, KnowledgeID: knowledge.ID, Title: knowledge.Title, Status: "active", LastAppliedHash: knowledge.GetMetadata()["content_hash"]}
+		if knowledge.EnableStatus == "disabled" {
+			page.Status = "disabled"
+		}
+		if err := s.webCrawlerRepo.CreatePage(ctx, page); err != nil {
+			return nil, err
+		}
+		baseline[canonical] = page
+	}
+	return baseline, nil
 }
 
 func (s *DataSourceService) webCrawlKnowledgeNeedsRefresh(ctx context.Context, ds *types.DataSource, page webcrawler.Page) (bool, error) {
@@ -439,7 +539,7 @@ func (s *DataSourceService) ProcessWebCrawlApply(ctx context.Context, task *asyn
 		if listErr != nil {
 			return listErr
 		}
-		if len(failedChanges) > 0 {
+		if len(failedChanges) > 0 || scan.ItemsFailed > 0 || scan.ErrorMessage != "" {
 			scan.Status = types.WebCrawlScanStatusPartialFailed
 		} else {
 			scan.Status = types.WebCrawlScanStatusCompleted
