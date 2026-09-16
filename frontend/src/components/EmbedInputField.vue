@@ -2,10 +2,10 @@
   <div class="embed-input-box" :class="{ 'is-replying': isReplying }">
     <div v-if="uploadedAttachments.length" class="embed-input-box__files">
       <div v-for="(att, index) in uploadedAttachments" :key="`${att.file.name}-${index}`" class="embed-file-chip">
-        <t-icon name="file" size="14px" />
+        <FileIcon size="14px" />
         <span class="embed-file-chip__name">{{ att.file.name }}</span>
         <button type="button" class="embed-file-chip__remove" @click="removeAttachment(index)">
-          <t-icon name="close" size="12px" />
+          <CloseIcon size="12px" />
         </button>
       </div>
     </div>
@@ -13,7 +13,7 @@
       <div v-for="(img, index) in uploadedImages" :key="img.preview" class="embed-image-thumb">
         <img :src="img.preview" :alt="img.file.name" />
         <button type="button" class="embed-image-thumb__remove" @click="removeImage(index)">
-          <t-icon name="close" size="12px" />
+          <CloseIcon size="12px" />
         </button>
       </div>
     </div>
@@ -75,7 +75,7 @@
             :aria-label="t('input.imageUpload.label')"
             @click="triggerImageUpload"
           >
-            <t-icon name="image" size="18px" />
+            <ImageIcon size="18px" />
           </button>
         </t-tooltip>
         <t-tooltip v-if="showFileUploadToggle" placement="top" :content="t('input.fileUpload.tooltip')">
@@ -86,7 +86,7 @@
             :aria-label="t('input.fileUpload.label')"
             @click="triggerFileUpload"
           >
-            <t-icon name="attach" size="18px" />
+            <AttachIcon size="18px" />
           </button>
         </t-tooltip>
       </div>
@@ -116,6 +116,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { AttachIcon, CloseIcon, FileIcon, ImageIcon } from 'tdesign-icons-vue-next'
 import { embedToast } from '@/utils/embedToast'
 import { isEmbedImageFile } from '@/utils/embedFile'
 
@@ -265,6 +266,7 @@ onUnmounted(() => {
 .embed-input-box {
   position: relative;
   width: 100%;
+  box-sizing: border-box;
   max-width: 800px;
   margin: 0 auto;
   background: var(--td-bg-color-container, #fff);
@@ -298,10 +300,23 @@ onUnmounted(() => {
       border: none;
       box-shadow: none;
       background: transparent;
-      padding: 14px 16px 52px;
+      padding: 14px 16px 8px;
       font-size: 14px;
       line-height: 1.5;
+      // Preserve two editable rows even when an initially hidden frame reports
+      // a zero-height autosize measurement. This overrides TDesign's inline min.
+      min-height: 64px !important;
       resize: none;
+      overflow-x: hidden;
+      overflow-y: auto;
+      // Keep long drafts scrollable without displaying a scrollbar.
+      scrollbar-width: none;
+
+      &::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+      }
     }
 
     &.has-images :deep(.t-textarea__inner) {
@@ -310,19 +325,11 @@ onUnmounted(() => {
   }
 
   &__bar {
-    position: absolute;
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
+    margin: 0 12px 12px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    pointer-events: none;
-
-    > * {
-      pointer-events: auto;
-    }
   }
 
   &__controls {

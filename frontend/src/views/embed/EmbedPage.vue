@@ -5,7 +5,7 @@
       <header v-if="sessionId" class="embed-header">
         <span class="embed-header__badge" :style="badgeStyle">
           <span v-if="config.agent_avatar" class="embed-header__avatar">{{ config.agent_avatar }}</span>
-          <t-icon v-else :name="headerIcon" size="18px" />
+          <component :is="headerIcon" v-else size="18px" />
         </span>
         <div class="embed-header__text">
           <h1 class="embed-header__title">{{ headerTitle }}</h1>
@@ -21,7 +21,7 @@
           :aria-label="$t('embedPublish.newChat')"
           @click="handleNewChat"
         >
-          <template #icon><t-icon name="add" /></template>
+          <template #icon><AddIcon /></template>
         </t-button>
       </header>
 
@@ -56,6 +56,7 @@
 import { computed, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { AddIcon, ChatIcon, ControlPlatformIcon } from 'tdesign-icons-vue-next'
 import EmbedChatView from '@/views/embed/EmbedChatView.vue'
 import { useEmbedBridge } from '@/composables/useEmbedBridge'
 import { setDefaultProtectedFileAccess } from '@/utils/protectedFileAccess'
@@ -163,7 +164,7 @@ const headerSubtitle = computed(() => {
 
 const headerIcon = computed(() => {
   const agentId = config.value?.agent_id || ''
-  return agentId && agentId !== 'builtin-quick-answer' ? 'control-platform' : 'chat'
+  return agentId && agentId !== 'builtin-quick-answer' ? ControlPlatformIcon : ChatIcon
 })
 
 watch(headerTitle, (title) => {
@@ -178,16 +179,8 @@ watch(headerTitle, (title) => {
   flex-direction: column;
   background: var(--td-bg-color-container, #fff);
   overflow: hidden;
-  /* 子组件（含 AgentStreamDisplay）内凡用 --td-brand-color 的 loading / 强调色均跟随渠道主题 */
-  --td-brand-color: var(--embed-primary, var(--td-brand-color));
-  --td-brand-color-hover: var(--embed-primary, var(--td-brand-color-hover));
-  --td-brand-color-active: var(--embed-primary, var(--td-brand-color-active));
-
-  :deep(.t-button--theme-primary) {
-    --td-brand-color: var(--embed-primary, var(--td-brand-color));
-    --td-brand-color-hover: var(--embed-primary, var(--td-brand-color-hover));
-    --td-brand-color-active: var(--embed-primary, var(--td-brand-color-active));
-  }
+  // pageStyle supplies channel colors; otherwise inherit the theme tokens.
+  // A custom property referencing itself, even in a fallback, is invalid.
 
   :deep(.embed-input-box:focus-within) {
     border-color: var(--embed-primary, var(--td-brand-color));

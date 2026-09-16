@@ -3,10 +3,11 @@
         v-if="session.knowledge_references && session.knowledge_references.length">
         <div class="refer_header" v-if="!contentOnly" @click="referBoxSwitch">
             <div class="refer_title">
-                <t-icon v-if="!timelineMode" name="file" class="refer-title-icon" />
+                <FileIcon v-if="!timelineMode" class="refer-title-icon" />
                 <span>{{ headerText }}</span>
                 <div class="refer_show_icon">
-                    <t-icon :name="showReferBox ? 'chevron-down' : 'chevron-right'" />
+                    <ChevronDownIcon v-if="showReferBox" />
+                    <ChevronRightIcon v-else />
                 </div>
             </div>
         </div>
@@ -23,7 +24,7 @@
             <div v-for="(group, gIdx) in groupedKnowledgeRefs" :key="'grp-' + gIdx" class="doc-group">
                 <div class="doc-group-header" @click="toggleGroup(group.key)">
                     <div class="doc-group-left">
-                        <t-icon name="file" size="14px" class="doc-group-icon" />
+                        <FileIcon size="14px" class="doc-group-icon" />
                         <span class="doc-group-title" :title="group.title">{{ group.title }}</span>
                         <span class="doc-group-count">{{ $t('chat.referenceChunkCount', { count: group.chunks.length })
                             }}</span>
@@ -36,7 +37,7 @@
                                 target="_blank"
                                 rel="noopener noreferrer"
                             >
-                                <t-icon name="jump" size="14px" />
+                                <JumpIcon size="14px" />
                             </a>
                         </t-tooltip>
                     </div>
@@ -63,6 +64,7 @@
 import { computed, ref, reactive } from "vue";
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
+import { ChevronDownIcon, ChevronRightIcon, FileIcon, JumpIcon } from 'tdesign-icons-vue-next';
 import { sanitizeHTML } from '@/utils/security';
 import ContentPopup from './tool-results/ContentPopup.vue';
 import { useChatReferencesDrawer } from '@/composables/useChatReferencesDrawer';

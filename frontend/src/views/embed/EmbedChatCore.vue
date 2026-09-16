@@ -91,15 +91,14 @@
       </div>
     </div>
 
-    <transition name="scroll-btn-fade">
-      <div v-show="userHasScrolledUp" class="scroll-to-bottom-btn" @click="onClickScrollToBottom" aria-label="scroll to bottom">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </div>
-    </transition>
-
     <div class="embed-chat__input">
+      <transition name="scroll-btn-fade">
+        <div v-show="userHasScrolledUp" class="scroll-to-bottom-btn" @click="onClickScrollToBottom" aria-label="scroll to bottom">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+      </transition>
       <EmbedInputField
         :isReplying="isReplying"
         :show-web-search-toggle="showWebSearchToggle"
@@ -402,6 +401,7 @@ watch(
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   width: 100%;
   position: relative;
 }
@@ -411,6 +411,7 @@ watch(
   min-height: 0;
   width: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .embed-chat__messages {
@@ -420,7 +421,7 @@ watch(
   max-width: 800px;
   margin: 0 auto;
   width: 100%;
-  padding: 12px 16px 0;
+  padding: 12px 16px 16px;
   box-sizing: border-box;
 }
 
@@ -428,6 +429,7 @@ watch(
   display: flex;
   flex-direction: column;
   width: 100%;
+  min-width: 0;
 }
 
 .embed-suggested {
@@ -552,6 +554,7 @@ watch(
 }
 
 .embed-chat__input {
+  position: relative;
   flex-shrink: 0;
   padding: 8px 16px 16px;
   box-sizing: border-box;
@@ -596,7 +599,7 @@ watch(
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 100px;
+  bottom: calc(100% + 8px);
   z-index: 10;
   width: 36px;
   height: 36px;

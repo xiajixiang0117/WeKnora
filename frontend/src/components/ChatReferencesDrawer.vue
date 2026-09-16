@@ -20,7 +20,7 @@
             :aria-label="t('common.close')"
             @click="close"
           >
-            <t-icon name="close" size="20px" />
+            <CloseIcon size="20px" />
           </button>
         </header>
 
@@ -66,7 +66,7 @@
               >
                 <template v-if="item.kind === 'document'">
                   <div class="reference-item__document">
-                    <t-icon name="file" class="reference-item__doc-icon" />
+                    <FileIcon class="reference-item__doc-icon" />
                     <div class="reference-item__document-main">
                       <div class="reference-item__title-row">
                         <h5 class="reference-item__title">{{ item.title }}</h5>
@@ -79,7 +79,7 @@
                           :aria-label="t('chat.navigateToDocument')"
                           @click.stop
                         >
-                          <t-icon name="jump" size="14px" />
+                          <JumpIcon size="14px" />
                         </a>
                       </div>
                       <p v-if="item.snippet && !expandedKeys.has(item.key)" class="reference-item__snippet">
@@ -104,7 +104,7 @@
                     <span class="reference-item__domain">{{ item.domain }}</span>
                   </div>
                   <div v-else-if="item.kind === 'tool' && item.domain" class="reference-item__source">
-                    <t-icon name="tools" class="reference-item__source-mark" />
+                    <ToolsIcon class="reference-item__source-mark" />
                     <span class="reference-item__domain">{{ item.domain }}</span>
                   </div>
 
@@ -138,6 +138,7 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { CloseIcon, FileIcon, JumpIcon, ToolsIcon } from 'tdesign-icons-vue-next'
 import { useChatReferencesDrawer } from '@/composables/useChatReferencesDrawer'
 import {
   buildReferenceSections,

@@ -1,5 +1,42 @@
 @import './chat-hljs.less';
 
+// Embedded answers must fit narrow iframe widths, including code and tables.
+// Keep this opt-in so the full chat can retain its scrollable code/table layout.
+.chat-markdown-embedded-layout() {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+
+  :deep(pre),
+  :deep(pre code),
+  :deep(.chat-code-block__pre code) {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  :deep(pre) {
+    box-sizing: border-box;
+    max-width: 100%;
+  }
+
+  :deep(.chat-markdown-table),
+  :deep(table) {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  :deep(table) {
+    table-layout: fixed;
+  }
+
+  :deep(table tr th),
+  :deep(table tr td) {
+    padding: 8px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
 // Single source of truth for chat answer Markdown typography and block styles.
 // Used by botmsg, AgentStreamDisplay, embed chat, and the dev Markdown test page.
 // Future chat Markdown visual changes should be made here instead of in

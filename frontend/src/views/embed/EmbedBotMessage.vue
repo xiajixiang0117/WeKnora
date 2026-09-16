@@ -219,6 +219,7 @@ onMounted(() => {
   color: var(--td-text-color-primary);
   font-size: 16px;
   margin-right: auto;
+  min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
 
@@ -245,6 +246,7 @@ onMounted(() => {
   // Chat Markdown visual styles are centralized in chat-markdown.less.
   // Do not add element-level Markdown rules here; update the shared mixin.
   .chat-markdown-typography();
+  .chat-markdown-embedded-layout();
   .chat-citation-pills();
 }
 

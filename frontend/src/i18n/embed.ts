@@ -73,6 +73,21 @@ const messages = {
       "tokenRequiredForPreview": "需要发布 Token 才能预览。请先创建渠道，或点击「轮换 Token」获取新 Token。"
     },
     "chat": {
+      "conversationTime": {
+        "today": "今天 {time}",
+        "yesterday": "昨天 {time}",
+        "thisYear": "{month}月{day}日 {time}",
+        "otherYear": "{year}年{month}月{day}日 {time}"
+      },
+      "referencesDrawerTitle": "参考来源",
+      "referencesDrawerTitleWeb": "网页来源",
+      "referencesDrawerTitleDocs": "文档来源",
+      "referencesDrawerTitleTools": "工具结果",
+      "referencesDrawerTitleMixed": "参考来源",
+      "referencesDrawerWebSection": "网页",
+      "referencesDrawerDocsSection": "知识库文档",
+      "referencesDrawerToolsSection": "工具",
+      "referencesDrawerEmpty": "暂无参考来源",
       "title": "对话",
       "newChat": "新对话",
       "suggestedQuestions": "你可以这样问我",
@@ -243,6 +258,7 @@ const messages = {
       "editorOpened": "已打开编辑器，请选择知识库后保存"
     },
     "common": {
+      "close": "关闭",
       "loading": "加载中...",
       "confirm": "确认",
       "cancel": "取消",
@@ -639,6 +655,21 @@ const messages = {
       "tokenRequiredForPreview": "プレビューには公開トークンが必要です。先にチャネルを作成するか、トークンをローテーションしてください。"
     },
     "chat": {
+      "conversationTime": {
+        "today": "今日{time}",
+        "yesterday": "昨日{time}",
+        "thisYear": "{month}/{day} {time}",
+        "otherYear": "{year}/{month}/{day} {time}"
+      },
+      "referencesDrawerTitle": "出典",
+      "referencesDrawerTitleWeb": "Webの出典",
+      "referencesDrawerTitleDocs": "ドキュメントの出典",
+      "referencesDrawerTitleTools": "ツールの実行結果",
+      "referencesDrawerTitleMixed": "出典",
+      "referencesDrawerWebSection": "Web",
+      "referencesDrawerDocsSection": "ドキュメント",
+      "referencesDrawerToolsSection": "ツール",
+      "referencesDrawerEmpty": "出典はありません",
       "title": "チャット",
       "newChat": "新しいチャット",
       "suggestedQuestions": "こんな質問ができます",
@@ -809,6 +840,7 @@ const messages = {
       "editorOpened": "エディタを開きました。ナレッジベースを選択して保存してください"
     },
     "common": {
+      "close": "閉じる",
       "loading": "読み込み中...",
       "confirm": "確認",
       "cancel": "キャンセル",
@@ -1205,6 +1237,21 @@ const messages = {
       "tokenRequiredForPreview": "A publish token is required to preview. Create a channel or rotate the token first."
     },
     "chat": {
+      "conversationTime": {
+        "today": "Today {time}",
+        "yesterday": "Yesterday {time}",
+        "thisYear": "{month}/{day} {time}",
+        "otherYear": "{month}/{day}/{year} {time}"
+      },
+      "referencesDrawerTitle": "Sources",
+      "referencesDrawerTitleWeb": "Web sources",
+      "referencesDrawerTitleDocs": "Document sources",
+      "referencesDrawerTitleTools": "Tool results",
+      "referencesDrawerTitleMixed": "Sources",
+      "referencesDrawerWebSection": "Web",
+      "referencesDrawerDocsSection": "Documents",
+      "referencesDrawerToolsSection": "Tools",
+      "referencesDrawerEmpty": "No sources available",
       "title": "Chat",
       "newChat": "New Chat",
       "suggestedQuestions": "You can ask me",
@@ -1375,6 +1422,7 @@ const messages = {
       "editorOpened": "Editor opened, please select a knowledge base and save"
     },
     "common": {
+      "close": "Close",
       "loading": "Loading...",
       "confirm": "Confirm",
       "cancel": "Cancel",
@@ -1747,6 +1795,7 @@ const koEmbedPublish = {
     loadError: '로드 실패',
   },
   common: {
+    close: '닫기',
     loading: '로딩 중...',
     confirm: '확인',
     cancel: '취소',
@@ -1759,6 +1808,21 @@ const koEmbedPublish = {
     streamFailed: '스트림 연결 실패',
   },
   chat: {
+    conversationTime: {
+      today: '오늘 {time}',
+      yesterday: '어제 {time}',
+      thisYear: '{month}월 {day}일 {time}',
+      otherYear: '{year}년 {month}월 {day}일 {time}',
+    },
+    referencesDrawerTitle: '참고 출처',
+    referencesDrawerTitleWeb: '웹 출처',
+    referencesDrawerTitleDocs: '문서 출처',
+    referencesDrawerTitleTools: '도구 결과',
+    referencesDrawerTitleMixed: '참고 출처',
+    referencesDrawerWebSection: '웹',
+    referencesDrawerDocsSection: '지식베이스 문서',
+    referencesDrawerToolsSection: '도구',
+    referencesDrawerEmpty: '참고 출처가 없습니다',
     suggestedQuestions: '이렇게 물어보세요',
     suggestedQuestionsLoading: '로딩 중...',
     followUpQuestions: '이어서 질문',
@@ -1865,6 +1929,7 @@ const ruEmbedPublish = {
     loadError: 'Не удалось загрузить',
   },
   common: {
+    close: 'Закрыть',
     loading: 'Загрузка...',
     confirm: 'Подтвердить',
     cancel: 'Отмена',
@@ -1877,6 +1942,21 @@ const ruEmbedPublish = {
     streamFailed: 'Ошибка потокового соединения',
   },
   chat: {
+    conversationTime: {
+      today: 'Сегодня {time}',
+      yesterday: 'Вчера {time}',
+      thisYear: '{day}.{month} {time}',
+      otherYear: '{day}.{month}.{year} {time}',
+    },
+    referencesDrawerTitle: 'Источники',
+    referencesDrawerTitleWeb: 'Веб-источники',
+    referencesDrawerTitleDocs: 'Документы',
+    referencesDrawerTitleTools: 'Результаты инструментов',
+    referencesDrawerTitleMixed: 'Источники',
+    referencesDrawerWebSection: 'Веб',
+    referencesDrawerDocsSection: 'Документы базы знаний',
+    referencesDrawerToolsSection: 'Инструменты',
+    referencesDrawerEmpty: 'Источники отсутствуют',
     suggestedQuestions: 'Вы можете спросить так',
     suggestedQuestionsLoading: 'Загрузка...',
     followUpQuestions: 'Спрашивайте дальше',

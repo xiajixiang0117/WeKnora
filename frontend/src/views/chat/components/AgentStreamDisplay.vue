@@ -3317,6 +3317,10 @@ const handleAddToKnowledge = (answerEvent: any) => {
       .chat-markdown-typography();
       .chat-citation-pills();
 
+      .is-embedded & {
+        .chat-markdown-embedded-layout();
+      }
+
       :deep(img) {
         background-color: var(--td-bg-color-secondarycontainer);
         /* 加载时的占位背景色 */
