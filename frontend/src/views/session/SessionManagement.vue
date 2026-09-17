@@ -177,7 +177,7 @@
           <t-table row-key="request_id" :data="traces" :columns="traceColumns" size="medium" hover>
             <template #created_at="{ row }"><time :datetime="row.created_at">{{ formatDate(row.created_at) }}</time></template>
             <template #status="{ row }"><t-tag size="small" variant="light">{{ row.status }}</t-tag></template>
-            <template #query="{ row }"><span class="session-management__query">{{ row.original_query }}</span></template>
+            <template #query="{ row }"><span class="session-management__query">{{ displayQuery(row.original_query) }}</span></template>
             <template #actions="{ row }">
               <t-button size="small" variant="text" @click="openTrace(row)">{{ t('sessionManagement.viewTrace') }}</t-button>
             </template>
@@ -190,16 +190,16 @@
             <h2>{{ t('sessionManagement.traceDetail') }}</h2>
             <code>{{ selectedTrace.request_id }}</code>
           </div>
-          <p class="session-management__trace-query"><span>{{ t('sessionManagement.columns.query') }}</span>{{ selectedTrace.trace.original_query }}</p>
+          <p class="session-management__trace-query"><span>{{ t('sessionManagement.columns.query') }}</span>{{ displayQuery(selectedTrace.trace.original_query) }}</p>
           <details v-for="step in selectedTrace.trace.steps" :key="step.sequence" class="session-management__trace-step" open>
             <summary>
               <strong>#{{ step.sequence }} · {{ step.kind }}</strong>
               <t-tag size="small" variant="light">{{ step.status }}</t-tag>
             </summary>
             <div class="session-management__trace-step-content">
-              <p v-if="step.query"><span>{{ t('sessionManagement.columns.query') }}</span>{{ step.query }}</p>
-              <p v-if="step.rewritten_query"><span>{{ t('sessionManagement.rewrittenQuery') }}</span>{{ step.rewritten_query }}</p>
-              <p v-if="step.expansion_queries?.length"><span>{{ t('sessionManagement.expansionQueries') }}</span>{{ step.expansion_queries.join(' · ') }}</p>
+              <p v-if="step.query"><span>{{ t('sessionManagement.columns.query') }}</span>{{ displayQuery(step.query) }}</p>
+              <p v-if="step.rewritten_query"><span>{{ t('sessionManagement.rewrittenQuery') }}</span>{{ displayQuery(step.rewritten_query) }}</p>
+              <p v-if="step.expansion_queries?.length"><span>{{ t('sessionManagement.expansionQueries') }}</span>{{ step.expansion_queries.map(displayQuery).join(' · ') }}</p>
               <p v-if="step.error_summary" class="session-management__trace-error">{{ step.error_summary }}</p>
               <template v-if="step.retrieval">
                 <p>
@@ -236,6 +236,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
+import { restoreEmbedMessageDisplay } from '@/utils/embedContext'
 import {
   getSessionUsage,
   getRetrievalExecutionTrace,
@@ -400,6 +401,13 @@ async function openTrace(summary: RetrievalTraceSummary) {
   } catch (err: any) {
     tracesError.value = err?.message || t('sessionManagement.loadTraceFailed')
   }
+}
+
+// Strip only the embed transport prefix at render time. Keep the persisted
+// execution trace intact for diagnostics and leave other channels untouched.
+function displayQuery(query: string) {
+  if (selectedSummary.value?.channel !== 'embed') return query
+  return restoreEmbedMessageDisplay({ role: 'user', content: query }).content
 }
 
 function formatTokens(value: number) {

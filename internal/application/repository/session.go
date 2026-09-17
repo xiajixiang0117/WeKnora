@@ -160,6 +160,9 @@ func (r *sessionRepository) QueryPaged(
 	// Base filter shared by count and list queries.
 	applyBase := func(db *gorm.DB) *gorm.DB {
 		db = db.Where("s.tenant_id = ? AND s.deleted_at IS NULL", q.TenantID)
+		if q.HasMessages {
+			db = db.Where("EXISTS (SELECT 1 FROM messages m WHERE m.session_id = s.id AND m.deleted_at IS NULL)")
+		}
 		if q.UserID != "" {
 			db = db.Where("(s.user_id = ? OR s.user_id IS NULL OR s.user_id = '')", q.UserID)
 		}

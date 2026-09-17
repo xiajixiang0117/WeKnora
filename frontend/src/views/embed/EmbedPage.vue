@@ -2,7 +2,7 @@
   <div class="embed-page" :style="pageStyle">
     <div v-if="loadError" class="embed-error">{{ loadError }}</div>
     <template v-else-if="config">
-      <header v-if="sessionId" class="embed-header">
+      <header v-if="!bootstrapping" class="embed-header">
         <span class="embed-header__badge" :style="badgeStyle">
           <span v-if="config.agent_avatar" class="embed-header__avatar">{{ config.agent_avatar }}</span>
           <component :is="headerIcon" v-else size="18px" />
@@ -26,8 +26,9 @@
       </header>
 
       <EmbedChatView
-        v-if="sessionId"
+        v-if="!bootstrapping"
         :session-id="sessionId"
+        :ensure-session="ensureSession"
         :session-sig="sessionSig"
         :visitor-id="visitorId"
         :channel-id="channelId"
@@ -78,6 +79,7 @@ const {
   bootstrapping,
   hostContext,
   startNewSession,
+  ensureSession,
 } = useEmbedBridge(channelId)
 
 // An embed visitor has no Bearer/tenant credentials, so every protected file in

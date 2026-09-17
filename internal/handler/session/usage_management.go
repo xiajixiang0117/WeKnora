@@ -64,11 +64,12 @@ func (h *Handler) ListSessionUsage(c *gin.Context) {
 	}
 
 	result, err := h.sessionService.ListSessions(ctx, &types.SessionListQuery{
-		TenantWide: true,
-		Keyword:    c.Query("keyword"),
-		Source:     c.Query("source"),
-		Page:       pagination.Page,
-		PageSize:   pagination.PageSize,
+		TenantWide:  true,
+		HasMessages: true,
+		Keyword:     c.Query("keyword"),
+		Source:      c.Query("source"),
+		Page:        pagination.Page,
+		PageSize:    pagination.PageSize,
 	})
 	if err != nil {
 		logger.ErrorWithFields(ctx, err, nil)

@@ -345,3 +345,39 @@ func TestSessionRepositoryQueryPagedHidesMaintenanceSessions(t *testing.T) {
 			"source=%q count must not include the maintenance session", source)
 	}
 }
+
+func TestSessionRepositoryQueryPagedHasMessages(t *testing.T) {
+	repo, db := newSessionRepositoryForTest(t)
+	require.NoError(t, db.AutoMigrate(&testIMChannelSession{}, &types.Message{}))
+	empty := createSessionForTest(t, db, 1, "alice")
+	asked := createSessionForTest(t, db, 1, "alice")
+	answered := createSessionForTest(t, db, 1, "alice")
+	deleted := createSessionForTest(t, db, 1, "alice")
+	foreign := createSessionForTest(t, db, 2, "alice")
+	for _, row := range []struct{ id, session, role string }{
+		{"question", asked.ID, "user"},
+		{"answer", answered.ID, "assistant"},
+		{"deleted", deleted.ID, "user"},
+		{"foreign", foreign.ID, "user"},
+	} {
+		require.NoError(t, db.Create(&types.Message{ID: row.id, SessionID: row.session, Role: row.role}).Error)
+	}
+	require.NoError(t, db.Delete(&types.Message{}, "session_id = ?", deleted.ID).Error)
+	ctx := context.Background()
+	q := &types.SessionListQuery{TenantID: 1, HasMessages: true, Page: 1, PageSize: 1}
+	first, total, err := repo.QueryPaged(ctx, q)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, total)
+	require.Len(t, first, 1)
+	q.Page = 2
+	second, total, err := repo.QueryPaged(ctx, q)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, total)
+	require.ElementsMatch(t, []string{asked.ID, answered.ID}, append(listItemIDsForTest(first), listItemIDsForTest(second)...))
+	q.HasMessages = false
+	q.Page, q.PageSize = 1, 10
+	all, total, err := repo.QueryPaged(ctx, q)
+	require.NoError(t, err)
+	require.EqualValues(t, 4, total)
+	require.Contains(t, listItemIDsForTest(all), empty.ID)
+}

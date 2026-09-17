@@ -23,6 +23,7 @@ import { useChatStreamHandler } from '@/composables/useChatStreamHandler'
 import { useStickyBottomOnResize } from '@/composables/useStickyBottomOnResize'
 
 export function useEmbedChatSession(options: {
+  ensureSession: () => Promise<void>
   sessionId: Ref<string>
   sessionSig: Ref<string>
   visitorId: Ref<string>
@@ -226,7 +227,10 @@ export function useEmbedChatSession(options: {
       })
   }
 
+  let sendGeneration = 0
+
   const handleStopGeneration = () => {
+    sendGeneration++
     stopStream()
     markInFlightAssistantStopped(currentAssistantMessageId.value)
     const messageId = currentAssistantMessageId.value
@@ -243,10 +247,14 @@ export function useEmbedChatSession(options: {
     isReplying.value = false
   }
 
+  let preparingSession = false
+
   const sendMsg = async (
     value: string,
     opts: { webSearchEnabled?: boolean; imageFiles?: File[]; attachmentFiles?: File[] } = {},
   ) => {
+    if (isReplying.value || preparingSession) return
+    const generation = ++sendGeneration
     stopStream()
     prepareForNewOutgoingMessage()
     const outboundQuery = buildQueryWithHostContext(value, options.hostContext?.value)
@@ -278,6 +286,23 @@ export function useEmbedChatSession(options: {
       loading.value = false
       return
     }
+
+    if (generation !== sendGeneration) return
+    preparingSession = true
+    try {
+      await options.ensureSession()
+      // Let the session props and watcher settle before adding the first message.
+      await nextTick()
+    } catch {
+      embedToast(t('embedPublish.sessionFailed'))
+      isReplying.value = false
+      loading.value = false
+      return
+    } finally {
+      preparingSession = false
+    }
+
+    if (generation !== sendGeneration) return
 
     messagesList.push({
       content: value,
@@ -361,6 +386,7 @@ export function useEmbedChatSession(options: {
     isFirstEnter.value = true
     fullContent.value = ''
     if (!sid) {
+      hasMoreHistory.value = false
       historyLoading.value = false
       return
     }
@@ -369,7 +395,14 @@ export function useEmbedChatSession(options: {
 
   watch(
     () => options.sessionId.value,
-    (sid) => resetAndLoad(sid),
+    (sid) => {
+      // A just-created session has no history; fetching it here can race the
+      // first send and reset or duplicate its optimistic user message.
+      if (preparingSession) return
+      sendGeneration++
+      stopStream()
+      resetAndLoad(sid)
+    },
     { immediate: true },
   )
 
@@ -379,6 +412,7 @@ export function useEmbedChatSession(options: {
   })
 
   onUnmounted(() => {
+    sendGeneration++
     stopStream()
     fullContent.value = ''
   })

@@ -214,6 +214,8 @@ func SanitizeClientSessionDescription(incoming, existing string) string {
 type SessionListQuery struct {
 	TenantID uint64
 	UserID   string
+	// HasMessages excludes empty drafts without requiring a successful answer.
+	HasMessages bool
 	// TenantWide is reserved for admin-only management reports. When false,
 	// ListSessions derives the regular per-owner scope from the request context.
 	TenantWide bool

@@ -143,6 +143,7 @@ type EmbedImage = { url?: string; data?: string }
 type EmbedAttachment = { file_name: string; file_size?: number }
 
 const props = defineProps<{
+  ensureSession: () => Promise<void>
   sessionId: string
   sessionSig: string
   visitorId: string
@@ -277,6 +278,7 @@ const {
   setSuggestionAttribution,
 } = useEmbedChatSession({
   sessionId: sessionIdRef,
+  ensureSession: props.ensureSession,
   sessionSig: sessionSigRef,
   visitorId: visitorIdRef,
   channelId: props.channelId,

@@ -1,6 +1,7 @@
 <template>
   <EmbedChatCore
     :session-id="sessionId"
+    :ensure-session="ensureSession"
     :session-sig="sessionSig"
     :visitor-id="visitorId"
     :channel-id="channelId"
@@ -26,6 +27,7 @@ import { defineAsyncComponent } from 'vue'
 const EmbedChatCore = defineAsyncComponent(() => import('@/views/embed/EmbedChatCore.vue'))
 
 defineProps<{
+  ensureSession: () => Promise<void>
   sessionId: string
   sessionSig: string
   visitorId: string

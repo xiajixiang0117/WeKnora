@@ -149,26 +149,16 @@ export function useEmbedBridge(channelId: Ref<string>) {
       }
 
       // Resume a persisted session when still valid and still bound to the same
-      // agent; otherwise create a fresh one (e.g. after rebinding the channel).
+      // agent; otherwise stay in a local draft until the visitor sends a message.
       const configAgentId = String(res.data.agent_id || '').trim()
       let resolved: StoredSession | null = null
       const stored = readStoredSession(id)
       const agentMatches = !stored?.agentId || !configAgentId || stored.agentId === configAgentId
       if (stored && agentMatches && (await isStoredSessionValid(id, apiToken, stored))) {
         resolved = { ...stored, agentId: configAgentId || stored.agentId }
-      } else {
-        const sessionRes = await createEmbedSession(id, apiToken)
-        const newId = sessionRes?.data?.id || ''
-        if (newId) {
-          resolved = { id: newId, sig: sessionRes?.data?.sig || '', agentId: configAgentId }
-        }
       }
-      if (!resolved) {
-        loadError.value = t('embedPublish.sessionFailed')
-        return
-      }
-      sessionId.value = resolved.id
-      sessionSig.value = resolved.sig
+      sessionSig.value = resolved?.sig || ''
+      sessionId.value = resolved?.id || ''
       writeStoredSession(id, resolved)
       token.value = apiToken
       postEmbedReady(id)
@@ -187,24 +177,38 @@ export function useEmbedBridge(channelId: Ref<string>) {
     }
   }
 
-  // Discard the current conversation and start a fresh signed session. Backing
-  // the "新建对话" affordance — also the privacy escape hatch on shared devices.
-  const startNewSession = async () => {
-    const id = channelId.value
-    const apiToken = token.value
-    if (!id || !apiToken) return
-    try {
-      const sessionRes = await createEmbedSession(id, apiToken)
-      const newId = sessionRes?.data?.id || ''
-      if (!newId) return
-      const agentId = String(config.value?.agent_id || '').trim()
-      const next: StoredSession = { id: newId, sig: sessionRes?.data?.sig || '', agentId }
-      sessionSig.value = next.sig
-      sessionId.value = next.id
-      writeStoredSession(id, next)
-    } catch {
-      // Non-fatal: keep the current session if creating a new one fails.
+  let pendingSession: Promise<void> | null = null
+  const ensureSession = async () => {
+    if (sessionId.value) return
+    if (!pendingSession) {
+      pendingSession = (async () => {
+        const id = channelId.value
+        if (!id || !token.value || bootstrapping.value) throw new Error('embed not ready')
+        const response = await createEmbedSession(id, token.value)
+        const next: StoredSession = {
+          id: response?.data?.id || '',
+          sig: response?.data?.sig || '',
+          agentId: String(config.value?.agent_id || '').trim(),
+        }
+        if (!next.id || !next.sig) throw new Error('failed to create session')
+        sessionSig.value = next.sig
+        sessionId.value = next.id
+        writeStoredSession(id, next)
+      })()
     }
+    try {
+      await pendingSession
+    } finally {
+      pendingSession = null
+    }
+  }
+
+  // New chat is a local draft; persist it only when the visitor actually sends.
+  const startNewSession = () => {
+    if (pendingSession) return
+    sessionSig.value = ''
+    sessionId.value = ''
+    writeStoredSession(channelId.value, null)
   }
 
   const start = async () => {
@@ -263,5 +267,6 @@ export function useEmbedBridge(channelId: Ref<string>) {
     bootstrapping,
     hostContext,
     startNewSession,
+    ensureSession,
   }
 }
