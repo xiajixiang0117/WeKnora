@@ -253,7 +253,7 @@ watch(() => props.visible, async (open) => {
   position: absolute;
   width: 380px;
   max-width: calc(100% - 32px);
-  height: 500px;
+  height: 880px;
   max-height: calc(100% - 88px);
   border-radius: 12px;
   overflow: hidden;

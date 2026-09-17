@@ -103,10 +103,13 @@
           type="button"
           class="embed-send-btn"
           :class="{ disabled: !canSend }"
+          :disabled="!canSend"
           :aria-label="t('input.send')"
           @click="submit"
         >
-          <img src="@/assets/img/sending-aircraft.svg" :alt="t('input.send')" />
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
         </button>
       </div>
     </div>
@@ -270,9 +273,9 @@ onUnmounted(() => {
   max-width: 800px;
   margin: 0 auto;
   background: var(--td-bg-color-container, #fff);
-  border-radius: 12px;
-  border: 0.5px solid var(--td-component-border, #e7e7e7);
-  box-shadow: 0 6px 6px rgba(0, 0, 0, 0.04), 0 12px 12px -1px rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  border: 1px solid var(--td-component-stroke, #e7e7e7);
+  box-shadow: 0 4px 18px rgba(24, 39, 68, 0.05);
   transition: border-color 0.15s ease;
 
   &:focus-within {
@@ -300,12 +303,12 @@ onUnmounted(() => {
       border: none;
       box-shadow: none;
       background: transparent;
-      padding: 14px 16px 8px;
+      padding: 12px 14px 6px;
       font-size: 14px;
       line-height: 1.5;
       // Preserve two editable rows even when an initially hidden frame reports
       // a zero-height autosize measurement. This overrides TDesign's inline min.
-      min-height: 64px !important;
+      min-height: 54px !important;
       resize: none;
       overflow-x: hidden;
       overflow-y: auto;
@@ -325,7 +328,7 @@ onUnmounted(() => {
   }
 
   &__bar {
-    margin: 0 12px 12px;
+    margin: 0 10px 10px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -440,6 +443,7 @@ onUnmounted(() => {
   border: none;
   border-radius: 6px;
   cursor: pointer;
+  color: #fff;
   background: var(--embed-primary, var(--td-brand-color, #07c05f));
   transition: background 0.15s ease, opacity 0.15s ease;
 
@@ -449,13 +453,10 @@ onUnmounted(() => {
 
   &.disabled {
     cursor: not-allowed;
-    opacity: 0.45;
+    background: var(--td-bg-color-secondarycontainer, #f5f6f8);
+    color: var(--td-text-color-disabled, #b8bdc7);
   }
 
-  img {
-    width: 16px;
-    height: 16px;
-  }
 }
 
 .embed-stop-btn {
@@ -474,5 +475,9 @@ onUnmounted(() => {
   &:hover {
     background: var(--td-bg-color-component-hover);
   }
+}
+.embed-input-box button:focus-visible {
+  outline: 2px solid var(--embed-primary, var(--td-brand-color));
+  outline-offset: 3px;
 }
 </style>

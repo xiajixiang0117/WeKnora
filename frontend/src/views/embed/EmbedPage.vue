@@ -175,6 +175,7 @@ watch(headerTitle, (title) => {
 <style scoped lang="less">
 .embed-page {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--td-bg-color-container, #fff);
@@ -194,9 +195,10 @@ watch(headerTitle, (title) => {
 .embed-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--td-component-stroke);
+  gap: 10px;
+  min-height: 64px;
+  box-sizing: border-box;
+  padding: 16px 20px;
   background: var(--td-bg-color-container);
   flex-shrink: 0;
 
@@ -204,8 +206,8 @@ watch(headerTitle, (title) => {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 30px;
+    height: 30px;
     border-radius: 10px;
     flex-shrink: 0;
     background: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
@@ -233,7 +235,7 @@ watch(headerTitle, (title) => {
 
   &__title {
     margin: 0;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
     line-height: 1.35;
     color: var(--td-text-color-primary);

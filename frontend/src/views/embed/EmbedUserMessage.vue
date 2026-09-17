@@ -101,19 +101,19 @@ const formatFileSize = (bytes: number): string => {
   width: 100%;
 
   &.is-embedded .user_msg {
-    max-width: 100%;
+    max-width: min(88%, 680px);
   }
 }
 
 .user_msg {
   width: max-content;
   max-width: min(76%, 680px);
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--td-bg-color-secondarycontainer);
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--embed-primary, var(--td-brand-color)) 5%, var(--td-bg-color-container, #fff));
   margin-left: auto;
   color: var(--td-text-color-primary);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.6;
   text-align: left;
   word-break: break-word;

@@ -37,6 +37,9 @@
               @click="handleSuggestedClick(item.question)"
             >
               <span class="embed-suggested__text">{{ item.question }}</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" class="embed-suggested__arrow">
+                <path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
             </button>
           </div>
         </div>
@@ -93,11 +96,11 @@
 
     <div class="embed-chat__input">
       <transition name="scroll-btn-fade">
-        <div v-show="userHasScrolledUp" class="scroll-to-bottom-btn" @click="onClickScrollToBottom" aria-label="scroll to bottom">
+        <button type="button" v-show="userHasScrolledUp" class="scroll-to-bottom-btn" @click="onClickScrollToBottom" aria-label="scroll to bottom">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
-        </div>
+        </button>
       </transition>
       <EmbedInputField
         :isReplying="isReplying"
@@ -412,16 +415,18 @@ watch(
   width: 100%;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .embed-chat__messages {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
   max-width: 800px;
   margin: 0 auto;
   width: 100%;
-  padding: 12px 16px 16px;
+  padding: 16px 20px 24px;
   box-sizing: border-box;
 }
 
@@ -449,21 +454,24 @@ watch(
   }
 
   &__card {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     width: 100%;
-    padding: 10px 12px;
+    min-height: 46px;
+    padding: 12px 16px;
     border: 1px solid var(--td-component-stroke);
-    border-radius: 10px;
+    border-radius: 12px;
     background: var(--td-bg-color-container);
     text-align: left;
     cursor: pointer;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    font: inherit;
+    transition: border-color 0.15s ease, background 0.15s ease;
 
     &:hover {
       border-color: color-mix(in srgb, var(--td-text-color-primary) 10%, var(--td-component-stroke));
       background: color-mix(in srgb, var(--td-text-color-primary) 4%, var(--td-bg-color-container));
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     }
 
     &--skeleton {
@@ -476,8 +484,15 @@ watch(
     }
   }
 
+  &__arrow {
+    flex-shrink: 0;
+    color: var(--td-text-color-placeholder);
+  }
+
   &__text {
-    font-size: 13px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: 14px;
     line-height: 1.45;
     color: var(--td-text-color-primary);
   }
@@ -487,40 +502,20 @@ watch(
   display: flex;
   justify-content: flex-start;
   width: 100%;
-  animation: welcome-in 0.28s ease both;
 
   &__text {
     margin: 0;
-    max-width: min(88%, 520px);
-    padding: 10px 14px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 14px 16px;
     font-size: 14px;
     line-height: 1.55;
     color: var(--td-text-color-primary);
     white-space: pre-wrap;
     word-break: break-word;
-    background: color-mix(
-      in srgb,
-      var(--embed-primary, var(--td-brand-color)) 7%,
-      var(--td-bg-color-container, #fff)
-    );
-    border: 1px solid color-mix(
-      in srgb,
-      var(--embed-primary, var(--td-brand-color)) 14%,
-      var(--td-component-stroke, #e7e7e7)
-    );
-    border-radius: 4px 14px 14px 14px;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-  }
-}
-
-@keyframes welcome-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+    background: var(--td-bg-color-container, #fff);
+    border: 1px solid var(--td-component-stroke, #e7e7e7);
+    border-radius: 12px;
   }
 }
 
@@ -556,7 +551,8 @@ watch(
 .embed-chat__input {
   position: relative;
   flex-shrink: 0;
-  padding: 8px 16px 16px;
+  padding: 12px 20px 20px;
+  background: var(--td-bg-color-container, #fff);
   box-sizing: border-box;
 }
 
@@ -597,8 +593,7 @@ watch(
 
 .scroll-to-bottom-btn {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 20px;
   bottom: calc(100% + 8px);
   z-index: 10;
   width: 36px;
@@ -622,6 +617,22 @@ watch(
 .scroll-btn-fade-enter-from,
 .scroll-btn-fade-leave-to {
   opacity: 0;
-  transform: translateX(-50%) translateY(8px);
+  transform: translateY(8px);
+}
+.embed-suggested__card:focus-visible,
+.scroll-to-bottom-btn:focus-visible {
+  outline: 2px solid var(--embed-primary, var(--td-brand-color));
+  outline-offset: 3px;
+}
+
+@media (max-width: 360px) {
+  .embed-chat__messages, .embed-chat__input { padding-inline: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .embed-suggested__card, .sk-line, .scroll-btn-fade-enter-active, .scroll-btn-fade-leave-active {
+    animation: none;
+    transition: none;
+  }
 }
 </style>
