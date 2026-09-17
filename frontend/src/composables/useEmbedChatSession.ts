@@ -16,7 +16,7 @@ import {
   stopEmbedSession,
 } from '@/api/embed'
 import { embedToast } from '@/utils/embedToast'
-import { buildQueryWithHostContext } from '@/utils/embedContext'
+import { buildQueryWithHostContext, restoreEmbedMessageDisplay } from '@/utils/embedContext'
 import { fileToDataURI } from '@/utils/embedFile'
 import { useI18n } from 'vue-i18n'
 import { useChatStreamHandler } from '@/composables/useChatStreamHandler'
@@ -214,7 +214,7 @@ export function useEmbedChatSession(options: {
         }
         if (batch.length < limit.value) hasMoreHistory.value = false
         created_at.value = nextCursor
-        await handleMsgList(batch, isScrollType, scrollHeight)
+        await handleMsgList(batch.map(restoreEmbedMessageDisplay), isScrollType, scrollHeight)
       })
       .catch((err) => {
         console.error('Failed to load messages:', err)

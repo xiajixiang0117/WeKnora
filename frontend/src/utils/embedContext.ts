@@ -10,3 +10,15 @@ export function buildQueryWithHostContext(
   if (!lines.length) return query
   return `[Host context]\n${lines.join('\n')}\n\n${query}`
 }
+
+/** Restore the display text of persisted embed queries, keeping model context on the server. */
+export function restoreEmbedMessageDisplay<T extends { role?: unknown; content?: unknown }>(
+  message: T,
+): T {
+  if (message.role !== 'user' || typeof message.content !== 'string') return message
+  // Only recognize the prefix emitted by buildQueryWithHostContext. Do not
+  // remove context quoted later in a question or alter assistant responses.
+  const prefix = /^\[Host context\]\n[^\n]+: [\s\S]*?\n\n/.exec(message.content)
+  if (!prefix) return message
+  return { ...message, content: message.content.slice(prefix[0].length) }
+}
