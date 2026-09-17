@@ -55,11 +55,31 @@ func newResourceStreamDecoder(registry *resourceRegistry) *resourceStreamDecoder
 					}
 				}
 			}
+			if escapedHold := escapedResourceHoldLen(combined); escapedHold > hold {
+				hold = escapedHold
+			}
 			return hold
 		},
 		emit:  registry.DecodeText,
 		flush: registry.DecodeText,
 	}}
+}
+
+// Hold escaped scheme prefixes until the next byte determines whether they
+// form a resource handle. This also covers providers splitting a backslash run.
+func escapedResourceHoldLen(value string) int {
+	idx := strings.LastIndex(value, "res")
+	if idx < 0 || !strings.Contains(value[idx:], `\`) {
+		return 0
+	}
+	tail := strings.ReplaceAll(value[idx:], `\`, "")
+	if strings.HasPrefix("res://", tail) {
+		return len(value) - idx
+	}
+	if strings.HasPrefix(tail, "res://") && allDigits(strings.TrimPrefix(tail, "res://")) {
+		return len(value) - idx
+	}
+	return 0
 }
 
 func (d *resourceStreamDecoder) Feed(chunk string) string {
@@ -151,13 +171,16 @@ func newOrphanResourceStreamFilter() *orphanResourceStreamFilter {
 	return &orphanResourceStreamFilter{hold: streamHold{
 		holdLen: orphanResourceHoldLen,
 		emit: func(released string) string {
-			return resourceHandleShapeRE.ReplaceAllString(released, "")
+			return escapedResourceHandleRE.ReplaceAllString(released, "")
 		},
 		flush: orphanResourceFlush,
 	}}
 }
 
 func orphanResourceHoldLen(combined string) int {
+	if hold := escapedResourceHoldLen(combined); hold > 0 {
+		return hold
+	}
 	const prefix = "res://"
 	holdAt := -1
 	// Unknown handles must be safe across every provider split, including
@@ -181,6 +204,10 @@ func orphanResourceHoldLen(combined string) int {
 }
 
 func orphanResourceFlush(pending string) string {
+	pending = normalizeResourceHandles(pending)
+	if escapedResourceHoldLen(pending) > 0 && strings.Contains(pending, ":") {
+		pending = strings.ReplaceAll(pending, `\`, "")
+	}
 	// A stream that ends mid-token must not surface the model-context
 	// protocol fragment. Preserve ordinary r/re/res prose, but discard any
 	// suffix that has already crossed into the reserved URL-like syntax.

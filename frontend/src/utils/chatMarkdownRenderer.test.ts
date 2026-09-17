@@ -7,6 +7,7 @@ import {
   createChatMarkdownRenderer,
   markStandaloneStrongParagraphs,
   normalizeFullwidthMarkdownImageParentheses,
+  normalizeEscapedMarkdownImageParentheses,
   normalizeLegacyImageContextMarkup,
   preprocessMathDelimiters,
   renderChatMarkdown,
@@ -24,6 +25,45 @@ import {
 } from './citationMarkdown.ts'
 
 const SAMPLE_DOC = 'example-report.docx'
+
+test('escaped image parentheses render multiline alt text as an image, not math', () => {
+  const ref = 'resource://AbCdEfGhIjKlMnOpQrStUv'
+  for (const escape of ['\\', '\\\\\\']) {
+    const alt = `${escape}*${escape}*GPIO${escape}*${escape}*\n${escape}- PINMUX (${escape}\`bf0${escape}_hal.c${escape}\`)`
+    const input = `![${alt}]${escape}(${ref}${escape})`
+    assert.equal(normalizeEscapedMarkdownImageParentheses(input), `![${alt}](${ref})`)
+    const html = renderChatMarkdown(input, {
+      renderer: createChatMarkdownRenderer(),
+      escapeMarkdown: (text) => text,
+      sanitizeHtml: (text) => text,
+    })
+    assert.match(html, /<img src="resource:\/\/AbCdEfGhIjKlMnOpQrStUv"/)
+    assert.doesNotMatch(html, /katex/)
+  }
+})
+
+test('escaped image repair preserves code, math and unsupported schemes', () => {
+  for (const input of [
+    '`![alt]\\(resource://example\\)`',
+    '```md\n![alt]\\(resource://example\\)\n```',
+    '~~~md\n![alt]\\(resource://example\\)\n~~~',
+    '\\(x+y\\)',
+    '![alt]\\(unknown://example\\)',
+  ]) {
+    assert.equal(normalizeEscapedMarkdownImageParentheses(input), input)
+  }
+})
+
+test('escaped incomplete image uses the streaming placeholder', () => {
+  const html = renderChatMarkdown('![GPIO]\\(resource://AbCd', {
+    renderer: createChatMarkdownRenderer(),
+    escapeMarkdown: (text) => text,
+    sanitizeHtml: (text) => text,
+    streaming: true,
+  })
+  assert.match(html, /streaming-image-loading/)
+  assert.doesNotMatch(html, /katex|resource:\/\//)
+})
 const SAMPLE_CHUNK_A = '00000001-0000-4000-8000-000000000001'
 const SAMPLE_CHUNK_B = '00000002-0000-4000-8000-000000000002'
 const SAMPLE_CHUNK_C = '00000003-0000-4000-8000-000000000003'

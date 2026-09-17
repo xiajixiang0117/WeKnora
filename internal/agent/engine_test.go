@@ -91,6 +91,19 @@ func TestStreamLLMResourceAliasesRoundTrip(t *testing.T) {
 	require.Equal(t, "source=res://0001", model.calls[0][0].Content)
 }
 
+func TestStreamLLMEscapedResourceAliasRoundTrip(t *testing.T) {
+	const ref = "resource://AbCdEfGhIjKlMnOpQrStUv"
+	model := &mockChat{responses: []mockResponse{{chunks: []types.StreamResponse{
+		{ResponseType: types.ResponseTypeAnswer, Content: `![GPIO]\(res\`},
+		{ResponseType: types.ResponseTypeAnswer, Content: `://0001)`, Done: true},
+	}}}}
+	engine := newTestEngine(t, model)
+	result, err := engine.streamLLMToEventBus(context.Background(),
+		[]chat.Message{{Role: "tool", Content: "source=" + ref}}, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, `![GPIO]\(`+ref+")", result.Content)
+}
+
 // TestStreamLLMSummarySlugSurvivesDocumentCompaction is the regression guard for
 // the mangled `summary/<uuid>` → `summary/d1` bug. A wiki summary-page slug
 // embeds a document's UUID. The unified model-context registry owns the

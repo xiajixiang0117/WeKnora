@@ -93,6 +93,27 @@ const FULLWIDTH_IMAGE_CLOSE_RE = new RegExp(
   'gi',
 )
 
+const ESCAPED_IMAGE_OPEN_RE = new RegExp(
+  `(!\\[(?:\\\\.|[^\\]\\\\])*\\])\\\\+\\((?=${IMAGE_URL_SCHEME}://)`,
+  'gi',
+)
+const ESCAPED_IMAGE_CLOSE_RE = new RegExp(
+  `(!\\[(?:\\\\.|[^\\]\\\\])*\\]\\(${IMAGE_URL_SCHEME}://[^\\s)\\\\]+)\\\\+\\)`,
+  'gi',
+)
+
+/** Repair escaped image delimiters before they can be interpreted as math. */
+export function normalizeEscapedMarkdownImageParentheses(content: string): string {
+  if (!content.includes('\\')) return content
+  const parts = content.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~|(?<!\\)`[^`\n]*`)/g)
+  for (let i = 0; i < parts.length; i += 2) {
+    parts[i] = parts[i]
+      .replace(ESCAPED_IMAGE_OPEN_RE, '$1(')
+      .replace(ESCAPED_IMAGE_CLOSE_RE, '$1)')
+  }
+  return parts.join('')
+}
+
 /**
  * Repair image Markdown when a model localizes its destination parentheses:
  * `![alt]（resource://…）` -> `![alt](resource://…)`.
@@ -466,7 +487,9 @@ export function renderChatMarkdown(rawMarkdown: unknown, options: RenderChatMark
   )
   const citationSafeText = stripIncompleteCitationTag(imageContextSafeText)
   const { text: tagSafe, tags } = preserveCitationTags(citationSafeText)
-  const normalizedImageMarkdown = normalizeFullwidthMarkdownImageParentheses(tagSafe)
+  const normalizedImageMarkdown = normalizeEscapedMarkdownImageParentheses(
+    normalizeFullwidthMarkdownImageParentheses(tagSafe),
+  )
   // Skill-generated file names routinely contain spaces and parentheses, which
   // marked would split the destination on. Collapse each reference into a
   // single token before parsing.

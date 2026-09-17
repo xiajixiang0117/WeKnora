@@ -40,6 +40,14 @@ var storedRefRE = regexp.MustCompile(
 // orphan filter.
 var resourceHandleShapeRE = regexp.MustCompile(`res://\d+`)
 
+var escapedResourceHandleRE = regexp.MustCompile(`res\\*:\\*/\\*/\d+`)
+
+func normalizeResourceHandles(value string) string {
+	return escapedResourceHandleRE.ReplaceAllStringFunc(value, func(handle string) string {
+		return strings.ReplaceAll(handle, `\`, "")
+	})
+}
+
 // resourceRegistry assigns low-entropy, request-local handles to stable resource
 // handles. It is safe to reuse across all rounds of one Agent execution.
 type resourceRegistry struct {
@@ -71,6 +79,7 @@ func (r *resourceRegistry) DecodeText(value string) string {
 	if r == nil || value == "" {
 		return value
 	}
+	value = normalizeResourceHandles(value)
 	pairs := r.table.pairs()
 	sort.SliceStable(pairs, func(i, j int) bool { return len(pairs[i].handle) > len(pairs[j].handle) })
 	for _, item := range pairs {
@@ -86,7 +95,7 @@ func (r *resourceRegistry) StripOrphanHandles(value string) string {
 	if value == "" {
 		return value
 	}
-	return resourceHandleShapeRE.ReplaceAllString(value, "")
+	return escapedResourceHandleRE.ReplaceAllString(value, "")
 }
 
 // EncodeMessages returns a copied message slice with textual references
@@ -134,7 +143,7 @@ func (r *resourceRegistry) OrphanHandles(decoded string) []string {
 	}
 	var orphans []string
 	seen := make(map[string]struct{})
-	for _, match := range resourceHandleShapeRE.FindAllString(decoded, -1) {
+	for _, match := range resourceHandleShapeRE.FindAllString(normalizeResourceHandles(decoded), -1) {
 		if r != nil && r.table.has(match) {
 			continue
 		}
