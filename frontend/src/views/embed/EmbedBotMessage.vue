@@ -253,7 +253,9 @@ onMounted(() => {
 .embed-citation-float {
   position: absolute;
   z-index: 10000;
-  max-width: 320px;
+  box-sizing: border-box;
+  max-width: min(320px, calc(100vw - 16px));
+  overflow-wrap: anywhere;
   padding: 10px 12px;
   border-radius: 8px;
   background: var(--td-bg-color-container);
@@ -275,7 +277,9 @@ onMounted(() => {
 
   &__body {
     max-height: 200px;
+    overflow-x: hidden;
     overflow-y: auto;
+    overscroll-behavior: contain;
     white-space: pre-wrap;
   }
 

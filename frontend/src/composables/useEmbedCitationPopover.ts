@@ -49,8 +49,9 @@ export function useEmbedCitationPopover(
 
   const positionFor = (el: HTMLElement, offsetY = 0) => {
     const rect = el.getBoundingClientRect()
+    const width = Math.min(320, window.innerWidth - 16)
     float.value.top = rect.bottom + window.scrollY + 6 + offsetY
-    float.value.left = Math.min(rect.left + window.scrollX, window.innerWidth - 320)
+    float.value.left = window.scrollX + Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))
   }
 
   const openWeb = (el: HTMLElement) => {
