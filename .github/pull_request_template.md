@@ -36,6 +36,7 @@ exact command and failure here.
 - [ ] Self-reviewed the code
 - [ ] Added/updated tests covering the change
 - [ ] Updated related documentation (README, `docs/`, Swagger annotations, etc.)
+- [ ] Non-trivial decisions are recorded in `.agents/notes/` and `npm run verify-notes` passes (see `docs/AGENT_NOTES.md`)
 - [ ] Breaking changes are clearly called out in the description above
 
 ## Screenshots / Recordings
