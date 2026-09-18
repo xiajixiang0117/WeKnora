@@ -102,11 +102,11 @@ func (s *Store) enrichKnowledgeBaseNames(ctx context.Context, snapshot *Snapshot
 		if step.Retrieval != nil && step.Retrieval.KnowledgeBaseID != "" && !seen[step.Retrieval.KnowledgeBaseID] {
 			ids, seen[step.Retrieval.KnowledgeBaseID] = append(ids, step.Retrieval.KnowledgeBaseID), true
 		}
-		if step.Rerank != nil {
-			for _, candidate := range step.Rerank.Candidates {
-				if candidate.KnowledgeBaseID != "" && !seen[candidate.KnowledgeBaseID] {
-					ids, seen[candidate.KnowledgeBaseID] = append(ids, candidate.KnowledgeBaseID), true
-				}
+	}
+	for _, group := range snapshot.CandidateGroups() {
+		for _, candidate := range group {
+			if candidate.KnowledgeBaseID != "" && !seen[candidate.KnowledgeBaseID] {
+				ids, seen[candidate.KnowledgeBaseID] = append(ids, candidate.KnowledgeBaseID), true
 			}
 		}
 	}
@@ -126,14 +126,11 @@ func (s *Store) enrichKnowledgeBaseNames(ctx context.Context, snapshot *Snapshot
 	for i := range snapshot.Steps {
 		if retrieval := snapshot.Steps[i].Retrieval; retrieval != nil {
 			retrieval.KnowledgeBaseName = names[retrieval.KnowledgeBaseID]
-			for j := range retrieval.Candidates {
-				retrieval.Candidates[j].KnowledgeBaseName = names[retrieval.Candidates[j].KnowledgeBaseID]
-			}
 		}
-		if rerank := snapshot.Steps[i].Rerank; rerank != nil {
-			for j := range rerank.Candidates {
-				rerank.Candidates[j].KnowledgeBaseName = names[rerank.Candidates[j].KnowledgeBaseID]
-			}
+	}
+	for _, group := range snapshot.CandidateGroups() {
+		for i := range group {
+			group[i].KnowledgeBaseName = names[group[i].KnowledgeBaseID]
 		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/modelcontext"
 	"github.com/Tencent/WeKnora/internal/models/chat"
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
@@ -46,7 +47,9 @@ func prepareMessagesWithModelContext(
 			})
 			continue
 		}
-		knowledgeResults = append(knowledgeResults, result)
+		snapshot := *result
+		snapshot.Content = getEnrichedPassageForChat(ctx, result)
+		knowledgeResults = append(knowledgeResults, &snapshot)
 		knowledgeRows = append(knowledgeRows, map[string]interface{}{
 			"chunk_id":          result.ID,
 			"knowledge_id":      result.KnowledgeID,
@@ -56,7 +59,7 @@ func prepareMessagesWithModelContext(
 			"knowledge_type":    result.KnowledgeType,
 			"chunk_index":       result.ChunkIndex,
 			"chunk_type":        result.ChunkType,
-			"content":           getEnrichedPassageForChat(ctx, result),
+			"content":           snapshot.Content,
 		})
 	}
 	registry.RegisterSearchResults(knowledgeResults)
@@ -95,6 +98,7 @@ func prepareMessagesWithModelContext(
 	if !replaced {
 		messages[last].Content = modelContexts + "\n\n" + messages[last].Content
 	}
+	retrievaltrace.RecordGenerationContext(ctx, "rag", knowledgeResults)
 	return messages, registry
 }
 

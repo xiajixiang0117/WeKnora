@@ -971,6 +971,10 @@ func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle
 				types.TenantIDContextKey,
 				reqCtx.session.TenantID,
 			)
+			retrievaltrace.RecordAnswer(traceCtx, streamCtx.assistantMessage.Content,
+				streamCtx.assistantMessage.KnowledgeReferences,
+				status == "completed" && streamCtx.assistantMessage.IsCompleted,
+				streamCtx.assistantMessage.IsFallback)
 			if err := h.traceStore.Save(
 				traceCtx,
 				reqCtx.session.TenantID,

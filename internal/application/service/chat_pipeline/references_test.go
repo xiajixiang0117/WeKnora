@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +29,13 @@ func TestPrepareMessagesWithModelContextUsesChunkCentricContext(t *testing.T) {
 		},
 	}
 
-	messages, refs := prepareMessagesWithModelContext(context.Background(), manage)
+	ctx := retrievaltrace.WithRecorder(context.Background(), retrievaltrace.NewRecorder("question"))
+	messages, refs := prepareMessagesWithModelContext(ctx, manage)
+	snapshot := retrievaltrace.FromContext(ctx).Snapshot()
+	require.Len(t, snapshot.Steps, 1)
+	require.Equal(t, "generation_context", snapshot.Steps[0].Kind)
+	require.Len(t, snapshot.Steps[0].Context.Candidates, 2)
+	require.Equal(t, "first content", snapshot.Steps[0].Context.Candidates[0].Content)
 	require.Len(t, messages, 2)
 	require.Contains(t, messages[0].Content, "Source handling protocol")
 	require.Contains(t, messages[1].Content, `<document id="d1" kb="b1" title="Doc">`)

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/Tencent/WeKnora/internal/event"
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 	"github.com/google/uuid"
@@ -113,6 +115,7 @@ func (p *PluginChatCompletionStream) OnEvent(ctx context.Context,
 		answerID := fmt.Sprintf("%s-answer", uuid.New().String()[:8])
 		thinkingOpen := false
 		answerCompleted := false
+		var rawAnswer strings.Builder
 
 		closeThinking := func() {
 			if !thinkingOpen {
@@ -224,10 +227,14 @@ func (p *PluginChatCompletionStream) OnEvent(ctx context.Context,
 					if answerCompleted {
 						continue
 					}
+					if retrievaltrace.FromContext(ctx) != nil {
+						rawAnswer.WriteString(response.Content)
+					}
 					response.Content = answerDecoder.Feed(response.Content)
 					if response.Done {
 						response.Content += answerDecoder.Flush()
 						answerCompleted = true
+						retrievaltrace.RecordModelCitations(ctx, modelContext, rawAnswer.String())
 					}
 					closeThinking()
 					eventBus.Emit(ctx, types.Event{

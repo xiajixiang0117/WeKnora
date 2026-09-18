@@ -159,8 +159,14 @@
             <template #output="{ row }">{{ usageValue(row, 'completion_tokens') }}</template>
             <template #cache="{ row }">{{ usageValue(row, 'cache_read_tokens') }}</template>
             <template #total="{ row }"><strong>{{ usageValue(row, 'total_tokens') }}</strong></template>
+            <template #actions="{ row }"><t-button size="small" variant="text" @click="selectedAnswer = row">{{ t('sessionManagement.viewAnswer') }}</t-button></template>
           </t-table>
         </div>
+
+        <section v-if="selectedAnswer" class="session-management__trace-detail">
+          <div class="session-management__detail-heading"><h2>{{ t('sessionManagement.finalAnswer') }}</h2><time>{{ formatDate(selectedAnswer.created_at) }}</time></div>
+          <TraceAnswer :content="selectedAnswer.content" :completed="selectedAnswer.is_completed" :fallback="selectedAnswer.is_fallback" />
+        </section>
 
         <div class="session-management__detail-heading session-management__trace-heading">
           <h2>{{ t('sessionManagement.executionTraces') }}</h2>
@@ -185,15 +191,31 @@
         </div>
         <div v-else class="session-management__empty-trace">{{ t('sessionManagement.noTraces') }}</div>
 
-        <section v-if="selectedTrace" class="session-management__trace-detail">
+        <div v-if="traceLoading" class="session-management__drawer-state"><t-loading size="small" />{{ t('sessionManagement.loadingTraces') }}</div>
+        <div v-else-if="traceError" class="session-management__drawer-state session-management__drawer-state--error">{{ traceError }}</div>
+        <section v-else-if="selectedTrace" class="session-management__trace-detail">
           <div class="session-management__detail-heading">
             <h2>{{ t('sessionManagement.traceDetail') }}</h2>
             <code>{{ selectedTrace.request_id }}</code>
           </div>
           <p class="session-management__trace-query"><span>{{ t('sessionManagement.columns.query') }}</span>{{ displayQuery(selectedTrace.trace.original_query) }}</p>
+          <section class="session-management__trace-outcome">
+            <h3>{{ t('sessionManagement.finalAnswer') }}</h3>
+            <TraceAnswer v-if="selectedTrace.trace.answer" :content="selectedTrace.trace.answer.content" :completed="selectedTrace.trace.answer.is_completed" :fallback="selectedTrace.trace.answer.is_fallback" />
+            <p v-else class="session-management__muted">{{ t('sessionManagement.answerUnavailable') }}</p>
+            <h3>{{ t('sessionManagement.citedChunks') }}<template v-if="selectedTrace.trace.answer"> ({{ selectedTrace.trace.answer.cited_count }})</template></h3>
+            <p class="session-management__muted">{{ t('sessionManagement.citedChunksNote') }}</p>
+            <template v-if="selectedTrace.trace.answer">
+              <p v-if="selectedTrace.trace.answer.truncated" class="session-management__trace-error">{{ t('sessionManagement.truncated') }}</p>
+              <TraceCandidates v-if="selectedTrace.trace.answer.cited_candidates?.length" :candidates="selectedTrace.trace.answer.cited_candidates" />
+              <p v-else class="session-management__muted">{{ t('sessionManagement.noCitedChunks') }}</p>
+            </template>
+            <p v-else class="session-management__muted">{{ t('sessionManagement.answerUnavailable') }}</p>
+            <p v-if="!selectedTrace.trace.steps?.some(step => step.context)" class="session-management__muted">{{ t('sessionManagement.contextUnavailable') }}</p>
+          </section>
           <details v-for="step in selectedTrace.trace.steps" :key="step.sequence" class="session-management__trace-step" open>
             <summary>
-              <strong>#{{ step.sequence }} · {{ step.kind }}</strong>
+              <strong>#{{ step.sequence }} · {{ step.kind === 'generation_context' ? t('sessionManagement.generationContext') : step.kind }}<small v-if="step.source"> · {{ step.source }}</small></strong>
               <t-tag size="small" variant="light">{{ step.status }}</t-tag>
             </summary>
             <div class="session-management__trace-step-content">
@@ -207,9 +229,7 @@
                   <span>{{ t('sessionManagement.recalledCount') }}</span>{{ step.retrieval.returned_count }}
                   <span v-if="step.retrieval.truncated" class="session-management__trace-error">{{ t('sessionManagement.truncated') }}</span>
                 </p>
-                <t-table v-if="step.retrieval.candidates?.length" row-key="chunk_id" :data="step.retrieval.candidates" :columns="retrievalColumns" size="small">
-                  <template #retrieval_score="{ row }">{{ formatScore(row.retrieval_score) }}</template>
-                </t-table>
+                <TraceCandidates :candidates="step.retrieval.candidates" scores="retrieval" />
               </template>
               <template v-if="step.rerank">
                 <p>
@@ -217,12 +237,12 @@
                   <span>{{ t('sessionManagement.threshold') }}</span>{{ formatScore(step.rerank.threshold) }}
                   <span v-if="step.rerank.truncated" class="session-management__trace-error">{{ t('sessionManagement.truncated') }}</span>
                 </p>
-                <t-table v-if="step.rerank.candidates?.length" row-key="chunk_id" :data="step.rerank.candidates" :columns="rerankColumns" size="small">
-                  <template #retrieval_score="{ row }">{{ formatScore(row.retrieval_score) }}</template>
-                  <template #model_score="{ row }">{{ scoreOrDash(row.model_score) }}</template>
-                  <template #final_score="{ row }">{{ scoreOrDash(row.final_score) }}</template>
-                  <template #selected="{ row }">{{ row.selected ? t('sessionManagement.selected') : '--' }}</template>
-                </t-table>
+                <TraceCandidates :candidates="step.rerank.candidates" scores="rerank" />
+              </template>
+              <template v-if="step.context">
+                <p>{{ t('sessionManagement.generationContextNote') }} ({{ step.context.captured_count }} / {{ step.context.candidate_count }})</p>
+                <p v-if="step.context.truncated" class="session-management__trace-error">{{ t('sessionManagement.truncated') }}</p>
+                <TraceCandidates :candidates="step.context.candidates" />
               </template>
             </div>
           </details>
@@ -235,6 +255,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import TraceCandidates from './TraceCandidates.vue'
+import TraceAnswer from './TraceAnswer.vue'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 import { restoreEmbedMessageDisplay } from '@/utils/embedContext'
 import {
@@ -269,6 +291,11 @@ const traces = ref<RetrievalTraceSummary[]>([])
 const tracesLoading = ref(false)
 const tracesError = ref('')
 const selectedTrace = ref<RetrievalExecutionTrace | null>(null)
+const selectedAnswer = ref<SessionUsageDetail | null>(null)
+const traceLoading = ref(false)
+const traceError = ref('')
+let detailRequest = 0
+let traceRequest = 0
 
 const sourceOptions = computed(() => [
   { label: t('sessionManagement.allChannels'), value: 'all' },
@@ -299,6 +326,7 @@ const detailColumns = computed(() => [
   { colKey: 'output', title: t('sessionManagement.columns.output'), width: 104, align: 'right' },
   { colKey: 'cache', title: t('sessionManagement.columns.cacheRead'), width: 112, align: 'right' },
   { colKey: 'total', title: t('sessionManagement.columns.total'), width: 104, align: 'right' },
+  { colKey: 'actions', title: '', width: 100, fixed: 'right' },
 ])
 
 const traceColumns = computed(() => [
@@ -307,22 +335,6 @@ const traceColumns = computed(() => [
   { colKey: 'query', title: t('sessionManagement.columns.query'), ellipsis: true },
   { colKey: 'step_count', title: t('sessionManagement.columns.steps'), width: 80, align: 'right' },
   { colKey: 'actions', title: '', width: 92, align: 'center' },
-])
-
-const retrievalColumns = computed(() => [
-  { colKey: 'knowledge_base_name', title: t('sessionManagement.columns.knowledgeBase'), width: 170, ellipsis: true },
-  { colKey: 'knowledge_name', title: t('sessionManagement.columns.document'), width: 220, ellipsis: true },
-  { colKey: 'knowledge_id', title: t('sessionManagement.columns.documentId'), width: 150, ellipsis: true },
-  { colKey: 'chunk_id', title: t('sessionManagement.columns.chunk'), width: 150, ellipsis: true },
-  { colKey: 'retrieval_score', title: t('sessionManagement.columns.retrievalScore'), width: 118, align: 'right' },
-])
-
-const rerankColumns = computed(() => [
-  ...retrievalColumns.value.slice(0, 4),
-  { colKey: 'retrieval_score', title: t('sessionManagement.columns.retrievalScore'), width: 116, align: 'right' },
-  { colKey: 'model_score', title: t('sessionManagement.columns.modelScore'), width: 104, align: 'right' },
-  { colKey: 'final_score', title: t('sessionManagement.columns.finalScore'), width: 104, align: 'right' },
-  { colKey: 'selected', title: t('sessionManagement.columns.selected'), width: 82, align: 'center' },
 ])
 
 async function loadSessions() {
@@ -359,6 +371,12 @@ function onPageChange(context: any) {
 }
 
 async function openDetails(summary: SessionUsageSummary) {
+  const request = ++detailRequest
+  ++traceRequest
+  traceLoading.value = false
+  tracesLoading.value = false
+  traceError.value = ''
+  selectedAnswer.value = null
   selectedSummary.value = summary
   details.value = []
   traces.value = []
@@ -369,37 +387,49 @@ async function openDetails(summary: SessionUsageSummary) {
   detailsLoading.value = true
   try {
     const response = await getSessionUsage(summary.session_id)
+    if (request !== detailRequest) return
     selectedSummary.value = response.data.summary
     details.value = response.data.details || []
   } catch (err: any) {
+    if (request !== detailRequest) return
     detailsError.value = err?.message || t('sessionManagement.loadDetailsFailed')
   } finally {
-    detailsLoading.value = false
+    if (request === detailRequest) detailsLoading.value = false
   }
-  if (!detailsError.value) void loadTraces(summary.session_id)
+  if (request === detailRequest && !detailsError.value) void loadTraces(summary.session_id)
 }
 
 async function loadTraces(sessionId: string) {
+  const request = detailRequest
   tracesLoading.value = true
   tracesError.value = ''
   try {
     const response = await listRetrievalExecutionTraces(sessionId)
+    if (request !== detailRequest || selectedSummary.value?.session_id !== sessionId) return
     traces.value = response.data || []
   } catch (err: any) {
+    if (request !== detailRequest || selectedSummary.value?.session_id !== sessionId) return
     traces.value = []
     tracesError.value = err?.message || t('sessionManagement.loadTracesFailed')
   } finally {
-    tracesLoading.value = false
+    if (request === detailRequest && selectedSummary.value?.session_id === sessionId) tracesLoading.value = false
   }
 }
 
 async function openTrace(summary: RetrievalTraceSummary) {
   if (!selectedSummary.value) return
+  const sessionId = selectedSummary.value.session_id
+  const request = ++traceRequest
+  selectedTrace.value = null
+  traceError.value = ''
+  traceLoading.value = true
   try {
-    const response = await getRetrievalExecutionTrace(selectedSummary.value.session_id, summary.request_id)
-    selectedTrace.value = response.data
+    const response = await getRetrievalExecutionTrace(sessionId, summary.request_id)
+    if (request === traceRequest) selectedTrace.value = response.data
   } catch (err: any) {
-    tracesError.value = err?.message || t('sessionManagement.loadTraceFailed')
+    if (request === traceRequest) traceError.value = err?.message || t('sessionManagement.loadTraceFailed')
+  } finally {
+    if (request === traceRequest) traceLoading.value = false
   }
 }
 
@@ -443,7 +473,6 @@ function formatScore(value: number | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(4) : '--'
 }
 
-function scoreOrDash(value: number | undefined) { return formatScore(value) }
 
 onMounted(() => { void loadSessions() })
 </script>
@@ -479,7 +508,9 @@ onMounted(() => { void loadSessions() })
 .session-management__trace-heading { margin-top: 28px; }
 .session-management__empty-trace { padding: 20px; border: 1px dashed var(--td-component-stroke); border-radius: 6px; color: var(--td-text-color-secondary); font-size: 13px; }
 .session-management__query { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.session-management__trace-detail { margin-top: 24px; }
+.session-management__trace-detail { margin-top: 24px; min-width: 0; overflow-wrap: anywhere; }
+.session-management__trace-outcome { margin-bottom: 20px; }
+.session-management__trace-outcome h3 { font-size: 14px; margin: 20px 0 10px; }
 .session-management__trace-query, .session-management__trace-step-content p { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; color: var(--td-text-color-primary); font-size: 13px; line-height: 1.55; }
 .session-management__trace-query span, .session-management__trace-step-content p span { color: var(--td-text-color-secondary); }
 .session-management__trace-step { margin-top: 10px; border: 1px solid var(--td-component-stroke); border-radius: 6px; background: var(--td-bg-color-container); }

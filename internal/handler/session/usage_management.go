@@ -41,15 +41,18 @@ type SessionUsageAgent struct {
 // SessionUsageDetail is one assistant response and its persisted aggregate
 // across the agent's internal rounds for that response.
 type SessionUsageDetail struct {
-	MessageID string            `json:"message_id"`
-	RequestID string            `json:"request_id"`
-	CreatedAt time.Time         `json:"created_at"`
-	AgentID   string            `json:"agent_id,omitempty"`
-	AgentName string            `json:"agent_name,omitempty"`
-	ModelID   string            `json:"model_id,omitempty"`
-	ModelName string            `json:"model_name,omitempty"`
-	HasUsage  bool              `json:"has_usage"`
-	Usage     *types.TokenUsage `json:"usage,omitempty"`
+	Content     string            `json:"content"`
+	IsCompleted bool              `json:"is_completed"`
+	IsFallback  bool              `json:"is_fallback"`
+	MessageID   string            `json:"message_id"`
+	RequestID   string            `json:"request_id"`
+	CreatedAt   time.Time         `json:"created_at"`
+	AgentID     string            `json:"agent_id,omitempty"`
+	AgentName   string            `json:"agent_name,omitempty"`
+	ModelID     string            `json:"model_id,omitempty"`
+	ModelName   string            `json:"model_name,omitempty"`
+	HasUsage    bool              `json:"has_usage"`
+	Usage       *types.TokenUsage `json:"usage,omitempty"`
 }
 
 // ListSessionUsage returns tenant-wide, paginated chat-model usage grouped by
@@ -234,13 +237,16 @@ func (h *Handler) buildSessionUsage(
 			}
 
 			detail := SessionUsageDetail{
-				MessageID: message.ID,
-				RequestID: message.RequestID,
-				CreatedAt: message.CreatedAt,
-				AgentID:   message.AgentID,
-				AgentName: agentNames[message.AgentID],
-				ModelID:   message.ModelID,
-				ModelName: modelNames[message.ModelID],
+				Content:     message.Content,
+				IsCompleted: message.IsCompleted,
+				IsFallback:  message.IsFallback,
+				MessageID:   message.ID,
+				RequestID:   message.RequestID,
+				CreatedAt:   message.CreatedAt,
+				AgentID:     message.AgentID,
+				AgentName:   agentNames[message.AgentID],
+				ModelID:     message.ModelID,
+				ModelName:   modelNames[message.ModelID],
 			}
 			if message.Usage != nil {
 				usage := normalizedUsage(*message.Usage)

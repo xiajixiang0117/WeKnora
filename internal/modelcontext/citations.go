@@ -343,3 +343,22 @@ func (d *citationStreamExpander) Flush() string {
 	}
 	return d.registry.ExpandText(pending)
 }
+
+// ModelCitationTargets resolves private references before public URL citations
+// collapse multiple chunks of a stored web document into the same URL. Only
+// durable identifiers are returned; temporary model handles are not persisted.
+func (r *Registry) ModelCitationTargets(text string) PublicCitationTargets {
+	targets := PublicCitationTargets{chunkIDs: make(map[string]struct{}), webURLs: make(map[string]struct{})}
+	if r == nil || r.sources == nil || !r.sources.citationsEnabled {
+		return targets
+	}
+	for _, match := range refTagRE.FindAllStringSubmatch(text, -1) {
+		handle := strings.ToLower(match[1])
+		if id, _, ok := r.sources.chunks.resolve(handle); ok {
+			targets.chunkIDs[id] = struct{}{}
+		} else if url, _, ok := r.sources.webs.resolve(handle); ok {
+			targets.webURLs[canonicalWebURL(url)] = struct{}{}
+		}
+	}
+	return targets
+}

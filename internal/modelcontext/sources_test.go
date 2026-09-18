@@ -672,3 +672,15 @@ func TestModelOutputWebFetchKeepsEveryPageAndAccurateContinuation(t *testing.T) 
 	require.NotContains(t, output, `view="full"`)
 	require.Contains(t, output, `trust="untrusted"`)
 }
+
+func TestModelCitationTargetsResolveOnlyKnownEnabledHandles(t *testing.T) {
+	registry := NewRegistry(true)
+	registry.RegisterSearchResults([]*types.SearchResult{{ID: "chunk", KnowledgeType: "url", KnowledgeSource: "https://example.com/page"}})
+	targets := registry.ModelCitationTargets(`<ref id="c1"/><ref id="c999"/><kb chunk_id="forged"/>`)
+	require.True(t, targets.HasChunk("chunk"))
+	require.False(t, targets.HasChunk("forged"))
+	require.False(t, targets.HasWebURL("https://example.com/page"))
+	disabled := NewRegistry(false)
+	disabled.RegisterSearchResults([]*types.SearchResult{{ID: "chunk"}})
+	require.True(t, disabled.ModelCitationTargets(`<ref id="c1"/>`).Empty())
+}

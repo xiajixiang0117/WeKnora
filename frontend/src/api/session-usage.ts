@@ -29,6 +29,9 @@ export interface SessionUsageSummary {
 }
 
 export interface SessionUsageDetail {
+  content?: string
+  is_completed?: boolean
+  is_fallback?: boolean
   message_id: string
   request_id: string
   created_at: string
@@ -72,6 +75,9 @@ export interface RetrievalTraceCandidate {
   knowledge_id?: string
   knowledge_name?: string
   chunk_id: string
+  content?: string
+  content_source?: 'snapshot' | 'answer_reference'
+  citation_match?: 'chunk' | 'document'
   retrieval_score: number
   model_score?: number
   final_score?: number
@@ -104,6 +110,12 @@ export interface RetrievalTraceStep {
     truncated?: boolean
     candidates?: RetrievalTraceCandidate[]
   }
+  context?: {
+    candidate_count: number
+    captured_count: number
+    truncated?: boolean
+    candidates?: RetrievalTraceCandidate[]
+  }
   error_summary?: string
 }
 
@@ -118,6 +130,14 @@ export interface RetrievalExecutionTrace {
     trace_version: number
     original_query: string
     steps: RetrievalTraceStep[]
+    answer?: {
+      content: string
+      is_completed: boolean
+      is_fallback: boolean
+      cited_candidates: RetrievalTraceCandidate[]
+      cited_count: number
+      truncated?: boolean
+    }
   }
 }
 

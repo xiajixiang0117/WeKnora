@@ -3,6 +3,7 @@ package chatpipeline
 import (
 	"context"
 
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 )
@@ -66,6 +67,7 @@ func (p *PluginChatCompletion) OnEvent(
 		})
 		return ErrModelCall.WithError(err)
 	}
+	retrievaltrace.RecordModelCitations(ctx, modelContext, chatResponse.Content)
 	modelContext.DecodeResponse(chatResponse)
 	if orphans := modelContext.OrphanResourceHandles(chatResponse.Content); len(orphans) > 0 {
 		pipelineWarn(ctx, "Completion", "orphan_resource_handles", map[string]interface{}{

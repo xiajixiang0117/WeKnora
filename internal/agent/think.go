@@ -14,6 +14,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/event"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/chat"
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
@@ -65,6 +66,7 @@ func (e *AgentEngine) streamLLMToEventBus(
 	chunkCount := 0
 	responseTypeCounts := make(map[string]int)
 	firstChunkTime := time.Time{}
+	var rawAnswer strings.Builder
 	answerDecoder := e.modelContext.StreamDecoder()
 	thinkingDecoder := e.modelContext.StreamDecoder()
 
@@ -102,6 +104,9 @@ func (e *AgentEngine) streamLLMToEventBus(
 				chunk.Content += thinkingDecoder.Flush()
 			}
 		} else {
+			if retrievaltrace.FromContext(ctx) != nil && (chunk.Data == nil || chunk.Data["source"] == nil) {
+				rawAnswer.WriteString(chunk.Content)
+			}
 			chunk.Content = answerDecoder.Feed(chunk.Content)
 			if chunk.Done {
 				chunk.Content += answerDecoder.Flush()
@@ -136,6 +141,7 @@ func (e *AgentEngine) streamLLMToEventBus(
 			emitFunc(&chunk, result.Content)
 		}
 	}
+	retrievaltrace.RecordModelCitations(ctx, e.modelContext, rawAnswer.String())
 	answerTail := answerDecoder.Flush()
 	thinkingTail := thinkingDecoder.Flush()
 	result.Content += answerTail

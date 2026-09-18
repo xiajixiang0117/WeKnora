@@ -1,11 +1,13 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 
 	agenttools "github.com/Tencent/WeKnora/internal/agent/tools"
 	"github.com/Tencent/WeKnora/internal/modelcontext"
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
@@ -95,11 +97,25 @@ func referencesFromToolResult(toolName string, result *types.ToolResult) []*type
 		rows = result.Data["results"]
 	case toolName == agenttools.ToolGrepChunks && displayType == "grep_results":
 		rows = result.Data["chunk_results"]
+	case toolName == agenttools.ToolListKnowledgeChunks && displayType == "knowledge_chunks_list":
+		rows = result.Data["chunks"]
 	default:
 		return nil
 	}
 
-	return searchResultsFromRows(rows)
+	refs := searchResultsFromRows(rows)
+	for _, ref := range refs {
+		if ref.KnowledgeTitle == "" {
+			ref.KnowledgeTitle = referenceString(result.Data, "knowledge_title")
+		}
+		if ref.KnowledgeType == "" {
+			ref.KnowledgeType = referenceString(result.Data, "knowledge_type")
+		}
+		if ref.KnowledgeSource == "" {
+			ref.KnowledgeSource = referenceString(result.Data, "knowledge_source")
+		}
+	}
+	return refs
 }
 
 func searchResultsFromRows(value interface{}) []*types.SearchResult {
@@ -170,5 +186,23 @@ func referenceInt(row map[string]interface{}, key string) int {
 		return int(value)
 	default:
 		return 0
+	}
+}
+
+// Record only built-in structured sources that are added to model messages.
+func recordToolGenerationContext(ctx context.Context, step types.AgentStep) {
+	if retrievaltrace.FromContext(ctx) == nil {
+		return
+	}
+	for _, call := range step.ToolCalls {
+		refs := referencesFromToolResult(call.Name, call.Result)
+		for _, ref := range refs {
+			if ref.Content == "" {
+				ref.Content = ref.MatchedContent
+			}
+		}
+		if len(refs) > 0 {
+			retrievaltrace.RecordGenerationContext(ctx, "agent:"+call.Name, refs)
+		}
 	}
 }
