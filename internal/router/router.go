@@ -17,6 +17,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/handler"
 	"github.com/Tencent/WeKnora/internal/handler/session"
 	"github.com/Tencent/WeKnora/internal/logger"
+	"github.com/Tencent/WeKnora/internal/mcpserver"
 	"github.com/Tencent/WeKnora/internal/middleware"
 	"github.com/Tencent/WeKnora/internal/tracing/langfuse"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
@@ -82,6 +83,9 @@ type RouterParams struct {
 	IMHandler                    *handler.IMHandler
 	EmbedChannelHandler          *handler.EmbedChannelHandler
 	EmbedChannelService          interfaces.EmbedChannelService
+	MCPEndpointHandler           *handler.MCPEndpointHandler
+	MCPEndpointService           interfaces.MCPEndpointService
+	MCPServer                    *mcpserver.Server
 	RedisClient                  *redis.Client
 	DataSourceHandler            *handler.DataSourceHandler
 	DataSourceCredentialsHandler *handler.DataSourceCredentialsHandler
@@ -111,7 +115,20 @@ func NewRouter(params RouterParams) *gin.Engine {
 	// 实际只对未来改为回显具体 Origin 时才生效；当前认证全部走显式的
 	// Authorization / X-API-Key 头，不依赖 ambient 凭据。若引入 cookie
 	// 认证，必须先把 AllowOrigins 换成受控清单。
-	r.Use(cors.New(routerCORSConfig()))
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders: []string{
+			"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key", "X-Request-ID", "X-Tenant-ID",
+			"X-Embed-Session", "X-External-User-ID", "X-External-User-Token", "X-WeKnora-Desktop-Token",
+			// Streamable HTTP MCP clients running in a browser send these on
+			// the /mcp/:endpoint_id surface.
+			"MCP-Protocol-Version", "Mcp-Session-Id", "Last-Event-ID",
+		},
+		ExposeHeaders:    []string{"Content-Length", "Access-Control-Allow-Origin", "Mcp-Session-Id"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	// 基础中间件（不需要认证）
 	r.Use(middleware.RequestID())
@@ -138,9 +155,9 @@ func NewRouter(params RouterParams) *gin.Engine {
 
 	// Embed page framing policy: emit a per-channel `frame-ancestors` CSP so the
 	// embed SPA page (/embed/:channelId) can only be iframed by the channel's
-	// allowed host origins. This is the browser-side counterpart to the parent
-	// Origin allowlist enforced in EmbedAuth. Registered before the static
-	// handler so it runs for the embed HTML response.
+	// allowed origins. This is the page-level counterpart to the API Origin
+	// allowlist enforced in EmbedAuth. Registered before the static handler so
+	// it runs for the embed HTML response.
 	if params.EmbedChannelService != nil {
 		r.Use(embedFrameAncestorsMiddleware(params.EmbedChannelService))
 	}
@@ -165,6 +182,10 @@ func NewRouter(params RouterParams) *gin.Engine {
 		params.ResourceCatalog,
 	)
 
+	// Workspace MCP server surface (/mcp/:endpoint_id): bearer-token auth per
+	// endpoint, so it must precede the global Auth middleware.
+	RegisterMCPServerRoutes(r, params.MCPServer, params.MCPEndpointService, params.TenantService)
+
 	// Short-lived capability URLs for IM and other clients that cannot attach
 	// WeKnora authentication headers.
 	serveResourceGrants(r, params.ResourceCatalog, params.TenantService, params.FileService, params.StorageBackendResolver)
@@ -174,6 +195,10 @@ func NewRouter(params RouterParams) *gin.Engine {
 	// auth headers on the WS handshake, so this must precede the global Auth
 	// middleware). The ticket is minted by an authenticated POST.
 	RegisterSandboxTerminalRoutes(r, params.SessionHandler)
+	RegisterSandboxDesktopRoutes(r, params.SessionHandler)
+	r.GET("/api/v1/local-browser/extension", params.SessionHandler.BrowserSkillExtension)
+	r.POST("/api/v1/local-browser/extension/authorize", params.SessionHandler.BrowserSkillAuthorize)
+	r.POST("/api/v1/local-browser/internal", params.SessionHandler.BrowserSkillInternal)
 
 	// 认证中间件
 	r.Use(middleware.Auth(params.TenantService, params.UserService, params.TenantMemberService, params.TenantAPIKeyService, params.Config))
@@ -272,6 +297,9 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterModelRoutes(v1, params.ModelHandler, params.ModelCredentialsHandler, rbacGuards)
 		RegisterSandboxConfigRoutes(v1, params.SandboxConfigHandler, params.SandboxSkillHandler, rbacGuards)
 		RegisterMyEnvVarRoutes(v1, params.MeEnvVarHandler)
+		v1.GET("/me/browser", params.SessionHandler.BrowserSkillAccount)
+		v1.GET("/me/browser/extension", params.SessionHandler.BrowserSkillDownload)
+		v1.POST("/me/browser", params.SessionHandler.BrowserSkillAccount)
 		RegisterEvaluationRoutes(v1, params.EvaluationHandler, rbacGuards)
 		RegisterInitializationRoutes(v1, params.InitializationHandler, rbacGuards)
 		params.SystemHandler.BindDeploymentCapabilities(deploymentCapabilitiesFromRouter(params))
@@ -288,6 +316,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 		RegisterOrganizationRoutes(v1, params.OrganizationHandler, rbacGuards)
 		RegisterIMChannelRoutes(v1, params.IMHandler, rbacGuards)
 		RegisterEmbedChannelRoutes(v1, params.EmbedChannelHandler, rbacGuards)
+		RegisterMCPEndpointRoutes(v1, params.MCPEndpointHandler, rbacGuards)
 		RegisterDataSourceRoutes(v1, params.DataSourceHandler, params.DataSourceCredentialsHandler, rbacGuards)
 		RegisterWeKnoraCloudRoutes(v1, params.WeKnoraCloudHandler, rbacGuards)
 		RegisterWikiPageRoutes(v1, params.WikiPageHandler, rbacGuards)
@@ -302,20 +331,6 @@ func NewRouter(params RouterParams) *gin.Engine {
 	}
 
 	return r
-}
-
-func routerCORSConfig() cors.Config {
-	return cors.Config{
-		AllowOrigins: []string{"*"},
-		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		// X-Embed-Parent-Origin is deliberately absent. It is produced by the
-		// trusted B-origin iframe and must remain a same-origin-only header;
-		// allowing it in CORS would let any website spoof an allowed parent A.
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key", "X-Request-ID", "X-Tenant-ID", "X-Embed-Session", "X-External-User-ID", "X-External-User-Token"},
-		ExposeHeaders:    []string{"Content-Length", "Access-Control-Allow-Origin"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}
 }
 
 // trustedProxies returns the proxy CIDRs/IPs whose X-Forwarded-For headers

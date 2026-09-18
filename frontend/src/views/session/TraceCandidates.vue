@@ -41,16 +41,16 @@ function score(value?: number) { return typeof value === 'number' && Number.isFi
 <style scoped>
 .trace-candidates { min-width: 0; }
 .trace-candidates__item { border-top: 1px solid var(--td-component-stroke); }
-summary { padding: 12px 0; cursor: pointer; overflow-wrap: anywhere; font-size: 13px; }
+summary { padding: 12px 0; cursor: pointer; overflow-wrap: anywhere; font-size: var(--app-text-md); }
 .trace-candidates__title { font-weight: 500; }
 .trace-candidates__scores { margin-left: 12px; color: var(--td-text-color-secondary); }
-.trace-candidates__id { display: block; margin-top: 4px; color: var(--td-text-color-placeholder); font-size: 12px; }
-.trace-candidates__hint { color: var(--td-brand-color); font-size: 12px; }
+.trace-candidates__id { display: block; margin-top: 4px; color: var(--td-text-color-placeholder); font-size: var(--app-text-sm); }
+.trace-candidates__hint { color: var(--td-brand-color); font-size: var(--app-text-sm); }
 .trace-candidates__body { min-width: 0; padding-bottom: 12px; }
-dl { margin: 0 0 10px; font-size: 12px; }
+dl { margin: 0 0 10px; font-size: var(--app-text-sm); }
 dl > div { display: flex; gap: 8px; margin: 4px 0; }
 dt { flex: 0 0 90px; color: var(--td-text-color-secondary); }
 dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-pre { max-height: 420px; overflow: auto; overscroll-behavior: contain; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 14px; background: var(--td-bg-color-secondarycontainer); border-radius: 4px; font-size: 13px; line-height: 1.65; }
-.trace-candidates__empty { color: var(--td-text-color-secondary); font-size: 13px; line-height: 1.6; }
+pre { max-height: 420px; overflow: auto; overscroll-behavior: contain; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 14px; background: var(--td-bg-color-secondarycontainer); border-radius: var(--app-radius-xs); font-size: var(--app-text-md); line-height: 1.65; }
+.trace-candidates__empty { color: var(--td-text-color-secondary); font-size: var(--app-text-md); line-height: 1.6; }
 </style>

@@ -156,6 +156,42 @@ func TestStreamLLMSummarySlugSurvivesDocumentCompaction(t *testing.T) {
 	require.NotContains(t, result.ToolCalls[0].Function.Arguments, "res://")
 }
 
+// Reproduce an MCP-only turn following a property-management answer, with
+// unrelated FAQ entries injected by the bound-KB directory.
+func TestStreamMCPAnswerRejectsUnretrievedKnowledgeCitations(t *testing.T) {
+	model := &mockChat{responses: []mockResponse{{chunks: []types.StreamResponse{
+		{ResponseType: types.ResponseTypeAnswer, Content: `KM文章<ref id="c`},
+		{ResponseType: types.ResponseTypeAnswer, Content: `3"/><ref id="c1"/><ref id="c2"/> 正确来源<ref id="w`},
+		{ResponseType: types.ResponseTypeAnswer, Content: `1"/>`, Done: true, FinishReason: "stop"},
+	}}}}
+	engine := newTestEngine(t, model)
+	engine.knowledgeBasesInfo = []*KnowledgeBaseInfo{{
+		ID: "faq-kb", Name: "FAQ TEST", Type: "faq", RecentDocs: []RecentDocInfo{
+			{ChunkID: "faq-1", Title: "什么是 WeKnora？", FAQStandardQuestion: "什么是 WeKnora？"},
+			{ChunkID: "faq-2", Title: "如何创建知识库？", FAQStandardQuestion: "如何创建知识库？"},
+		},
+	}}
+	userTurn := engine.RenderUserTurnContent("session", "KM上有趣的事情")
+	const article = "https://km.woa.com/articles/show/669504?jumpfrom=kmmcp"
+	toolResult := engine.modelContext.ModelToolResultForTool("call_mcp_tool", &types.ToolResult{
+		Success: true, Output: "标题: AI玩法\n摘要: Computer Use 案例\n链接: " + article,
+	})
+	var emitted strings.Builder
+	result, err := engine.streamLLMToEventBus(context.Background(), []chat.Message{
+		{Role: "assistant", Content: `物业工作<kb doc="9月13日周报.docx" chunk_id="weekly-report" />`},
+		{Role: "user", Content: userTurn},
+		{Role: "tool", Name: "call_mcp_tool", Content: toolResult},
+	}, nil, func(chunk *types.StreamResponse, _ string) {
+		emitted.WriteString(chunk.Content)
+	})
+	require.NoError(t, err)
+	want := `KM文章 正确来源<web url="` + article + `" title="" />`
+	require.Equal(t, want, result.Content)
+	require.Equal(t, want, emitted.String(), "invalid references must not reach SSE even transiently")
+	require.Contains(t, model.calls[0][2].Content, `<source id="w1"`)
+	require.Contains(t, model.calls[0][1].Content, `chunk_id="c1"`, "FAQ handles remain available for retrieval")
+}
+
 // Reproduces the round that ended a 40-round conversation: the stream broke
 // while serializing a large write_sandbox_file call, after a short preamble had
 // already streamed. Treating that as a completed turn let the preamble stand in
@@ -218,9 +254,9 @@ func TestRunToolCallRejectsUnresolvedHandlesBeforeExecution(t *testing.T) {
 			ID: "call-1",
 			Function: types.FunctionCall{
 				Name:      tool.Name(),
-				Arguments: `{"knowledge_id":"d99"}`,
+				Arguments: `{"id":"d99"}`,
 			},
-			ModelArguments:     `{"knowledge_id":"d99"}`,
+			ModelArguments:     `{"id":"d99"}`,
 			ArgumentResolution: modelcontext.ArgumentResolutionUnresolved,
 			UnresolvedHandles:  []string{"d99"},
 		},
@@ -236,7 +272,7 @@ func TestRunToolCallDecodesHandlesAfterJSONRepair(t *testing.T) {
 	newEngine := func() (*AgentEngine, *countingTool) {
 		engine := newTestEngine(t, &mockChat{})
 		engine.toolRegistry = agenttools.NewToolRegistry()
-		tool := newCountingTool(agenttools.ToolListKnowledgeChunks)
+		tool := newCountingTool(agenttools.ToolReadDocument)
 		engine.toolRegistry.RegisterTool(tool)
 		return engine, tool
 	}
@@ -246,8 +282,8 @@ func TestRunToolCallDecodesHandlesAfterJSONRepair(t *testing.T) {
 		context.Background(),
 		types.LLMToolCall{
 			ID:             "call-unknown",
-			Function:       types.FunctionCall{Name: unknownTool.Name(), Arguments: `{"knowledge_id":"d99",}`},
-			ModelArguments: `{"knowledge_id":"d99",}`,
+			Function:       types.FunctionCall{Name: unknownTool.Name(), Arguments: `{"id":"d99",}`},
+			ModelArguments: `{"id":"d99",}`,
 		},
 		0, 0, 1, "session", "message",
 	)
@@ -261,14 +297,14 @@ func TestRunToolCallDecodesHandlesAfterJSONRepair(t *testing.T) {
 		context.Background(),
 		types.LLMToolCall{
 			ID:             "call-known",
-			Function:       types.FunctionCall{Name: knownTool.Name(), Arguments: `{"knowledge_id":"d1",}`},
-			ModelArguments: `{"knowledge_id":"d1",}`,
+			Function:       types.FunctionCall{Name: knownTool.Name(), Arguments: `{"id":"d1",}`},
+			ModelArguments: `{"id":"d1",}`,
 		},
 		0, 0, 1, "session", "message",
 	)
 	require.Equal(t, 1, knownTool.calls)
 	require.True(t, known.Result.Success)
-	require.Equal(t, "doc-real", known.Args["knowledge_id"])
+	require.Equal(t, "doc-real", known.Args["id"])
 }
 
 func (m *mockChat) Chat(_ context.Context, _ []chat.Message, _ *chat.ChatOptions) (*types.ChatResponse, error) {
@@ -524,7 +560,7 @@ func TestEmitCompletionEventCollectsKnowledgeSearchReferences(t *testing.T) {
 <kb doc="Board Guide.md" chunk_id="chunk-2" kb_id="kb-1" />`,
 		RoundSteps: []types.AgentStep{{
 			ToolCalls: []types.ToolCall{{
-				Name: agenttools.ToolKnowledgeSearch,
+				Name: agenttools.ToolSearchKnowledge,
 				Result: &types.ToolResult{
 					Success: true,
 					Data: map[string]interface{}{
@@ -580,7 +616,7 @@ func TestEmitCompletionEventDeduplicatesReferencesAcrossRetrievalTools(t *testin
 		RoundSteps: []types.AgentStep{
 			{
 				ToolCalls: []types.ToolCall{{
-					Name: agenttools.ToolKnowledgeSearch,
+					Name: agenttools.ToolSearchKnowledge,
 					Result: &types.ToolResult{
 						Success: true,
 						Data: map[string]interface{}{
@@ -594,7 +630,7 @@ func TestEmitCompletionEventDeduplicatesReferencesAcrossRetrievalTools(t *testin
 			},
 			{
 				ToolCalls: []types.ToolCall{{
-					Name: agenttools.ToolGrepChunks,
+					Name: agenttools.LegacyToolGrepChunks,
 					Result: &types.ToolResult{
 						Success: true,
 						Data: map[string]interface{}{
@@ -1006,7 +1042,7 @@ func TestStreamFinalAnswerToEventBus_EmitsDoneWhenProviderEndsWithEmptyChunk(t *
 	})
 
 	state := &types.AgentState{}
-	err := engine.streamFinalAnswerToEventBus(context.Background(), "test query", state, "sess-1")
+	err := engine.streamFinalAnswerToEventBus(context.Background(), "test query", state, "sess-1", emptyMessages())
 
 	require.NoError(t, err)
 	require.Len(t, finalAnswerEvents, 2)

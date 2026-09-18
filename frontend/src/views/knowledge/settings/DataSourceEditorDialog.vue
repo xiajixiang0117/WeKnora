@@ -13,7 +13,6 @@ import {
   deleteDataSource,
   putDataSourceCredentials,
   deleteDataSourceCredentials,
-  createWebCrawlScan,
   type DataSource,
   type Resource,
 } from '@/api/datasource'
@@ -148,19 +147,6 @@ function hydrateRssFeedUrlsFromConfig(config: { settings?: Record<string, any>; 
   return { ...settings, feed_urls: ids.join('\n') }
 }
 
-function hydrateWebCrawlerSettings(settings: Record<string, any>) {
-  const asText = (value: any) => Array.isArray(value) ? value.join('\n') : String(value || '')
-  return {
-    ...settings,
-    seed_urls: asText(settings.seed_urls),
-    allowed_hosts: asText(settings.allowed_hosts),
-    path_prefixes: asText(settings.path_prefixes),
-    exclude_patterns: asText(settings.exclude_patterns),
-    web_content_selector: asText(settings.web_content_selector),
-    web_exclude_selectors: asText(settings.web_exclude_selectors),
-  }
-}
-
 function addRssAuthHeader() {
   rssAuthHeaders.value.push({ key: '', value: '' })
 }
@@ -173,16 +159,38 @@ function needsConnectionTest(): boolean {
   return !(isEdit.value && credentialsConfigured.value && !replaceCredentialsMode.value)
 }
 
+function hydrateConfluenceCredentialsFromSettings() {
+  if (form.value.type !== 'confluence') return
+  const settings = form.value.config.settings || {}
+  const creds = form.value.config.credentials || {}
+  form.value.config.credentials = {
+    ...creds,
+    edition: creds.edition || settings.edition || 'server',
+    base_url: creds.base_url || settings.base_url || '',
+    username: creds.username || settings.username || '',
+  }
+}
+
+function syncConfluencePublicFieldsToSettings() {
+  if (form.value.type !== 'confluence') return
+  const creds = form.value.config.credentials || {}
+  form.value.config.settings = {
+    ...(form.value.config.settings || {}),
+    ...(creds.edition ? { edition: creds.edition } : {}),
+    ...(creds.base_url ? { base_url: creds.base_url } : {}),
+    ...(creds.username ? { username: creds.username } : {}),
+  }
+}
+
 function enterReplaceCredentials() {
   pendingRemoveCredentials.value = false
   replaceCredentialsMode.value = true
+  hydrateConfluenceCredentialsFromSettings()
   testResult.value = ''
   testErrorMsg.value = ''
 }
 
 // Form data
-const DEFAULT_SYNC_SCHEDULE = '0 0 */6 * * *'
-
 const form = ref({
   name: '',
   type: '',
@@ -191,7 +199,7 @@ const form = ref({
     resource_ids: [] as string[],
     settings: {} as Record<string, any>,
   },
-  sync_schedule: DEFAULT_SYNC_SCHEDULE,
+  sync_schedule: '0 0 */6 * * *',
   sync_mode: 'incremental' as 'incremental' | 'full',
   conflict_strategy: 'overwrite' as 'overwrite' | 'skip',
   sync_deletions: true,
@@ -223,10 +231,6 @@ const driveFolderTokenError = ref('')
 const driveRootLoaded = ref(false)
 const isDriveConnector = (type: string) => type === 'feishu_drive' || type === 'lark_drive'
 const isGitLabConnector = (type: string) => type === 'gitlab'
-const isWebCrawlerConnector = (type: string) => type === 'web_crawler'
-function hasCredentialStep() {
-  return !isWebCrawlerConnector(form.value.type)
-}
 
 interface GitLabProjectInput { project_id: string; ref: string; pathsText: string }
 const gitlabProjects = ref<GitLabProjectInput[]>([])
@@ -606,6 +610,20 @@ const connectorDefs = computed<ConnectorDef[]>(() => [
     ],
   },
   {
+    type: 'confluence',
+    available: true,
+    docUrl: 'https://developer.atlassian.com/cloud/confluence/rest/',
+    permissionDocUrl: 'https://developer.atlassian.com/cloud/confluence/rest/',
+    permissionPageUrl: 'https://id.atlassian.com/manage-profile/security/api-tokens',
+    requiredPermissions: [],
+    fields: [
+      { key: 'base_url', labelKey: 'datasource.field.confluenceBaseUrl', placeholder: 'https://confluence.example.com or https://team.atlassian.net/wiki' },
+      { key: 'username', labelKey: 'datasource.field.confluenceUsername', placeholder: 'name or email' },
+      { key: 'password', labelKey: 'datasource.field.confluencePassword', placeholder: 'Server/DC password', secret: true },
+      { key: 'api_token', labelKey: 'datasource.field.confluenceApiToken', placeholder: 'Cloud API token', secret: true },
+    ],
+  },
+  {
     type: 'yuque',
     available: true,
     docUrl: 'https://www.yuque.com/yuque/developer/api',
@@ -618,6 +636,23 @@ const connectorDefs = computed<ConnectorDef[]>(() => [
     fields: [
       { key: 'api_token', labelKey: 'datasource.field.apiToken', placeholder: '', secret: true },
       { key: 'base_url', labelKey: 'datasource.field.baseUrl', placeholder: 'https://www.yuque.com', optional: true, hintKey: 'datasource.field.baseUrlHint' },
+    ],
+  },
+  {
+    type: 'dingtalk',
+    available: true,
+    docUrl: 'https://open.dingtalk.com/document/development/knowledge-base-overview',
+    permissionDocUrl: 'https://open.dingtalk.com/document/development/get-knowledge-base-list',
+    permissionPageUrl: 'https://open-dev.dingtalk.com/',
+    requiredPermissions: [
+      'Wiki.Workspace.Read',
+      'Wiki.Node.Read',
+      'Storage.File.Read',
+    ],
+    fields: [
+      { key: 'client_id', labelKey: 'datasource.field.clientId', placeholder: 'dingxxxxxxxx' },
+      { key: 'client_secret', labelKey: 'datasource.field.clientSecret', placeholder: '', secret: true },
+      { key: 'operator_id', labelKey: 'datasource.field.operatorId', placeholder: '', hintKey: 'datasource.field.operatorIdHint' },
     ],
   },
   {
@@ -653,14 +688,21 @@ const connectorDefs = computed<ConnectorDef[]>(() => [
       { key: 'access_token', labelKey: 'datasource.gitlab.accessToken', placeholder: '', secret: true },
     ],
   },
-  {
-    type: 'web_crawler', available: true, docUrl: '', permissionDocUrl: '', permissionPageUrl: '', requiredPermissions: [],
-    fields: [],
-  },
 ])
 
 
 const currentDef = computed(() => connectorDefs.value.find(d => d.type === form.value.type))
+
+const displayedCredentialFields = computed(() => {
+  const fields = currentDef.value?.fields || []
+  if (form.value.type !== "confluence") return fields
+
+  return fields.filter((field) => {
+    if (field.key === "password") return form.value.config.credentials.edition !== "cloud"
+    if (field.key === "api_token") return form.value.config.credentials.edition === "cloud"
+    return true
+  })
+})
 
 // --- Drawer lifecycle ---
 watch(visible, async (v) => {
@@ -675,9 +717,7 @@ watch(visible, async (v) => {
     }
     return
   }
-  step.value = isEdit.value
-    ? (props.dataSource?.type === 'web_crawler' ? 2 : 1)
-    : 0
+  step.value = isEdit.value ? 1 : 0
   testResult.value = ''
   testErrorMsg.value = ''
   tempDsId.value = ''
@@ -712,9 +752,7 @@ watch(visible, async (v) => {
         resource_ids: editConfig.resource_ids || [],
         settings: props.dataSource.type === 'rss'
           ? hydrateRssFeedUrlsFromConfig(editConfig)
-          : (props.dataSource.type === 'web_crawler'
-            ? hydrateWebCrawlerSettings(editConfig.settings || {})
-            : (editConfig.settings || {})),
+          : (editConfig.settings || {}),
       },
       sync_schedule: props.dataSource.sync_schedule,
       sync_mode: props.dataSource.sync_mode,
@@ -794,29 +832,22 @@ function selectType(def: ConnectorDef) {
   if (!def.available) return
   form.value.type = def.type
   form.value.name = t(`datasource.connector.${def.type}`)
-  form.value.sync_schedule = isWebCrawlerConnector(def.type)
-    ? ''
-    : form.value.sync_schedule || DEFAULT_SYNC_SCHEDULE
-  form.value.config.credentials = {}
+  form.value.config.credentials = def.type === "confluence" ? { edition: "server" } : {}
+  if (def.type === 'confluence') {
+    form.value.config.settings = { ...form.value.config.settings, edition: 'server' }
+  }
   if (isGitLabConnector(def.type)) addGitLabProject()
   rssAuthHeaders.value = []
-  step.value = isWebCrawlerConnector(def.type) ? 2 : 1
+  step.value = 1
 }
 
-// --- Test connection (stateless, no DB write) ---
+// --- Test connection ---
 async function testConnection() {
   syncRssAuthHeadersToCredentials()
+  syncConfluencePublicFieldsToSettings()
   if (!validateRssFeedUrls()) return
-  if (isWebCrawlerConnector(form.value.type)) {
-    if (!String(form.value.config.settings.seed_urls || '').trim()) {
-      MessagePlugin.warning(t('datasource.webCrawler.seedRequired'))
-      return
-    }
-    testResult.value = 'success'
-    return
-  }
   if (!isEdit.value || !credentialsConfigured.value || replaceCredentialsMode.value) {
-    const fields = currentDef.value?.fields || []
+    const fields = displayedCredentialFields.value
     for (const f of fields) {
       if (f.optional || f.fieldType === 'custom_headers') continue
       if (!form.value.config.credentials[f.key]) {
@@ -830,7 +861,10 @@ async function testConnection() {
   testResult.value = ''
   testErrorMsg.value = ''
   try {
-    if (isEdit.value && tempDsId.value) {
+    // The main update endpoint ignores credentials. Only use the saved
+    // connection when keeping its credentials; test replacements directly
+    // without persisting them until the user saves the data source.
+    if (isEdit.value && tempDsId.value && !needsConnectionTest()) {
       await updateDataSource(tempDsId.value, {
         ...form.value,
         knowledge_base_id: props.kbId,
@@ -858,6 +892,7 @@ async function testConnection() {
 async function loadResources() {
   loadingResources.value = true
   try {
+    syncConfluencePublicFieldsToSettings()
     if (!tempDsId.value) {
       const res = await createDataSource({
         ...form.value,
@@ -1012,7 +1047,7 @@ function validateStep1Fields(): boolean {
     return true
   }
 
-  const fields = currentDef.value?.fields || []
+  const fields = displayedCredentialFields.value
   for (const f of fields) {
     if (f.optional || f.fieldType === 'custom_headers') continue
     if (!form.value.config.credentials[f.key]) {
@@ -1047,12 +1082,6 @@ async function nextStep() {
       return
     }
   }
-  if (step.value === 2 && isWebCrawlerConnector(form.value.type)) {
-    if (!String(form.value.config.settings.seed_urls || '').trim()) {
-      MessagePlugin.warning(t('datasource.webCrawler.seedRequired'))
-      return
-    }
-  }
   step.value++
   if (step.value === 2) {
     // Drive connectors need a user-supplied folder_token before listing.
@@ -1066,15 +1095,12 @@ async function nextStep() {
       return
     }
     if (isGitLabConnector(form.value.type)) return
-    if (isWebCrawlerConnector(form.value.type)) return
     loadResources()
   }
 }
 
 function prevStep() {
-  step.value = isWebCrawlerConnector(form.value.type) && step.value === 2
-    ? 0
-    : step.value - 1
+  step.value--
 }
 
 // Build the config payload for Create / Update requests.
@@ -1088,19 +1114,11 @@ function prevStep() {
 // validator happy.
 function buildConfigPayload(): Record<string, unknown> {
   syncGitLabProjectsToSettings()
-  const settings = { ...form.value.config.settings }
-  if (isWebCrawlerConnector(form.value.type)) {
-    for (const key of ['seed_urls', 'allowed_hosts', 'path_prefixes', 'exclude_patterns']) {
-      settings[key] = String(settings[key] || '').split(/[\n,]/).map(v => v.trim()).filter(Boolean)
-    }
-    settings.web_content_selector = String(settings.web_content_selector || '').trim()
-    settings.web_exclude_selectors = String(settings.web_exclude_selectors || '').split(/[\n,]/).map(v => v.trim()).filter(Boolean)
-    if (settings.max_pages !== undefined && settings.max_pages !== '') settings.max_pages = Number(settings.max_pages)
-  }
+  syncConfluencePublicFieldsToSettings()
   return {
     credentials: isEdit.value ? {} : { ...form.value.config.credentials },
     resource_ids: form.value.config.resource_ids,
-    settings,
+    settings: form.value.config.settings,
   }
 }
 
@@ -1110,6 +1128,7 @@ function buildConfigPayload(): Record<string, unknown> {
 async function commitCredentialsIfNeeded(dsId: string): Promise<boolean> {
   if (!isEdit.value || !replaceCredentialsMode.value) return true
   syncRssAuthHeadersToCredentials()
+  syncConfluencePublicFieldsToSettings()
   const filled = Object.entries(form.value.config.credentials).filter(
     ([, v]) => typeof v === 'string' ? v !== '' : v != null,
   )
@@ -1146,7 +1165,6 @@ async function handleSubmit() {
       await updateDataSource(tempDsId.value, {
         ...form.value,
         config: buildConfigPayload(),
-        sync_schedule: isWebCrawlerConnector(form.value.type) ? '' : form.value.sync_schedule,
         knowledge_base_id: props.kbId,
         status: 'active',
       } as any)
@@ -1154,7 +1172,6 @@ async function handleSubmit() {
       const res = await createDataSource({
         ...form.value,
         config: buildConfigPayload(),
-        sync_schedule: isWebCrawlerConnector(form.value.type) ? '' : form.value.sync_schedule,
         knowledge_base_id: props.kbId,
         status: 'active',
       } as any)
@@ -1167,13 +1184,8 @@ async function handleSubmit() {
       MessagePlugin.warning(t('datasource.updateSuccessSyncHint'))
     } else {
       try {
-        if (isWebCrawlerConnector(form.value.type)) {
-          await createWebCrawlScan(dataSourceId)
-          MessagePlugin.success(t('datasource.webCrawler.scanStarted'))
-        } else {
-          await triggerSync(dataSourceId)
-          MessagePlugin.success(t('datasource.createAndSyncSuccess'))
-        }
+        await triggerSync(dataSourceId)
+        MessagePlugin.success(t('datasource.createAndSyncSuccess'))
       } catch (e: any) {
         MessagePlugin.warning(e?.message || e?.error || t('datasource.createButSyncFailed'))
       }
@@ -1260,20 +1272,18 @@ function resourceRowState(id: string): CheckState {
   return checkStates.value.get(id) || 'unchecked'
 }
 
-const steps = computed(() => [
-  { value: 0, title: t('datasource.step.selectType') },
-  ...(hasCredentialStep() ? [{ value: 1, title: t('datasource.step.credentials') }] : []),
-  { value: 2, title: t('datasource.step.resources') },
-  { value: 3, title: t('datasource.step.strategy') },
+const stepTitles = computed(() => [
+  t('datasource.step.selectType'),
+  t('datasource.step.credentials'),
+  t('datasource.step.resources'),
+  t('datasource.step.strategy'),
 ])
 
 const drawerTitle = computed(() =>
   isEdit.value ? t('datasource.editTitle') : t('datasource.createTitle'),
 )
 
-const drawerDescription = computed(() =>
-  steps.value.find(item => item.value === step.value)?.title ?? '',
-)
+const drawerDescription = computed(() => stepTitles.value[step.value] ?? '')
 
 const drawerConfirmText = computed(() => {
   if (step.value === 3) {
@@ -1347,15 +1357,15 @@ const drawerConfirmText = computed(() => {
     <!-- Step indicator -->
     <div class="ds-steps">
       <div
-        v-for="(item, i) in steps"
-        :key="item.value"
-        :class="['ds-step', { active: step === item.value, done: step > item.value }]"
+        v-for="(title, i) in stepTitles"
+        :key="i"
+        :class="['ds-step', { active: step === i, done: step > i }]"
       >
         <span class="ds-step-num">
-          <t-icon v-if="step > item.value" name="check" class="ds-step-check" />
+          <t-icon v-if="step > i" name="check" class="ds-step-check" />
           <template v-else>{{ i + 1 }}</template>
         </span>
-        <span class="ds-step-title">{{ item.title }}</span>
+        <span class="ds-step-title">{{ title }}</span>
       </div>
     </div>
 
@@ -1483,7 +1493,7 @@ const drawerConfirmText = computed(() => {
         </div>
       </section>
 
-      <section v-if="hasCredentialStep()" class="setting-drawer__section">
+      <section class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ t('datasource.credentialsLabel') }}</h4>
 
         <div v-if="isEdit && credentialsConfigured && !replaceCredentialsMode" class="form-item">
@@ -1546,8 +1556,15 @@ const drawerConfirmText = computed(() => {
         </div>
 
         <template v-else-if="credentialsInputVisible">
+          <div v-if="form.type === 'confluence'" class="form-item">
+            <label class="form-label">{{ t('datasource.field.confluenceEdition') }}</label>
+            <t-select v-model="form.config.credentials.edition">
+              <t-option value="server" :label="t('datasource.field.confluenceEditionServer')" />
+              <t-option value="cloud" :label="t('datasource.field.confluenceEditionCloud')" />
+            </t-select>
+          </div>
           <div
-            v-for="field in currentDef?.fields || []"
+            v-for="field in displayedCredentialFields"
             :key="field.key"
             class="form-item"
           >
@@ -1624,43 +1641,7 @@ const drawerConfirmText = computed(() => {
     </template>
 
     <!-- Step 2: Select resources -->
-    <section v-if="step === 2 && isWebCrawlerConnector(form.type)" class="setting-drawer__section ds-resource-section">
-      <h4 class="setting-drawer__section-title">{{ t('datasource.webCrawler.scopeTitle') }}</h4>
-      <div class="form-item">
-        <label class="form-label required">{{ t('datasource.webCrawler.seedUrls') }}</label>
-        <t-textarea v-model="form.config.settings.seed_urls" :placeholder="t('datasource.webCrawler.seedPlaceholder')" :autosize="{ minRows: 3, maxRows: 8 }" />
-        <p class="form-desc">{{ t('datasource.webCrawler.seedHint') }}</p>
-      </div>
-      <div class="form-item">
-        <label class="form-label">{{ t('datasource.webCrawler.allowedHosts') }}</label>
-        <t-input v-model="form.config.settings.allowed_hosts" :placeholder="t('datasource.webCrawler.allowedHostsPlaceholder')" />
-      </div>
-      <div class="form-item">
-        <label class="form-label">{{ t('datasource.webCrawler.pathPrefixes') }}</label>
-        <t-input v-model="form.config.settings.path_prefixes" :placeholder="t('datasource.webCrawler.pathPrefixesPlaceholder')" />
-      </div>
-      <div class="form-item">
-        <label class="form-label">{{ t('datasource.webCrawler.excludePatterns') }}</label>
-        <t-input v-model="form.config.settings.exclude_patterns" :placeholder="t('datasource.webCrawler.excludePlaceholder')" />
-      </div>
-      <div class="form-item">
-        <label class="form-label">{{ t('datasource.webCrawler.contentSelector') }}</label>
-        <t-input v-model="form.config.settings.web_content_selector" :placeholder="t('datasource.webCrawler.contentSelectorPlaceholder')" />
-        <p class="form-desc">{{ t('datasource.webCrawler.contentSelectorHint') }}</p>
-      </div>
-      <div class="form-item">
-        <label class="form-label">{{ t('datasource.webCrawler.excludeSelectors') }}</label>
-        <t-input v-model="form.config.settings.web_exclude_selectors" :placeholder="t('datasource.webCrawler.excludeSelectorsPlaceholder')" />
-        <p class="form-desc">{{ t('datasource.webCrawler.excludeSelectorsHint') }}</p>
-      </div>
-      <div class="form-item web-crawler-options">
-        <label class="form-label">{{ t('datasource.webCrawler.maxPages') }}</label>
-        <t-input-number v-model="form.config.settings.max_pages" :min="1" :max="5000" />
-        <t-checkbox v-model="form.config.settings.respect_robots">{{ t('datasource.webCrawler.respectRobots') }}</t-checkbox>
-      </div>
-    </section>
-
-    <section v-else-if="step === 2" class="setting-drawer__section ds-resource-section">
+    <section v-if="step === 2" class="setting-drawer__section ds-resource-section">
       <template v-if="isGitLabConnector(form.type)">
         <h4 class="setting-drawer__section-title">{{ t('datasource.gitlab.projects') }}</h4>
         <p class="ds-resource-hint">{{ t('datasource.gitlab.projectsHint') }}</p>
@@ -1847,7 +1828,7 @@ const drawerConfirmText = computed(() => {
 
     <!-- Step 3: Sync strategy -->
     <template v-if="step === 3">
-      <section v-if="!isWebCrawlerConnector(form.type)" class="setting-drawer__section">
+      <section class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ t('datasource.syncScheduleLabel') }}</h4>
         <t-select v-model="form.sync_schedule">
           <t-option v-for="p in schedulePresets" :key="p.value" :value="p.value" :label="p.label" />
@@ -1931,7 +1912,7 @@ const drawerConfirmText = computed(() => {
   gap: 8px;
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--app-text-md);
   color: var(--td-text-color-placeholder);
 }
 
@@ -1960,7 +1941,7 @@ const drawerConfirmText = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   font-weight: 600;
   border: 1px solid var(--td-component-stroke);
   color: var(--td-text-color-placeholder);
@@ -1980,7 +1961,7 @@ const drawerConfirmText = computed(() => {
 }
 
 .ds-step-check {
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 
 .ds-loading-center {
@@ -2017,12 +1998,12 @@ const drawerConfirmText = computed(() => {
 }
 
 .ds-type-name {
-  font-size: 13px;
+  font-size: var(--app-text-md);
   font-weight: 600;
 }
 
 .ds-type-soon {
-  font-size: 10px;
+  font-size: var(--app-text-2xs);
   color: var(--td-text-color-placeholder);
   background: var(--td-bg-color-component);
   padding: 1px 6px;
@@ -2030,7 +2011,7 @@ const drawerConfirmText = computed(() => {
 }
 
 .ds-type-desc {
-  font-size: 11px;
+  font-size: var(--app-text-xs);
   color: var(--td-text-color-secondary);
   line-height: 1.5;
 }
@@ -2040,14 +2021,14 @@ const drawerConfirmText = computed(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--app-text-md);
   line-height: 1.5;
   color: var(--td-text-color-secondary);
   flex-wrap: wrap;
 }
 
 .inline-alert__icon {
-  font-size: 15px;
+  font-size: var(--app-text-lg);
   flex-shrink: 0;
   color: var(--td-text-color-placeholder);
 }
@@ -2061,11 +2042,11 @@ const drawerConfirmText = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  font-size: 13px;
+  font-size: var(--app-text-md);
   font-weight: 500;
   color: var(--td-brand-color);
   white-space: nowrap;
-  transition: color 0.15s ease;
+  transition: color var(--app-motion-fast) ease;
 }
 
 .inline-alert__action:hover {
@@ -2091,12 +2072,12 @@ const drawerConfirmText = computed(() => {
   border: none;
   background: transparent;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--app-text-md);
   line-height: 1.5;
   color: var(--td-text-color-secondary);
   text-align: left;
   cursor: pointer;
-  transition: color 0.12s ease;
+  transition: color var(--app-motion-instant) ease;
 }
 
 .ds-setup-guide__toggle:hover,
@@ -2133,7 +2114,7 @@ const drawerConfirmText = computed(() => {
 }
 
 .ds-setup-step {
-  font-size: 13px;
+  font-size: var(--app-text-md);
   line-height: 1.5;
   color: var(--td-text-color-primary);
 }
@@ -2151,7 +2132,7 @@ const drawerConfirmText = computed(() => {
 
 .ds-perm-tag {
   display: inline-block;
-  font-size: 11px;
+  font-size: var(--app-text-xs);
   padding: 1px 5px;
   margin: 2px 4px 2px 0;
   border-radius: 3px;
@@ -2165,7 +2146,7 @@ const drawerConfirmText = computed(() => {
   align-items: center;
   gap: 4px;
   margin-top: 10px;
-  font-size: 13px;
+  font-size: var(--app-text-md);
 }
 
 .credential-faux-input {
@@ -2175,14 +2156,14 @@ const drawerConfirmText = computed(() => {
   height: 32px;
   padding: 0 4px 0 12px;
   background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-border, var(--td-component-stroke));
-  border-radius: 6px;
-  font-size: 13px;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  border: 1px solid var(--td-component-border);
+  border-radius: var(--app-radius-sm);
+  font-size: var(--app-text-md);
+  transition: border-color var(--app-motion-fast) ease, background-color var(--app-motion-fast) ease;
 }
 
 .credential-faux-input:hover {
-  border-color: var(--td-brand-color-hover, var(--td-brand-color));
+  border-color: var(--td-brand-color-hover);
 }
 
 .credential-faux-input.is-empty {
@@ -2218,7 +2199,7 @@ const drawerConfirmText = computed(() => {
 
 .credential-status-icon {
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: var(--app-text-xl);
 }
 
 .credential-status-icon.success {
@@ -2243,8 +2224,8 @@ const drawerConfirmText = computed(() => {
 .credential-actions :deep(.t-button--variant-text) {
   height: 24px;
   padding: 0 8px;
-  font-size: 12px;
-  border-radius: 4px;
+  font-size: var(--app-text-sm);
+  border-radius: var(--app-radius-xs);
 }
 
 .action-divider {
@@ -2262,7 +2243,7 @@ const drawerConfirmText = computed(() => {
 .credential-edit-actions :deep(.t-button) {
   height: 28px;
   padding: 0 12px;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
 }
 
 .form-item {
@@ -2274,14 +2255,14 @@ const drawerConfirmText = computed(() => {
 }
 
 .form-item--flat :deep(.t-checkbox__label) {
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   line-height: 1.5;
   color: var(--td-text-color-secondary);
 }
 
 .form-label {
   display: block;
-  font-size: 13px;
+  font-size: var(--app-text-md);
   font-weight: 500;
   margin-bottom: 6px;
   color: var(--td-text-color-primary);
@@ -2298,13 +2279,13 @@ const drawerConfirmText = computed(() => {
 
 .form-desc {
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   line-height: 1.5;
   color: var(--td-text-color-placeholder);
 }
 
 .status-icon {
-  font-size: 16px;
+  font-size: var(--app-text-xl);
   flex-shrink: 0;
 }
 
@@ -2317,7 +2298,7 @@ const drawerConfirmText = computed(() => {
 }
 
 .footer-test-message {
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   line-height: 1.4;
   flex: 1;
   min-width: 0;
@@ -2341,7 +2322,7 @@ const drawerConfirmText = computed(() => {
 
 .ds-resource-hint {
   margin: -8px 0 0;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   line-height: 1.5;
   color: var(--td-text-color-placeholder);
 }
@@ -2353,7 +2334,7 @@ const drawerConfirmText = computed(() => {
   gap: 8px;
   padding: 12px;
   border: 1px solid var(--td-border-level-1-color);
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   background: var(--td-bg-color-container);
 }
 
@@ -2361,7 +2342,7 @@ const drawerConfirmText = computed(() => {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 13px;
+  font-size: var(--app-text-md);
   font-weight: 500;
   color: var(--td-text-color-primary);
 
@@ -2375,7 +2356,7 @@ const drawerConfirmText = computed(() => {
 }
 
 .drive-folder-input__help {
-  font-size: 15px;
+  font-size: var(--app-text-lg);
   color: var(--td-text-color-placeholder);
   cursor: help;
 
@@ -2401,21 +2382,21 @@ const drawerConfirmText = computed(() => {
   min-height: 120px;
   padding: 24px 12px;
   border: 1px dashed var(--td-border-level-2-color);
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   background: var(--td-bg-color-page);
   text-align: center;
 }
 
 .ds-drive-placeholder .ds-empty-title {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--app-text-md);
   font-weight: 500;
   color: var(--td-text-color-primary);
 }
 
 .ds-drive-placeholder .ds-empty-desc {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   line-height: 1.5;
   color: var(--td-text-color-placeholder);
 }
@@ -2436,7 +2417,7 @@ const drawerConfirmText = computed(() => {
 }
 
 .resource-picker__count {
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   color: var(--td-text-color-secondary);
 }
 
@@ -2452,10 +2433,10 @@ const drawerConfirmText = computed(() => {
   border: none;
   background: transparent;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   color: var(--td-text-color-placeholder);
   cursor: pointer;
-  transition: color 0.12s ease;
+  transition: color var(--app-motion-instant) ease;
 }
 
 .resource-picker__action:hover,
@@ -2466,7 +2447,7 @@ const drawerConfirmText = computed(() => {
 
 .resource-picker__action-sep {
   color: var(--td-text-color-disabled);
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   user-select: none;
 }
 
@@ -2489,9 +2470,9 @@ const drawerConfirmText = computed(() => {
   min-height: 34px;
   margin-bottom: 2px;
   padding: 5px 8px 5px calc(8px + var(--depth) * 14px);
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background var(--app-motion-instant) ease;
 }
 
 .resource-picker__row:last-child {
@@ -2517,11 +2498,11 @@ const drawerConfirmText = computed(() => {
   justify-content: center;
   padding: 0;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--app-radius-xs);
   background: transparent;
   color: var(--td-text-color-placeholder);
   cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background var(--app-motion-instant) ease, color var(--app-motion-instant) ease;
 }
 
 .resource-picker__expand:hover,
@@ -2535,13 +2516,13 @@ const drawerConfirmText = computed(() => {
   width: 16px;
   height: 16px;
   border-radius: 3px;
-  border: 1.5px solid var(--td-component-border, var(--td-component-stroke));
+  border: 1.5px solid var(--td-component-border);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   box-sizing: border-box;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background var(--app-motion-instant) ease, border-color var(--app-motion-instant) ease;
 }
 
 .resource-picker__check.is-checked,
@@ -2577,7 +2558,7 @@ const drawerConfirmText = computed(() => {
 
 .resource-picker__name {
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--app-text-md);
   line-height: 1.4;
   color: var(--td-text-color-primary);
   white-space: nowrap;
@@ -2587,10 +2568,10 @@ const drawerConfirmText = computed(() => {
 
 .resource-picker__type {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--app-text-2xs);
   line-height: 1;
   padding: 2px 5px;
-  border-radius: 4px;
+  border-radius: var(--app-radius-xs);
   color: var(--td-text-color-placeholder);
   background: color-mix(in srgb, var(--td-text-color-placeholder) 8%, transparent);
 }
@@ -2602,14 +2583,14 @@ const drawerConfirmText = computed(() => {
 }
 
 .ds-empty-title {
-  font-size: 14px;
+  font-size: var(--app-text-base);
   font-weight: 600;
   color: var(--td-text-color-primary);
   margin: 0 0 4px;
 }
 
 .ds-empty-desc {
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   color: var(--td-text-color-secondary);
   margin: 0 0 16px;
 }
@@ -2627,7 +2608,7 @@ const drawerConfirmText = computed(() => {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--app-text-md);
   color: var(--td-text-color-primary);
   line-height: 1.5;
 }
@@ -2639,7 +2620,7 @@ const drawerConfirmText = computed(() => {
   border: 1px solid var(--td-component-stroke);
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-secondary);
-  font-size: 11px;
+  font-size: var(--app-text-xs);
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -2664,7 +2645,7 @@ const drawerConfirmText = computed(() => {
 
 .custom-headers-desc {
   margin: 0 0 10px 0;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   line-height: 1.5;
   color: var(--td-text-color-placeholder);
 }
@@ -2694,7 +2675,7 @@ const drawerConfirmText = computed(() => {
     height: 32px;
     padding: 0;
     color: var(--td-text-color-placeholder);
-    border-radius: 6px;
+    border-radius: var(--app-radius-sm);
     transition: all 0.18s ease;
 
     &:hover {
@@ -2709,11 +2690,11 @@ const drawerConfirmText = computed(() => {
   border: none;
   background: transparent;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--app-text-md);
   font-weight: 500;
   color: var(--td-brand-color);
   cursor: pointer;
-  transition: color 0.12s ease;
+  transition: color var(--app-motion-instant) ease;
 }
 
 .ds-empty-retry:hover,
@@ -2730,7 +2711,7 @@ const drawerConfirmText = computed(() => {
   padding: 3px;
   background: var(--td-bg-color-secondarycontainer);
   border: 1px solid var(--td-component-stroke);
-  border-radius: 8px;
+  border-radius: var(--app-radius-md);
   width: fit-content;
   max-width: 100%;
 }
@@ -2742,15 +2723,15 @@ const drawerConfirmText = computed(() => {
   padding: 4px 10px;
   min-height: 28px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   background: transparent;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--app-text-sm);
   line-height: 1.3;
   color: var(--td-text-color-secondary);
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: background var(--app-motion-fast) ease, color var(--app-motion-fast) ease, border-color var(--app-motion-fast) ease;
 }
 
 .option-pill:hover {
@@ -2780,7 +2761,7 @@ const drawerConfirmText = computed(() => {
   gap: 8px;
   padding: 12px;
   border: 1px solid var(--td-component-stroke);
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   background: var(--td-bg-color-container);
 }
 
@@ -2792,11 +2773,11 @@ const drawerConfirmText = computed(() => {
 </style>
 
 <!--
-  Drawer header logo — same white badge as list cards / StorageEngineSettings.
+  Drawer header logo — same white badge as the data-source list cards.
 -->
 <style lang="less">
 .datasource-editor-drawer .setting-drawer__header-icon:has(.datasource-header-icon__img) {
-  background: var(--td-bg-color-container, #fff);
+  background: var(--td-bg-color-container);
   box-shadow: inset 0 0 0 1px var(--td-component-stroke);
 }
 

@@ -96,7 +96,7 @@ export function useEmbedChatSession(options: {
     scrollToBottom(true)
   }
 
-  useStickyBottomOnResize(scrollContainer, userHasScrolledUp, scrollToBottom)
+  useStickyBottomOnResize(scrollContainer, userHasScrolledUp)
 
   const debounce = <T extends (...args: never[]) => void>(fn: T, delay: number) => {
     let timer: ReturnType<typeof setTimeout>

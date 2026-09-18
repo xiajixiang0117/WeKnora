@@ -101,19 +101,19 @@ const formatFileSize = (bytes: number): string => {
   width: 100%;
 
   &.is-embedded .user_msg {
-    max-width: min(88%, 680px);
+    max-width: 100%;
   }
 }
 
 .user_msg {
   width: max-content;
   max-width: min(76%, 680px);
-  padding: 12px 16px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--embed-primary, var(--td-brand-color)) 5%, var(--td-bg-color-container, #fff));
+  padding: 8px 12px;
+  border-radius: var(--app-radius-md);
+  background: var(--td-bg-color-secondarycontainer);
   margin-left: auto;
   color: var(--td-text-color-primary);
-  font-size: 14px;
+  font-size: var(--app-text-xl);
   line-height: 1.6;
   text-align: left;
   word-break: break-word;
@@ -134,8 +134,8 @@ const formatFileSize = (bytes: number): string => {
   width: 120px;
   height: 120px;
   object-fit: cover;
-  border-radius: 6px;
-  border: 1px solid var(--td-border-level-2-color, #e7e7e7);
+  border-radius: var(--app-radius-sm);
+  border: 1px solid var(--td-border-level-2-color);
   cursor: pointer;
 }
 
@@ -149,15 +149,15 @@ const formatFileSize = (bytes: number): string => {
 
 .user_attachment_card {
   padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--td-border-level-1-color, #e7e7e7);
-  background: var(--td-bg-color-container, #fff);
+  border-radius: var(--app-radius-md);
+  border: 1px solid var(--td-border-level-1-color);
+  background: var(--td-bg-color-container);
   max-width: 260px;
   min-width: 120px;
 }
 
 .attachment_card_name {
-  font-size: 13px;
+  font-size: var(--app-text-md);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -165,8 +165,8 @@ const formatFileSize = (bytes: number): string => {
 }
 
 .attachment_card_meta {
-  font-size: 11px;
-  color: var(--td-text-color-secondary, #999);
+  font-size: var(--app-text-xs);
+  color: var(--td-text-color-secondary);
 }
 
 html[theme-mode='dark'] .user_msg {

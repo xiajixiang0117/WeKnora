@@ -14,7 +14,6 @@ import { humanizeCron, relativeTime } from '@/utils/cronHumanize'
 import DataSourceEditorDialog from './DataSourceEditorDialog.vue'
 import DataSourceSyncLogs from './DataSourceSyncLogs.vue'
 import DataSourceTypeIcon from './DataSourceTypeIcon.vue'
-import WebCrawlReviewDrawer from './WebCrawlReviewDrawer.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{ kbId: string }>()
@@ -35,9 +34,6 @@ const logsVisible = ref(false)
 const logsDsId = ref('')
 const logsDsName = ref('')
 const pollTimer = ref<number | null>(null)
-const webReviewVisible = ref(false)
-const webReviewDsId = ref('')
-const webReviewDsName = ref('')
 
 function stopPolling() {
   if (pollTimer.value !== null) {
@@ -87,12 +83,6 @@ function openLogs(ds: DataSource) {
   logsDsId.value = ds.id
   logsDsName.value = ds.name
   logsVisible.value = true
-}
-
-function openWebReview(ds: DataSource) {
-  webReviewDsId.value = ds.id
-  webReviewDsName.value = ds.name
-  webReviewVisible.value = true
 }
 
 async function removeDataSource(ds: DataSource) {
@@ -238,15 +228,12 @@ onBeforeUnmount(stopPolling)
                         <t-icon name="edit" /> {{ t('datasource.edit') }}
                       </t-dropdown-item>
                       <t-dropdown-item
-                        v-if="canManageDataSource && ds.type !== 'web_crawler'"
+                        v-if="canManageDataSource"
                         :disabled="isSyncRunning(ds)"
                         @click="handleSync(ds)"
                       >
                         <t-icon name="refresh" :class="{ 'ds-icon-spin': isSyncRunning(ds) }" />
                         {{ isSyncRunning(ds) ? t('datasource.logStatus.running') : t('datasource.syncNow') }}
-                      </t-dropdown-item>
-                      <t-dropdown-item v-if="canManageDataSource && ds.type === 'web_crawler'" @click="openWebReview(ds)">
-                        <t-icon name="search" /> {{ t('datasource.webCrawler.checkUpdates') }}
                       </t-dropdown-item>
                       <t-dropdown-item @click="openLogs(ds)">
                         <t-icon name="root-list" /> {{ t('datasource.logs') }}
@@ -287,7 +274,7 @@ onBeforeUnmount(stopPolling)
                 </t-dropdown>
               </div>
             </div>
-            <p v-if="ds.type !== 'web_crawler'" class="ds-card__subtitle">
+            <p class="ds-card__subtitle">
               {{ connectorLabel(ds.type) }} · {{ syncModeLabel(ds.sync_mode) }}
               <span class="ds-card__sep">·</span>
               <span class="ds-card__status" :class="`ds-card__status--${ds.status}`">
@@ -296,34 +283,29 @@ onBeforeUnmount(stopPolling)
               </span>
             </p>
             <p class="ds-card__detail">
-              <template v-if="ds.type === 'web_crawler'">
-                {{ t('datasource.webCrawler.manualSync') }}
-              </template>
-              <template v-else>
-                {{ scheduleLabel(ds.sync_schedule) }}
+              {{ scheduleLabel(ds.sync_schedule) }}
+              <span class="ds-card__sep">·</span>
+              <t-tooltip :content="lastSyncFullTime(ds)" :disabled="!lastSyncFullTime(ds)">
+                <span>{{ lastSyncTime(ds) || '--' }}</span>
+              </t-tooltip>
+              <template v-if="ds.latest_sync_log">
                 <span class="ds-card__sep">·</span>
-                <t-tooltip :content="lastSyncFullTime(ds)" :disabled="!lastSyncFullTime(ds)">
-                  <span>{{ lastSyncTime(ds) || '--' }}</span>
-                </t-tooltip>
-                <template v-if="ds.latest_sync_log">
-                  <span class="ds-card__sep">·</span>
-                  <span
-                    class="ds-card__sync-result"
-                    :class="`ds-card__sync-result--${ds.latest_sync_log.status}`"
-                  >
-                    {{ lastSyncStatusLabel(ds) }}
-                  </span>
-                  <span
-                    v-for="pill in syncResultPills(ds)"
-                    :key="pill.cls"
-                    class="ds-card__metric"
-                  >{{ pill.text }}</span>
-                </template>
+                <span
+                  class="ds-card__sync-result"
+                  :class="`ds-card__sync-result--${ds.latest_sync_log.status}`"
+                >
+                  {{ lastSyncStatusLabel(ds) }}
+                </span>
+                <span
+                  v-for="pill in syncResultPills(ds)"
+                  :key="pill.cls"
+                  class="ds-card__metric"
+                >{{ pill.text }}</span>
               </template>
             </p>
             <div v-if="ds.error_message" class="ds-card__error">
               <t-icon name="error-circle-filled" size="14px" />
-              <span class="ds-card__error-text">{{ ds.error_message }}</span>
+              <span>{{ ds.error_message }}</span>
             </div>
           </div>
         </component>
@@ -354,12 +336,6 @@ onBeforeUnmount(stopPolling)
       :data-source-id="logsDsId"
       :data-source-name="logsDsName"
     />
-
-    <WebCrawlReviewDrawer
-      v-model:visible="webReviewVisible"
-      :data-source-id="webReviewDsId"
-      :data-source-name="webReviewDsName"
-    />
   </div>
 </template>
 
@@ -373,14 +349,14 @@ onBeforeUnmount(stopPolling)
   margin-bottom: 28px;
 
   h2 {
-    font-size: 20px;
+    font-size: var(--app-text-3xl);
     font-weight: 600;
     color: var(--td-text-color-primary);
     margin: 0 0 8px 0;
   }
 
   .section-description {
-    font-size: 14px;
+    font-size: var(--app-text-base);
     color: var(--td-text-color-secondary);
     margin: 0;
     line-height: 1.6;
@@ -455,14 +431,14 @@ onBeforeUnmount(stopPolling)
       justify-content: center;
       width: 32px;
       height: 32px;
-      border-radius: 8px;
+      border-radius: var(--app-radius-md);
       background: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
       color: var(--td-brand-color);
-      font-size: 18px;
+      font-size: var(--app-text-2xl);
     }
 
     &__label {
-      font-size: 13px;
+      font-size: var(--app-text-md);
       font-weight: 500;
       line-height: 1.4;
     }
@@ -477,10 +453,10 @@ onBeforeUnmount(stopPolling)
     align-items: center;
     justify-content: center;
     margin-top: 1px;
-    font-size: 15px;
+    font-size: var(--app-text-lg);
     font-weight: 600;
     letter-spacing: 0.02em;
-    background: rgba(7, 192, 95, 0.12);
+    background: color-mix(in srgb, var(--td-brand-color) 12%, transparent);
     color: #07c05f;
     overflow: hidden;
   }
@@ -490,7 +466,7 @@ onBeforeUnmount(stopPolling)
   &--yuque .ds-card__badge,
   &--ima .ds-card__badge,
   &--rss .ds-card__badge {
-    background: var(--td-bg-color-container, #fff);
+    background: var(--td-bg-color-container);
     box-shadow: inset 0 0 0 1px var(--td-component-stroke);
   }
 
@@ -510,7 +486,7 @@ onBeforeUnmount(stopPolling)
     flex: 1;
     min-width: 0;
     margin: 0;
-    font-size: 14px;
+    font-size: var(--app-text-base);
     font-weight: 600;
     line-height: 1.4;
     color: var(--td-text-color-primary);
@@ -525,7 +501,7 @@ onBeforeUnmount(stopPolling)
     flex-wrap: wrap;
     gap: 4px;
     margin: 2px 0 0;
-    font-size: 12px;
+    font-size: var(--app-text-sm);
     line-height: 1.5;
     color: var(--td-text-color-secondary);
     min-width: 0;
@@ -555,7 +531,7 @@ onBeforeUnmount(stopPolling)
     flex-wrap: wrap;
     gap: 4px;
     margin: 4px 0 0;
-    font-size: 12px;
+    font-size: var(--app-text-sm);
     line-height: 1.45;
     color: var(--td-text-color-placeholder);
     min-width: 0;
@@ -583,7 +559,7 @@ onBeforeUnmount(stopPolling)
   }
 
   &__metric {
-    font-size: 11px;
+    font-size: var(--app-text-xs);
     font-variant-numeric: tabular-nums;
     color: var(--td-text-color-disabled);
   }
@@ -599,25 +575,12 @@ onBeforeUnmount(stopPolling)
     gap: 6px;
     margin-top: 8px;
     padding: 8px 10px;
-    max-width: 100%;
-    box-sizing: border-box;
-    border-radius: 6px;
+    border-radius: var(--app-radius-sm);
     background: var(--td-error-color-1);
     color: var(--td-error-color);
-    font-size: 12px;
+    font-size: var(--app-text-sm);
     line-height: 1.45;
     text-align: left;
-  }
-
-  &__error-text {
-    flex: 1;
-    min-width: 0;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden;
-    overflow-wrap: anywhere;
-    word-break: break-word;
   }
 
   &__actions {
@@ -633,7 +596,7 @@ onBeforeUnmount(stopPolling)
     padding: 2px;
     opacity: 0;
     color: var(--td-text-color-placeholder);
-    transition: opacity 0.15s ease, color 0.15s ease;
+    transition: opacity var(--app-motion-fast) ease, color var(--app-motion-fast) ease;
 
     &:hover,
     &:focus-visible {
@@ -658,12 +621,7 @@ onBeforeUnmount(stopPolling)
 }
 
 .ds-icon-spin {
-  animation: ds-spin 1s linear infinite;
-}
-
-@keyframes ds-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  animation: wk-spin 1s linear infinite;
 }
 
 :deep(.t-dropdown__item.ds-dropdown-delete-item) {

@@ -2,10 +2,10 @@
   <div class="embed-page" :style="pageStyle">
     <div v-if="loadError" class="embed-error">{{ loadError }}</div>
     <template v-else-if="config">
-      <header v-if="!bootstrapping" class="embed-header">
+      <header v-if="sessionId" class="embed-header">
         <span class="embed-header__badge" :style="badgeStyle">
           <span v-if="config.agent_avatar" class="embed-header__avatar">{{ config.agent_avatar }}</span>
-          <component :is="headerIcon" v-else size="18px" />
+          <t-icon v-else :name="headerIcon" size="18px" />
         </span>
         <div class="embed-header__text">
           <h1 class="embed-header__title">{{ headerTitle }}</h1>
@@ -21,14 +21,13 @@
           :aria-label="$t('embedPublish.newChat')"
           @click="handleNewChat"
         >
-          <template #icon><AddIcon /></template>
+          <template #icon><t-icon name="add" /></template>
         </t-button>
       </header>
 
       <EmbedChatView
-        v-if="!bootstrapping"
+        v-if="sessionId"
         :session-id="sessionId"
-        :ensure-session="ensureSession"
         :session-sig="sessionSig"
         :visitor-id="visitorId"
         :channel-id="channelId"
@@ -57,7 +56,6 @@
 import { computed, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { AddIcon, ChatIcon, ControlPlatformIcon } from 'tdesign-icons-vue-next'
 import EmbedChatView from '@/views/embed/EmbedChatView.vue'
 import { useEmbedBridge } from '@/composables/useEmbedBridge'
 import { setDefaultProtectedFileAccess } from '@/utils/protectedFileAccess'
@@ -79,7 +77,6 @@ const {
   bootstrapping,
   hostContext,
   startNewSession,
-  ensureSession,
 } = useEmbedBridge(channelId)
 
 // An embed visitor has no Bearer/tenant credentials, so every protected file in
@@ -166,7 +163,7 @@ const headerSubtitle = computed(() => {
 
 const headerIcon = computed(() => {
   const agentId = config.value?.agent_id || ''
-  return agentId && agentId !== 'builtin-quick-answer' ? ControlPlatformIcon : ChatIcon
+  return agentId && agentId !== 'builtin-quick-answer' ? 'control-platform' : 'chat'
 })
 
 watch(headerTitle, (title) => {
@@ -177,13 +174,20 @@ watch(headerTitle, (title) => {
 <style scoped lang="less">
 .embed-page {
   height: 100vh;
-  height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: var(--td-bg-color-container, #fff);
+  background: var(--td-bg-color-container);
   overflow: hidden;
-  // pageStyle supplies channel colors; otherwise inherit the theme tokens.
-  // A custom property referencing itself, even in a fallback, is invalid.
+  /* 子组件（含 AgentStreamDisplay）内凡用 --td-brand-color 的 loading / 强调色均跟随渠道主题 */
+  --td-brand-color: var(--embed-primary, var(--td-brand-color));
+  --td-brand-color-hover: var(--embed-primary, var(--td-brand-color-hover));
+  --td-brand-color-active: var(--embed-primary, var(--td-brand-color-active));
+
+  :deep(.t-button--theme-primary) {
+    --td-brand-color: var(--embed-primary, var(--td-brand-color));
+    --td-brand-color-hover: var(--embed-primary, var(--td-brand-color-hover));
+    --td-brand-color-active: var(--embed-primary, var(--td-brand-color-active));
+  }
 
   :deep(.embed-input-box:focus-within) {
     border-color: var(--embed-primary, var(--td-brand-color));
@@ -197,10 +201,9 @@ watch(headerTitle, (title) => {
 .embed-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 64px;
-  box-sizing: border-box;
-  padding: 16px 20px;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--td-component-stroke);
   background: var(--td-bg-color-container);
   flex-shrink: 0;
 
@@ -208,16 +211,16 @@ watch(headerTitle, (title) => {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 10px;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--app-radius-lg);
     flex-shrink: 0;
     background: color-mix(in srgb, var(--td-brand-color) 10%, transparent);
     color: var(--td-brand-color);
   }
 
   &__avatar {
-    font-size: 20px;
+    font-size: var(--app-text-3xl);
     line-height: 1;
   }
 
@@ -237,7 +240,7 @@ watch(headerTitle, (title) => {
 
   &__title {
     margin: 0;
-    font-size: 16px;
+    font-size: var(--app-text-lg);
     font-weight: 600;
     line-height: 1.35;
     color: var(--td-text-color-primary);
@@ -248,7 +251,7 @@ watch(headerTitle, (title) => {
 
   &__subtitle {
     margin: 2px 0 0;
-    font-size: 12px;
+    font-size: var(--app-text-sm);
     line-height: 1.4;
     color: var(--td-text-color-secondary);
     overflow: hidden;

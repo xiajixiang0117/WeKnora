@@ -2,15 +2,17 @@ package service
 
 import (
 	"context"
-	"strings"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"testing"
 
 	"github.com/Tencent/WeKnora/internal/types"
-	"github.com/alicebob/miniredis/v2"
-	"github.com/redis/go-redis/v9"
 )
 
 func TestEmbedSessionHandleSignVerify(t *testing.T) {
+	t.Setenv("SYSTEM_SIGNING_KEY", "")
+	t.Setenv("SYSTEM_AES_KEY", "test-embed-signing-key-32-bytes!!!")
 	ch := &types.EmbedChannel{ID: "ch-1", PublishToken: "em_secret_token"}
 	const sessionID = "11111111-2222-3333-4444-555555555555"
 
@@ -52,6 +54,8 @@ func TestEmbedSessionHandleSignVerify(t *testing.T) {
 }
 
 func TestIsEmbedSessionToken(t *testing.T) {
+	t.Setenv("SYSTEM_SIGNING_KEY", "")
+	t.Setenv("SYSTEM_AES_KEY", "test-embed-signing-key-32-bytes!!!")
 	if !IsEmbedSessionToken("ems_abc123") {
 		t.Fatal("expected ems_ prefix to be session token")
 	}
@@ -63,48 +67,9 @@ func TestIsEmbedSessionToken(t *testing.T) {
 	}
 }
 
-func TestIsEmbedPreviewSessionToken(t *testing.T) {
-	if !IsEmbedPreviewSessionToken("ems_preview_abc123") {
-		t.Fatal("expected ems_preview_ prefix to be preview session token")
-	}
-	if IsEmbedPreviewSessionToken("ems_abc123") {
-		t.Fatal("ordinary session token must not be treated as preview token")
-	}
-	if IsEmbedPreviewSessionToken("em_abc123") {
-		t.Fatal("publish token must not be treated as preview token")
-	}
-}
-
-func TestIssuePreviewSessionUsesDistinctTokenPrefix(t *testing.T) {
-	mr := miniredis.RunT(t)
-	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	t.Cleanup(func() { _ = rdb.Close() })
-
-	svc := &embedChannelService{
-		repo: &stubEmbedChannelRepo{ch: &types.EmbedChannel{
-			ID:       "ch-preview",
-			TenantID: 42,
-			Enabled:  true,
-		}},
-		redis: rdb,
-	}
-	token, expiresIn, err := svc.IssuePreviewSession(context.Background(), 42, "ch-preview")
-	if err != nil {
-		t.Fatalf("IssuePreviewSession() error = %v", err)
-	}
-	if !strings.HasPrefix(token, "ems_preview_") {
-		t.Fatalf("preview token = %q, want ems_preview_ prefix", token)
-	}
-	if expiresIn != int(embedSessionTTL.Seconds()) {
-		t.Fatalf("expiresIn = %d, want %d", expiresIn, int(embedSessionTTL.Seconds()))
-	}
-	resolved, err := svc.ResolveSessionToken(context.Background(), token)
-	if err != nil || resolved != "ch-preview" {
-		t.Fatalf("ResolveSessionToken() = %q, %v; want ch-preview, nil", resolved, err)
-	}
-}
-
 func TestIssueSessionTokenWithoutRedis(t *testing.T) {
+	t.Setenv("SYSTEM_SIGNING_KEY", "")
+	t.Setenv("SYSTEM_AES_KEY", "test-embed-signing-key-32-bytes!!!")
 	svc := &embedChannelService{redis: nil}
 	_, _, err := svc.IssueSessionToken(context.Background(), "channel-1")
 	if err != ErrEmbedSessionUnavailable {
@@ -113,6 +78,8 @@ func TestIssueSessionTokenWithoutRedis(t *testing.T) {
 }
 
 func TestResolveSessionTokenWithoutRedis(t *testing.T) {
+	t.Setenv("SYSTEM_SIGNING_KEY", "")
+	t.Setenv("SYSTEM_AES_KEY", "test-embed-signing-key-32-bytes!!!")
 	svc := &embedChannelService{redis: nil}
 	_, err := svc.ResolveSessionToken(context.Background(), "ems_test")
 	if err != ErrEmbedSessionUnavailable {
@@ -121,9 +88,28 @@ func TestResolveSessionTokenWithoutRedis(t *testing.T) {
 }
 
 func TestResolveSessionTokenRejectsPublishToken(t *testing.T) {
+	t.Setenv("SYSTEM_SIGNING_KEY", "")
+	t.Setenv("SYSTEM_AES_KEY", "test-embed-signing-key-32-bytes!!!")
 	svc := &embedChannelService{redis: nil}
 	_, err := svc.ResolveSessionToken(context.Background(), "em_publish_only")
 	if err != ErrEmbedTokenInvalid {
 		t.Fatalf("expected ErrEmbedTokenInvalid for publish token, got %v", err)
+	}
+}
+
+func TestEmbedSessionRejectsPublicTokenForgery(t *testing.T) {
+	t.Setenv("SYSTEM_SIGNING_KEY", "")
+	t.Setenv("SYSTEM_AES_KEY", "test-embed-signing-key-32-bytes!!!")
+	ch := &types.EmbedChannel{ID: "channel", PublishToken: "public-token"}
+	mac := hmac.New(sha256.New, []byte(ch.PublishToken))
+	mac.Write([]byte(ch.ID + "|victim-session"))
+	forged := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	if VerifyEmbedSessionHandle(ch, "victim-session", forged) {
+		t.Fatal("accepted public-token forgery")
+	}
+	t.Setenv("SYSTEM_SIGNING_KEY", "")
+	t.Setenv("SYSTEM_AES_KEY", "")
+	if SignEmbedSessionHandle(ch, "session") != "" {
+		t.Fatal("signed without a server key")
 	}
 }

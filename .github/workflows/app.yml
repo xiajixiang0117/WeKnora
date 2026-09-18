@@ -1,9 +1,58 @@
 name: App
 
-# Anydoc (Rust archive + `anydoc` build tag) lives in anydoc.yml so its
-# expensive Rust build can be dispatched separately.
+# Anydoc (Rust archive + `anydoc` build tag) lives in anydoc.yml so a
+# migrations-only or unrelated Go PR does not compile the parser engine.
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.go"
+      - "!cli/**"
+      - "!client/**"
+      - "!docreader/**"
+      - "!third_party/anydoc-go/**"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - "config/**"
+      - "migrations/**"
+      - "skills/preloaded/**"
+      - "testdata/**"
+      - "docker/Dockerfile.app"
+      - "LICENSE"
+      - "THIRD_PARTY_NOTICES.md"
+      - "licenses/**"
+      - "internal/textconv/data/**"
+      - "scripts/*license*.sh"
+      - "scripts/git-hooks/**"
+      - "scripts/test-git-hooks.sh"
+      - "cmd/desktop/build/windows/installer/project.nsi"
+      - ".github/workflows/app.yml"
+  pull_request:
+    paths:
+      - "**/*.go"
+      - "!cli/**"
+      - "!client/**"
+      - "!docreader/**"
+      - "!third_party/anydoc-go/**"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - "config/**"
+      - "migrations/**"
+      - "skills/preloaded/**"
+      - "testdata/**"
+      - "docker/Dockerfile.app"
+      - "LICENSE"
+      - "THIRD_PARTY_NOTICES.md"
+      - "licenses/**"
+      - "internal/textconv/data/**"
+      - "scripts/*license*.sh"
+      - "scripts/git-hooks/**"
+      - "scripts/test-git-hooks.sh"
+      - "cmd/desktop/build/windows/installer/project.nsi"
+      - ".github/workflows/app.yml"
   workflow_dispatch:
 
 concurrency:
@@ -18,6 +67,7 @@ env:
   GOPROXY: https://proxy.golang.org,direct
   # Keep tests independent of a developer machine's custom log template.
   LOG_FORMAT: ""
+  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
 
 jobs:
   verify:
@@ -39,13 +89,24 @@ jobs:
         run: go mod download
 
       - name: Verify third-party notices and source bundle
-        run: bash ./scripts/check-license-bundle.sh
+        run: |
+          bash ./scripts/check-license-bundle.sh
+          bash ./scripts/test-license-bundle.sh
 
       - name: Check formatting
         shell: bash
         run: |
-          base=$(git rev-parse HEAD^)
-          diff_range="$base..$GITHUB_SHA"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Compare base..head, not the PR merge commit, so files changed only
+            # on main after the branch point are not attributed to this PR.
+            diff_range="${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}"
+          else
+            base="$BASE_SHA"
+            if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then
+              base=$(git rev-parse HEAD^)
+            fi
+            diff_range="$base..$GITHUB_SHA"
+          fi
           unformatted=$(
             git diff --name-only --diff-filter=ACMR -z "$diff_range" -- '*.go' ':!cli/**' |
               xargs -0 -r gofmt -l
@@ -55,6 +116,9 @@ jobs:
             echo "$unformatted"
             exit 1
           fi
+
+      - name: Verify Git hook test coverage
+        run: bash ./scripts/test-git-hooks.sh
 
       - name: Vet and test
         shell: bash

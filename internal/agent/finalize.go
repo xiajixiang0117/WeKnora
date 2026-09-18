@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	agenttools "github.com/Tencent/WeKnora/internal/agent/tools"
@@ -10,37 +9,8 @@ import (
 	"github.com/Tencent/WeKnora/internal/event"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/chat"
-	"github.com/Tencent/WeKnora/internal/searchutil"
 	"github.com/Tencent/WeKnora/internal/types"
 )
-
-const finalAnswerPresentationRequirement = `Use clear, natural language that fits the user's question. Headings and lists are optional: use them only when they make steps, comparisons, or conditions easier to understand. Do not force a fixed section template.`
-
-func finalAnswerImageRequirement(hasRetrievedImage bool) string {
-	if !hasRetrievedImage {
-		return ""
-	}
-	return `
-5. Retrieved tool results contain Markdown images. Unless the user explicitly requested text-only output or every image is clearly unrelated, the final answer MUST include at least one relevant Markdown image copied verbatim from the tool results. Preserve its complete URL exactly. Use ASCII half-width parentheses exactly as ![alt](url) and never use full-width （ or ）. Place the image immediately after the paragraph it supports. When multiple images support different sections, distribute them across those sections instead of stopping after the first image.
-6. Before finishing, silently verify that the answer contains a Markdown image when requirement 5 applies.`
-}
-
-// finalAnswerCitationRequirement repeats the source protocol in the final
-// synthesis instruction. Tool results are supplied after the system prompt, so
-// keeping the rule adjacent to the answer request makes it less likely that a
-// provider will omit otherwise valid inline citations.
-func finalAnswerCitationRequirement(citationsEnabled bool) string {
-	if !citationsEnabled {
-		return ""
-	}
-	return `
-
-Citation requirement:
-- When the answer uses retrieved knowledge, you MUST cite every material claim with the supplied source handle, for example <ref id="cN"/> for a knowledge chunk or <ref id="wN"/> for a web page.
-- Put each citation inline on the same line as the claim it supports. Do not group citations at the end of the answer.
-- Copy only cN/wN handles that appear in the supplied tool results. Never invent a handle or write <kb> or <web> tags.
-- Before finishing, silently verify that every material retrieved claim has at least one valid inline citation.`
-}
 
 // streamFinalAnswerToEventBus streams the final answer generation through EventBus
 func (e *AgentEngine) streamFinalAnswerToEventBus(
@@ -48,6 +18,7 @@ func (e *AgentEngine) streamFinalAnswerToEventBus(
 	query string,
 	state *types.AgentState,
 	sessionID string,
+	conversation []chat.Message,
 ) error {
 	totalToolCalls := countTotalToolCalls(state.RoundSteps)
 	logger.Infof(ctx, "[Agent][FinalAnswer] Synthesizing from %d steps, %d tool calls",
@@ -59,57 +30,17 @@ func (e *AgentEngine) streamFinalAnswerToEventBus(
 		"tool_results": totalToolCalls,
 	})
 
-	// Build messages with all context
-	systemPrompt := e.buildSystemPrompt(ctx)
-	userTurn := e.RenderUserTurnContent(sessionID, query)
-
-	messages := []chat.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: userTurn},
-	}
-
-	// Add all tool call results as context
-	toolResultCount := 0
-	hasRetrievedImage := false
-	for stepIdx, step := range state.RoundSteps {
-		for toolIdx, toolCall := range step.ToolCalls {
-			toolResultCount++
-			if searchutil.MarkdownImageRegex.MatchString(toolCall.Result.Output) {
-				hasRetrievedImage = true
-			}
-			modelOutput := e.modelContext.ModelToolResultForTool(toolCall.Name, toolCall.Result)
-			messages = append(messages, chat.Message{
-				Role:    "user",
-				Content: fmt.Sprintf("Tool %s returned: %s", toolCall.Name, modelOutput),
-			})
-			logger.Debugf(ctx, "[Agent][FinalAnswer] Added tool result [Step-%d][Tool-%d]: %s (output: %d chars)",
-				stepIdx+1, toolIdx+1, toolCall.Name, len(toolCall.Result.Output))
-		}
-	}
-
-	logger.Debugf(ctx, "[Agent][FinalAnswer] Built context: %d messages, %d tool results",
-		len(messages), toolResultCount)
-
-	imageRequirement := finalAnswerImageRequirement(hasRetrievedImage)
-	citationRequirement := finalAnswerCitationRequirement(e.config.CitationsEnabled())
-
-	// Add final answer prompt
-	finalPrompt := fmt.Sprintf(`Based on the above tool call results, generate a complete answer for the user's question.
-
-User question: %s
-
-Requirements:
-1. Answer based on the actually retrieved content
-2. %s
-3. If information is insufficient, honestly state so
-4. IMPORTANT: Respond in the same language as the user's question
-%s%s
-
-Now generate the final answer:`, query, finalAnswerPresentationRequirement, citationRequirement, imageRequirement)
-
+	// Reuse the live transcript, including history, images, compaction and steer
+	// messages. Tool output must retain its role and call ID; never promote it
+	// into user instructions during error recovery or iteration-limit synthesis.
+	messages := append([]chat.Message(nil), conversation...)
 	messages = append(messages, chat.Message{
-		Role:    "user",
-		Content: finalPrompt,
+		Role: "user",
+		Content: "Tool execution has ended for this run. Respond to the current task, including " +
+			"the latest user corrections and source restrictions in the conversation. Base claims on " +
+			"the evidence actually obtained; distinguish completed work from remaining work and explain " +
+			"any missing evidence. Use the user's requested language and format. Do not claim that an " +
+			"unperformed action succeeded.",
 	})
 
 	// Generate a single ID for this entire final answer stream
@@ -125,6 +56,7 @@ Now generate the final answer:`, query, finalAnswerPresentationRequirement, cita
 			Temperature:         e.config.Temperature,
 			MaxCompletionTokens: budget,
 			PromptCacheKey:      sessionID,
+			ToolChoice:          "none",
 		}, // Thinking disabled for final answer synthesis
 		func(chunk *types.StreamResponse, fullContent string) {
 			// Defensive filter: only emit answer content, skip thinking chunks
@@ -189,7 +121,7 @@ Now generate the final answer:`, query, finalAnswerPresentationRequirement, cita
 // handleMaxIterations generates a final answer when the agent loop exhausted all iterations
 // without the LLM producing a natural stop. It marks state.IsComplete = true.
 func (e *AgentEngine) handleMaxIterations(
-	ctx context.Context, query string, state *types.AgentState, sessionID string,
+	ctx context.Context, query string, state *types.AgentState, sessionID string, messages []chat.Message,
 ) {
 	logger.Info(ctx, "Reached max iterations, generating final answer")
 	common.PipelineWarn(ctx, "Agent", "max_iterations_reached", map[string]interface{}{
@@ -198,7 +130,7 @@ func (e *AgentEngine) handleMaxIterations(
 	})
 
 	// Stream final answer generation through EventBus
-	if err := e.streamFinalAnswerToEventBus(ctx, query, state, sessionID); err != nil {
+	if err := e.streamFinalAnswerToEventBus(ctx, query, state, sessionID, messages); err != nil {
 		logger.Errorf(ctx, "Failed to synthesize final answer: %v", err)
 		common.PipelineError(ctx, "Agent", "final_answer_failed", map[string]interface{}{
 			"error": err.Error(),
@@ -212,8 +144,14 @@ func (e *AgentEngine) handleMaxIterations(
 func (e *AgentEngine) emitCompletionEvent(
 	ctx context.Context, state *types.AgentState, sessionID, messageID string, startTime time.Time,
 ) {
-	state.KnowledgeRefs = collectKnowledgeReferences(state)
-
+	steps := state.RoundSteps
+	if len(state.PendingSteerMessages) > 0 {
+		// A stop or model failure can arrive after delivery but before the next
+		// response exists. Preserve that boundary without inventing an answer.
+		steps = append(append([]types.AgentStep(nil), steps...), types.AgentStep{
+			Iteration: state.CurrentRound, UserMessagesBefore: state.PendingSteerMessages,
+		})
+	}
 	// Convert knowledge refs to interface{} slice for event data
 	knowledgeRefsInterface := make([]interface{}, 0, len(state.KnowledgeRefs))
 	for _, ref := range state.KnowledgeRefs {
@@ -227,7 +165,7 @@ func (e *AgentEngine) emitCompletionEvent(
 		Data: event.AgentCompleteData{
 			FinalAnswer:     state.FinalAnswer,
 			KnowledgeRefs:   knowledgeRefsInterface,
-			AgentSteps:      state.RoundSteps, // Include detailed execution steps for message storage
+			AgentSteps:      steps,
 			Usage:           turnUsage(state),
 			TotalSteps:      len(state.RoundSteps),
 			TotalDurationMs: time.Since(startTime).Milliseconds(),
