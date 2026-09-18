@@ -93,11 +93,11 @@ func referencesFromToolResult(toolName string, result *types.ToolResult) []*type
 	displayType, _ := result.Data["display_type"].(string)
 	var rows interface{}
 	switch {
-	case toolName == agenttools.ToolKnowledgeSearch && displayType == "search_results":
+	case (toolName == agenttools.ToolSearchKnowledge || toolName == agenttools.LegacyToolKnowledgeSearch) && displayType == "search_results":
 		rows = result.Data["results"]
-	case toolName == agenttools.ToolGrepChunks && displayType == "grep_results":
+	case toolName == agenttools.LegacyToolGrepChunks && displayType == "grep_results":
 		rows = result.Data["chunk_results"]
-	case toolName == agenttools.ToolListKnowledgeChunks && displayType == "knowledge_chunks_list":
+	case (toolName == agenttools.ToolReadDocument || toolName == agenttools.LegacyToolListKnowledgeChunks) && displayType == "knowledge_chunks_list":
 		rows = result.Data["chunks"]
 	default:
 		return nil

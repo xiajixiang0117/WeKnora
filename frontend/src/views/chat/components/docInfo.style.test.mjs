@@ -13,6 +13,7 @@ test('timeline references neutralize brand colors via local css variables', () =
 })
 
 test('doc header uses right/down chevron on the outer title only', () => {
-  assert.match(source, /showReferBox \? 'chevron-down' : 'chevron-right'/)
+  assert.match(source, /<ChevronDownIcon v-if="showReferBox"\s*\/>/)
+  assert.match(source, /<ChevronRightIcon v-else\s*\/>/)
   assert.doesNotMatch(source, /class="doc-group-arrow"/)
 })

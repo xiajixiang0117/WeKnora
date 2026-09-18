@@ -73,21 +73,6 @@ const messages = {
       "tokenRequiredForPreview": "需要发布 Token 才能预览。请先创建渠道，或点击「轮换 Token」获取新 Token。"
     },
     "chat": {
-      "conversationTime": {
-        "today": "今天 {time}",
-        "yesterday": "昨天 {time}",
-        "thisYear": "{month}月{day}日 {time}",
-        "otherYear": "{year}年{month}月{day}日 {time}"
-      },
-      "referencesDrawerTitle": "参考来源",
-      "referencesDrawerTitleWeb": "网页来源",
-      "referencesDrawerTitleDocs": "文档来源",
-      "referencesDrawerTitleTools": "工具结果",
-      "referencesDrawerTitleMixed": "参考来源",
-      "referencesDrawerWebSection": "网页",
-      "referencesDrawerDocsSection": "知识库文档",
-      "referencesDrawerToolsSection": "工具",
-      "referencesDrawerEmpty": "暂无参考来源",
       "title": "对话",
       "newChat": "新对话",
       "suggestedQuestions": "你可以这样问我",
@@ -121,6 +106,12 @@ const messages = {
       "unableToGetKnowledgeBaseId": "无法获取知识库ID",
       "summaryInProgress": "正在总结答案……",
       "thinkingAlt": "正在思考",
+      "conversationTime": {
+        "today": "今天 {time}",
+        "yesterday": "昨天 {time}",
+        "thisYear": "{month}月{day}日 {time}",
+        "otherYear": "{year}年{month}月{day}日 {time}"
+      },
       "preparingAnswer": "正在准备回答…",
       "connectingModelAndGeneratingAnswer": "正在连接模型并生成回答…",
       "modelStillResponding": "模型响应较慢，仍在等待…",
@@ -130,6 +121,15 @@ const messages = {
       "referencesDocCount": "引用了{count}篇文档",
       "referencesWebCount": "参考了{count}条网页",
       "referencesDocAndWebCount": "引用了{docCount}篇文档和{webCount}条网页",
+      "referencesDrawerTitle": "参考来源",
+      "referencesDrawerTitleWeb": "网页来源",
+      "referencesDrawerTitleDocs": "文档来源",
+      "referencesDrawerTitleTools": "工具结果",
+      "referencesDrawerTitleMixed": "参考来源",
+      "referencesDrawerWebSection": "网页",
+      "referencesDrawerDocsSection": "知识库文档",
+      "referencesDrawerToolsSection": "工具",
+      "referencesDrawerEmpty": "暂无参考来源",
       "referenceChunkCount": "{count}个片段",
       "fallbackHint": "未从知识库中检索到相关内容，以上为模型直接回答",
       "requestInfoTitle": "请求信息",
@@ -258,10 +258,10 @@ const messages = {
       "editorOpened": "已打开编辑器，请选择知识库后保存"
     },
     "common": {
-      "close": "关闭",
       "loading": "加载中...",
       "confirm": "确认",
       "cancel": "取消",
+      "close": "关闭",
       "copy": "复制",
       "copied": "已复制",
       "finish": "完成"
@@ -655,21 +655,6 @@ const messages = {
       "tokenRequiredForPreview": "プレビューには公開トークンが必要です。先にチャネルを作成するか、トークンをローテーションしてください。"
     },
     "chat": {
-      "conversationTime": {
-        "today": "今日{time}",
-        "yesterday": "昨日{time}",
-        "thisYear": "{month}/{day} {time}",
-        "otherYear": "{year}/{month}/{day} {time}"
-      },
-      "referencesDrawerTitle": "出典",
-      "referencesDrawerTitleWeb": "Webの出典",
-      "referencesDrawerTitleDocs": "ドキュメントの出典",
-      "referencesDrawerTitleTools": "ツールの実行結果",
-      "referencesDrawerTitleMixed": "出典",
-      "referencesDrawerWebSection": "Web",
-      "referencesDrawerDocsSection": "ドキュメント",
-      "referencesDrawerToolsSection": "ツール",
-      "referencesDrawerEmpty": "出典はありません",
       "title": "チャット",
       "newChat": "新しいチャット",
       "suggestedQuestions": "こんな質問ができます",
@@ -702,6 +687,12 @@ const messages = {
       "unableToGetKnowledgeBaseId": "ナレッジベースIDを取得できません",
       "summaryInProgress": "回答を要約しています…",
       "thinkingAlt": "思考中",
+      "conversationTime": {
+        "today": "今日{time}",
+        "yesterday": "昨日{time}",
+        "thisYear": "{month}/{day} {time}",
+        "otherYear": "{year}/{month}/{day} {time}"
+      },
       "preparingAnswer": "回答を準備しています…",
       "connectingModelAndGeneratingAnswer": "モデルに接続して回答を生成しています…",
       "modelStillResponding": "モデルの応答に時間がかかっています。引き続きお待ちください…",
@@ -711,6 +702,15 @@ const messages = {
       "referencesDocCount": "{count}件のドキュメントを引用しました",
       "referencesWebCount": "{count}件のWebページを参照しました",
       "referencesDocAndWebCount": "{docCount}件のドキュメントと{webCount}件のWebページを引用しました",
+      "referencesDrawerTitle": "出典",
+      "referencesDrawerTitleWeb": "Webの出典",
+      "referencesDrawerTitleDocs": "ドキュメントの出典",
+      "referencesDrawerTitleTools": "ツールの実行結果",
+      "referencesDrawerTitleMixed": "出典",
+      "referencesDrawerWebSection": "Web",
+      "referencesDrawerDocsSection": "ドキュメント",
+      "referencesDrawerToolsSection": "ツール",
+      "referencesDrawerEmpty": "出典はありません",
       "referenceChunkCount": "{count}件のチャンク",
       "fallbackHint": "ナレッジベースに関連する内容が見つかりませんでした。以上はモデルによる直接の回答です。",
       "requestInfoTitle": "リクエスト情報",
@@ -840,10 +840,10 @@ const messages = {
       "editorOpened": "エディタを開きました。ナレッジベースを選択して保存してください"
     },
     "common": {
-      "close": "閉じる",
       "loading": "読み込み中...",
       "confirm": "確認",
       "cancel": "キャンセル",
+      "close": "閉じる",
       "copy": "コピー",
       "copied": "コピーしました",
       "finish": "完了"
@@ -1237,21 +1237,6 @@ const messages = {
       "tokenRequiredForPreview": "A publish token is required to preview. Create a channel or rotate the token first."
     },
     "chat": {
-      "conversationTime": {
-        "today": "Today {time}",
-        "yesterday": "Yesterday {time}",
-        "thisYear": "{month}/{day} {time}",
-        "otherYear": "{month}/{day}/{year} {time}"
-      },
-      "referencesDrawerTitle": "Sources",
-      "referencesDrawerTitleWeb": "Web sources",
-      "referencesDrawerTitleDocs": "Document sources",
-      "referencesDrawerTitleTools": "Tool results",
-      "referencesDrawerTitleMixed": "Sources",
-      "referencesDrawerWebSection": "Web",
-      "referencesDrawerDocsSection": "Documents",
-      "referencesDrawerToolsSection": "Tools",
-      "referencesDrawerEmpty": "No sources available",
       "title": "Chat",
       "newChat": "New Chat",
       "suggestedQuestions": "You can ask me",
@@ -1284,6 +1269,12 @@ const messages = {
       "unableToGetKnowledgeBaseId": "Unable to get knowledge base ID",
       "summaryInProgress": "Summarizing answer…",
       "thinkingAlt": "Thinking in progress",
+      "conversationTime": {
+        "today": "Today {time}",
+        "yesterday": "Yesterday {time}",
+        "thisYear": "{month}/{day} {time}",
+        "otherYear": "{month}/{day}/{year} {time}"
+      },
       "preparingAnswer": "Preparing an answer…",
       "connectingModelAndGeneratingAnswer": "Connecting to the model and generating an answer…",
       "modelStillResponding": "The model is taking longer than usual, still waiting…",
@@ -1293,6 +1284,15 @@ const messages = {
       "referencesDocCount": "Referenced {count} document(s)",
       "referencesWebCount": "Referenced {count} web result(s)",
       "referencesDocAndWebCount": "Referenced {docCount} document(s) and {webCount} web page(s)",
+      "referencesDrawerTitle": "Sources",
+      "referencesDrawerTitleWeb": "Web sources",
+      "referencesDrawerTitleDocs": "Document sources",
+      "referencesDrawerTitleTools": "Tool results",
+      "referencesDrawerTitleMixed": "Sources",
+      "referencesDrawerWebSection": "Web",
+      "referencesDrawerDocsSection": "Documents",
+      "referencesDrawerToolsSection": "Tools",
+      "referencesDrawerEmpty": "No sources available",
       "referenceChunkCount": "{count} chunk(s)",
       "fallbackHint": "No relevant content found in knowledge base. Above is a direct response from the model.",
       "requestInfoTitle": "Request info",
@@ -1422,10 +1422,10 @@ const messages = {
       "editorOpened": "Editor opened, please select a knowledge base and save"
     },
     "common": {
-      "close": "Close",
       "loading": "Loading...",
       "confirm": "Confirm",
       "cancel": "Cancel",
+      "close": "Close",
       "copy": "Copy",
       "copied": "Copied",
       "finish": "Finish"
@@ -1795,10 +1795,10 @@ const koEmbedPublish = {
     loadError: '로드 실패',
   },
   common: {
-    close: '닫기',
     loading: '로딩 중...',
     confirm: '확인',
     cancel: '취소',
+    close: '닫기',
     copy: '복사',
     copied: '복사됨',
   },
@@ -1808,12 +1808,24 @@ const koEmbedPublish = {
     streamFailed: '스트림 연결 실패',
   },
   chat: {
+    suggestedQuestions: '이렇게 물어보세요',
+    suggestedQuestionsLoading: '로딩 중...',
+    followUpQuestions: '이어서 질문',
+    followUpQuestionsLoading: '추천 질문 로딩 중',
+    thinkingAlt: '생각 중',
     conversationTime: {
       today: '오늘 {time}',
       yesterday: '어제 {time}',
       thisYear: '{month}월 {day}일 {time}',
       otherYear: '{year}년 {month}월 {day}일 {time}',
     },
+    preparingAnswer: '답변을 준비하고 있습니다…',
+    connectingModelAndGeneratingAnswer: '모델에 연결하여 답변을 생성하고 있습니다…',
+    modelStillResponding: '모델 응답이 평소보다 오래 걸리고 있습니다. 계속 기다리는 중…',
+    referencesTitle: '{count}개의 관련 내용 참조',
+    referencesDocCount: '{count}개 문서 참조',
+    referencesWebCount: '{count}개 웹 결과 참조',
+    referencesDocAndWebCount: '{docCount}개 문서와 {webCount}개 웹페이지 참조',
     referencesDrawerTitle: '참고 출처',
     referencesDrawerTitleWeb: '웹 출처',
     referencesDrawerTitleDocs: '문서 출처',
@@ -1823,14 +1835,7 @@ const koEmbedPublish = {
     referencesDrawerDocsSection: '지식베이스 문서',
     referencesDrawerToolsSection: '도구',
     referencesDrawerEmpty: '참고 출처가 없습니다',
-    suggestedQuestions: '이렇게 물어보세요',
-    suggestedQuestionsLoading: '로딩 중...',
-    followUpQuestions: '이어서 질문',
-    followUpQuestionsLoading: '추천 질문 로딩 중',
-    thinkingAlt: '생각 중',
-    preparingAnswer: '답변을 준비하고 있습니다…',
-    connectingModelAndGeneratingAnswer: '모델에 연결하여 답변을 생성하고 있습니다…',
-    modelStillResponding: '모델 응답이 평소보다 오래 걸리고 있습니다. 계속 기다리는 중…',
+    navigateToDocument: '문서 상세 보기',
     refreshSuggestedQuestions: '다른 질문',
     imageTooMany: '이미지는 최대 5장까지 업로드할 수 있습니다',
     imageTypeSizeError: 'JPG/PNG/GIF/WEBP만 지원하며, 각 파일은 10MB 이하여야 합니다',
@@ -1929,10 +1934,10 @@ const ruEmbedPublish = {
     loadError: 'Не удалось загрузить',
   },
   common: {
-    close: 'Закрыть',
     loading: 'Загрузка...',
     confirm: 'Подтвердить',
     cancel: 'Отмена',
+    close: 'Закрыть',
     copy: 'Копировать',
     copied: 'Скопировано',
   },
@@ -1942,12 +1947,24 @@ const ruEmbedPublish = {
     streamFailed: 'Ошибка потокового соединения',
   },
   chat: {
+    suggestedQuestions: 'Вы можете спросить так',
+    suggestedQuestionsLoading: 'Загрузка...',
+    followUpQuestions: 'Спрашивайте дальше',
+    followUpQuestionsLoading: 'Загрузка рекомендуемых вопросов',
+    thinkingAlt: 'Обдумывание...',
     conversationTime: {
       today: 'Сегодня {time}',
       yesterday: 'Вчера {time}',
       thisYear: '{day}.{month} {time}',
       otherYear: '{day}.{month}.{year} {time}',
     },
+    preparingAnswer: 'Подготовка ответа…',
+    connectingModelAndGeneratingAnswer: 'Подключение к модели и создание ответа…',
+    modelStillResponding: 'Модель отвечает дольше обычного, продолжаем ждать…',
+    referencesTitle: 'Использовано {count} связанного материала',
+    referencesDocCount: 'Использовано {count} документ(ов)',
+    referencesWebCount: 'Использовано {count} веб-результат(ов)',
+    referencesDocAndWebCount: 'Использовано {docCount} документ(ов) и {webCount} веб-страниц(ы)',
     referencesDrawerTitle: 'Источники',
     referencesDrawerTitleWeb: 'Веб-источники',
     referencesDrawerTitleDocs: 'Документы',
@@ -1957,14 +1974,7 @@ const ruEmbedPublish = {
     referencesDrawerDocsSection: 'Документы базы знаний',
     referencesDrawerToolsSection: 'Инструменты',
     referencesDrawerEmpty: 'Источники отсутствуют',
-    suggestedQuestions: 'Вы можете спросить так',
-    suggestedQuestionsLoading: 'Загрузка...',
-    followUpQuestions: 'Спрашивайте дальше',
-    followUpQuestionsLoading: 'Загрузка рекомендуемых вопросов',
-    thinkingAlt: 'Обдумывание...',
-    preparingAnswer: 'Подготовка ответа…',
-    connectingModelAndGeneratingAnswer: 'Подключение к модели и создание ответа…',
-    modelStillResponding: 'Модель отвечает дольше обычного, продолжаем ждать…',
+    navigateToDocument: 'Подробнее о документе',
     refreshSuggestedQuestions: 'Ещё',
     imageTooMany: 'Можно загрузить не более 5 изображений',
     imageTypeSizeError: 'Поддерживаются только JPG/PNG/GIF/WEBP, каждый файл до 10 МБ',
@@ -2040,7 +2050,7 @@ const ruEmbedPublish = {
   },
 } as const
 
-const SUPPORTED_LOCALES = ['zh-CN', 'en-US', 'ko-KR', 'ja-JP', 'ru-RU'] as const
+export const SUPPORTED_LOCALES = ['zh-CN', 'en-US', 'ko-KR', 'ja-JP', 'ru-RU'] as const
 export type EmbedLocale = (typeof SUPPORTED_LOCALES)[number]
 
 /** Isolated from the main app `locale` key so embed preview never hijacks admin UI language. */
@@ -2086,19 +2096,21 @@ function resolveInitialEmbedLocale(): EmbedLocale {
 
 const locale = resolveInitialEmbedLocale()
 
+export const EMBED_MESSAGES = {
+  'zh-CN': messages['zh-CN'],
+  'en-US': messages['en-US'],
+  'ko-KR': deepMerge(messages['en-US'], koEmbedPublish),
+  'ja-JP': messages['ja-JP'],
+  'ru-RU': deepMerge(messages['en-US'], ruEmbedPublish),
+} as const
+
 const i18n = createI18n({
   legacy: false,
   locale,
   fallbackLocale: 'en-US',
   globalInjection: true,
   warnHtmlMessage: false,
-  messages: {
-    'zh-CN': messages['zh-CN'],
-    'en-US': messages['en-US'],
-    'ko-KR': deepMerge(messages['en-US'], koEmbedPublish),
-    'ja-JP': messages['ja-JP'],
-    'ru-RU': deepMerge(messages['en-US'], ruEmbedPublish),
-  },
+  messages: EMBED_MESSAGES,
 })
 
 type LocaleRef = { value: string }

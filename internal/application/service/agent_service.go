@@ -13,6 +13,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/agent/skills"
 	"github.com/Tencent/WeKnora/internal/agent/tools"
 	"github.com/Tencent/WeKnora/internal/application/repository"
+	"github.com/Tencent/WeKnora/internal/browserskill"
 	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/event"
 	"github.com/Tencent/WeKnora/internal/logger"
@@ -92,6 +93,8 @@ func knowledgeBaseScopesForPrompt(config *types.AgentConfig) ([]string, map[stri
 
 // agentService implements agent-related business logic
 type agentService struct {
+	browserSkill         *browserskill.Manager
+	userRepo             interfaces.UserRepository
 	cfg                  *config.Config
 	modelService         interfaces.ModelService
 	mcpServiceService    interfaces.MCPServiceService
@@ -140,8 +143,12 @@ func NewAgentService(
 	sandboxResolver sandbox.TenantSandboxResolver,
 	sandboxPinner *SessionSandboxPinner,
 	sandboxPolicy WorkspaceSandboxPolicy,
+	browserSkill *browserskill.Manager,
+	userRepo interfaces.UserRepository,
 ) interfaces.AgentService {
 	return &agentService{
+		browserSkill:         browserSkill,
+		userRepo:             userRepo,
 		cfg:                  cfg,
 		modelService:         modelService,
 		knowledgeBaseService: knowledgeBaseService,
@@ -188,6 +195,11 @@ func (s *agentService) CreateAgentEngine(
 		return nil, fmt.Errorf("chat model is nil after initialization")
 	}
 
+	if config.LocalBrowserEnabled && (!s.browserSkill.Enabled() || config.SkillInstallMode()) {
+		return nil, fmt.Errorf("local browser is unavailable for this turn; " +
+			"enable the browser integration or update the input-bar selection")
+	}
+
 	// 2. Build tool registry
 	toolRegistry := tools.NewToolRegistry()
 	if config.MaxToolOutputChars > 0 {
@@ -231,18 +243,16 @@ func (s *agentService) CreateAgentEngine(
 		s.resolvePinnedSkillInfos(config),
 	)
 
-	// Set VLM image describer for MCP tool result image analysis.
-	// When an MCP tool returns images, the engine uses VLM to generate text descriptions
-	// and appends them to the tool result content (since Chat Completions API does not
-	// reliably support images in tool role messages across providers).
+	// Non-vision chat models use the configured VLM to describe tool images.
+	// Vision chat models receive the original images after the tool replies.
 	if config.VLMModelID != "" {
 		if vlmModel, err := s.modelService.GetVLMModel(ctx, config.VLMModelID); err == nil {
 			engine.SetImageDescriber(func(ctx context.Context, imgBytes []byte, prompt string) (string, error) {
 				return vlmModel.Predict(ctx, [][]byte{imgBytes}, prompt)
 			})
-			logger.Infof(ctx, "VLM image describer set for MCP tool result analysis (model: %s)", config.VLMModelID)
+			logger.Infof(ctx, "VLM image describer set for tool result analysis (model: %s)", config.VLMModelID)
 		} else {
-			logger.Warnf(ctx, "Failed to load VLM model %s for MCP image fallback: %v", config.VLMModelID, err)
+			logger.Warnf(ctx, "Failed to load VLM model %s for tool image fallback: %v", config.VLMModelID, err)
 		}
 	}
 
@@ -267,6 +277,18 @@ func (s *agentService) CreateAgentEngine(
 			logger.Infof(ctx, "Skills manager initialized with %d skills",
 				len(skillsManager.GetAllMetadata()))
 		}
+	}
+
+	// Browser operations are native BrowserSkill RPCs, independent of shell and sandbox setup.
+	if config.LocalBrowserEnabled && s.browserSkill.Enabled() && !config.SkillInstallMode() {
+		tenant, _ := types.TenantIDFromContext(ctx)
+		user, _ := types.UserIDFromContext(ctx)
+		scope := browserskill.Scope{Tenant: tenant, User: user}
+		instructions, err := s.browserSearchInstructions(ctx)
+		if err != nil {
+			return nil, err
+		}
+		toolRegistry.RegisterTool(tools.NewBrowserSkillTool(s.browserSkill, scope, sessionID, instructions))
 	}
 
 	return engine, nil
@@ -831,8 +853,9 @@ func (s *agentService) registerTools(
 	//   - Legacy agents without AllowedTools fall back to DefaultAllowedTools().
 	var allowedTools []string
 	if len(config.AllowedTools) > 0 {
-		allowedTools = make([]string, len(config.AllowedTools))
-		copy(allowedTools, config.AllowedTools)
+		// Retired retrieval tool names in stored configs map onto their
+		// successors here, so no data migration is needed.
+		allowedTools = tools.NormalizeAllowedTools(config.AllowedTools)
 		logger.Infof(ctx, "Using custom allowed tools from config: %v", allowedTools)
 	} else {
 		allowedTools = tools.DefaultAllowedTools()
@@ -844,6 +867,7 @@ func (s *agentService) registerTools(
 
 	// ---- Capability detection from SearchTargets ----
 	var hasVectorKB bool
+	var hasGraphKB bool
 	var wikiKBIDs []string
 	wikiRoutes := tools.NewWikiRouteResolver()
 	for _, target := range config.SearchTargets {
@@ -856,6 +880,9 @@ func (s *agentService) registerTools(
 		}
 		if kb.IsVectorEnabled() || kb.IsKeywordEnabled() {
 			hasVectorKB = true
+		}
+		if kb.IsGraphEnabled() {
+			hasGraphKB = true
 		}
 		if kb.IsWikiEnabled() {
 			wikiKBIDs = append(wikiKBIDs, kb.ID)
@@ -878,25 +905,23 @@ func (s *agentService) registerTools(
 	if !hasKnowledge {
 		filteredTools := make([]string, 0)
 		kbTools := map[string]bool{
-			tools.ToolKnowledgeSearch:     true,
-			tools.ToolGrepChunks:          true,
-			tools.ToolListKnowledgeChunks: true,
+			tools.ToolSearchKnowledge:     true,
+			tools.ToolReadDocument:        true,
+			tools.ToolListDocuments:       true,
 			tools.ToolQueryKnowledgeGraph: true,
-			tools.ToolGetDocumentInfo:     true,
 			tools.ToolDatabaseQuery:       true,
 			tools.ToolDataAnalysis:        true,
 			tools.ToolDataSchema:          true,
 			// Wiki tools also require at least one KB in scope.
-			tools.ToolWikiReadPage:      true,
-			tools.ToolWikiSearch:        true,
-			tools.ToolWikiReadSourceDoc: true,
-			tools.ToolWikiFlagIssue:     true,
-			tools.ToolWikiWritePage:     true,
-			tools.ToolWikiReplaceText:   true,
-			tools.ToolWikiRenamePage:    true,
-			tools.ToolWikiDeletePage:    true,
-			tools.ToolWikiReadIssue:     true,
-			tools.ToolWikiUpdateIssue:   true,
+			tools.ToolWikiReadPage:    true,
+			tools.ToolWikiSearch:      true,
+			tools.ToolWikiFlagIssue:   true,
+			tools.ToolWikiWritePage:   true,
+			tools.ToolWikiReplaceText: true,
+			tools.ToolWikiRenamePage:  true,
+			tools.ToolWikiDeletePage:  true,
+			tools.ToolWikiReadIssue:   true,
+			tools.ToolWikiUpdateIssue: true,
 		}
 
 		// If no knowledge and no web search, also disable todo_write (not useful for simple chat)
@@ -946,24 +971,27 @@ func (s *agentService) registerTools(
 	// in AgentEditorModal.vue. These are *all* tools that retrieve/inspect
 	// content from RAG-style knowledge bases.
 	ragToolSet := map[string]bool{
-		tools.ToolKnowledgeSearch:     true,
-		tools.ToolGrepChunks:          true,
-		tools.ToolListKnowledgeChunks: true,
+		tools.ToolSearchKnowledge:     true,
 		tools.ToolQueryKnowledgeGraph: true,
-		tools.ToolGetDocumentInfo:     true,
 		tools.ToolDatabaseQuery:       true,
 	}
+	// Document readers work on stored chunks, which every KB writes whatever
+	// its indexing strategy, so a wiki-only scope keeps them: they are how a
+	// wiki reader checks the source documents a page cites.
+	documentToolSet := map[string]bool{
+		tools.ToolReadDocument:  true,
+		tools.ToolListDocuments: true,
+	}
 	allWikiToolSet := map[string]bool{
-		tools.ToolWikiReadPage:      true,
-		tools.ToolWikiSearch:        true,
-		tools.ToolWikiReadSourceDoc: true,
-		tools.ToolWikiFlagIssue:     true,
-		tools.ToolWikiWritePage:     true,
-		tools.ToolWikiReplaceText:   true,
-		tools.ToolWikiRenamePage:    true,
-		tools.ToolWikiDeletePage:    true,
-		tools.ToolWikiReadIssue:     true,
-		tools.ToolWikiUpdateIssue:   true,
+		tools.ToolWikiReadPage:    true,
+		tools.ToolWikiSearch:      true,
+		tools.ToolWikiFlagIssue:   true,
+		tools.ToolWikiWritePage:   true,
+		tools.ToolWikiReplaceText: true,
+		tools.ToolWikiRenamePage:  true,
+		tools.ToolWikiDeletePage:  true,
+		tools.ToolWikiReadIssue:   true,
+		tools.ToolWikiUpdateIssue: true,
 	}
 
 	// Hard safety nets: drop tools whose runtime prerequisite is missing.
@@ -988,7 +1016,7 @@ func (s *agentService) registerTools(
 		filtered := make([]string, 0, len(allowedTools))
 		dropped := make([]string, 0)
 		for _, t := range allowedTools {
-			if ragToolSet[t] {
+			if ragToolSet[t] || (documentToolSet[t] && !hasWikiKB) {
 				dropped = append(dropped, t)
 				continue
 			}
@@ -997,6 +1025,15 @@ func (s *agentService) registerTools(
 		allowedTools = filtered
 		if len(dropped) > 0 {
 			logger.Warnf(ctx, "Dropped RAG tools %v because no RAG-capable KB is in scope", dropped)
+		}
+	}
+	// The graph tool only answers on graph-enabled bases; offering it on a
+	// scope without one produced degraded plain-search results and a tool
+	// the model kept trying. It follows the graph capability instead.
+	if !hasGraphKB {
+		if trimmed := withoutString(allowedTools, tools.ToolQueryKnowledgeGraph); len(trimmed) != len(allowedTools) {
+			allowedTools = trimmed
+			logger.Infof(ctx, "Dropped query_knowledge_graph because no graph-enabled KB is in scope")
 		}
 	}
 
@@ -1013,8 +1050,8 @@ func (s *agentService) registerTools(
 			toolToRegister = tools.NewSequentialThinkingTool()
 		case tools.ToolTodoWrite:
 			toolToRegister = tools.NewTodoWriteTool()
-		case tools.ToolKnowledgeSearch:
-			toolToRegister = tools.NewKnowledgeSearchTool(
+		case tools.ToolSearchKnowledge:
+			toolToRegister = tools.NewSearchKnowledgeTool(
 				s.knowledgeBaseService,
 				s.knowledgeService,
 				s.chunkService,
@@ -1022,16 +1059,13 @@ func (s *agentService) registerTools(
 				rerankModel,
 				s.cfg,
 			)
-		case tools.ToolGrepChunks:
-			toolToRegister = tools.NewGrepChunksTool(s.db, config.SearchTargets)
-			logger.Infof(ctx, "Registered grep_chunks tool with searchTargets: %d targets", len(config.SearchTargets))
-		case tools.ToolListKnowledgeChunks:
-			toolToRegister = tools.NewListKnowledgeChunksTool(s.knowledgeService, s.chunkService, config.SearchTargets)
+		case tools.ToolReadDocument:
+			toolToRegister = tools.NewReadDocumentTool(s.knowledgeService, s.chunkService, config.SearchTargets)
+		case tools.ToolListDocuments:
+			toolToRegister = tools.NewListDocumentsTool(s.knowledgeService, config.SearchTargets)
 		case tools.ToolQueryKnowledgeGraph:
 			toolToRegister = tools.NewQueryKnowledgeGraphTool(s.knowledgeBaseService, config.SearchTargets).
 				WithKnowledgeScope(s.knowledgeService)
-		case tools.ToolGetDocumentInfo:
-			toolToRegister = tools.NewGetDocumentInfoTool(s.knowledgeService, s.chunkService, config.SearchTargets)
 		case tools.ToolSearchConversations:
 			// The owner is captured from the caller's identity here, not read
 			// from the model's arguments, so no prompt can redirect the search
@@ -1073,8 +1107,6 @@ func (s *agentService) registerTools(
 			toolToRegister = tools.NewWikiReadPageTool(s.wikiPageService, s.knowledgeService, wikiScopes, wikiRoutes)
 		case tools.ToolWikiSearch:
 			toolToRegister = tools.NewWikiSearchTool(s.wikiPageService, s.knowledgeService, wikiScopes, wikiRoutes)
-		case tools.ToolWikiReadSourceDoc:
-			toolToRegister = tools.NewWikiReadSourceDocTool(s.knowledgeService, s.chunkService, config.SearchTargets)
 		case tools.ToolWikiFlagIssue:
 			toolToRegister = tools.NewWikiFlagIssueTool(s.wikiPageService, wikiKBIDs, wikiRoutes).
 				WithKnowledgeScope(s.knowledgeService, config.SearchTargets)
@@ -1206,7 +1238,7 @@ func (s *agentService) getKnowledgeBaseInfos(ctx context.Context, kbIDs []string
 			pageResult, err := s.knowledgeService.ListFAQEntries(metaCtx, kbID, &types.Pagination{
 				Page:     1,
 				PageSize: 10,
-			}, nil, 0, "", "", "")
+			}, nil, 0, "", "", "", nil)
 			if err == nil && pageResult != nil {
 				docCount = int(pageResult.Total)
 				if entries, ok := pageResult.Data.([]*types.FAQEntry); ok {
@@ -1268,6 +1300,10 @@ func (s *agentService) getKnowledgeBaseInfos(ctx context.Context, kbIDs []string
 		if kbType == "" {
 			kbType = "document" // Default type
 		}
+		var profile *types.KnowledgeBaseProfile
+		if kb.GeneratedProfile.HasText() {
+			profile = kb.GeneratedProfile
+		}
 		kbInfos = append(kbInfos, &agent.KnowledgeBaseInfo{
 			ID:           kb.ID,
 			Name:         kb.Name,
@@ -1276,6 +1312,7 @@ func (s *agentService) getKnowledgeBaseInfos(ctx context.Context, kbIDs []string
 			DocCount:     docCount,
 			Capabilities: kbRetrievalCapabilities(kb),
 			RecentDocs:   recentDocs,
+			Profile:      profile,
 		})
 	}
 

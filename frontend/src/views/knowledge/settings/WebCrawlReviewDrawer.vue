@@ -207,15 +207,15 @@ onBeforeUnmount(stopPolling)
 .web-crawl-footer-actions { display:flex; align-items:center; gap:8px; }
 .web-crawl-loading { display:flex; justify-content:center; padding:80px 0; }
 .web-crawl-error { margin-bottom:12px; overflow-wrap:anywhere; }
-.web-crawl-summary { display:flex; align-items:center; gap:10px; padding:12px 14px; margin-bottom:12px; background:var(--td-bg-color-container-hover); border-radius:8px; font-size:13px; color:var(--td-text-color-secondary); }
+.web-crawl-summary { display:flex; align-items:center; gap:10px; padding:12px 14px; margin-bottom:12px; background:var(--td-bg-color-container-hover); border-radius: var(--app-radius-md); font-size: var(--app-text-md); color:var(--td-text-color-secondary); }
 .web-crawl-filters { display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
-.web-crawl-filters button { border:0; padding:3px 6px; background:transparent; color:inherit; cursor:pointer; font:inherit; border-radius:4px; }
+.web-crawl-filters button { border:0; padding:3px 6px; background:transparent; color:inherit; cursor:pointer; font:inherit; border-radius: var(--app-radius-xs); }
 .web-crawl-filters button:hover,.web-crawl-filters button.active { background:var(--td-bg-color-container); color:var(--td-brand-color); }
 .web-crawl-empty { padding:70px 0; text-align:center; color:var(--td-text-color-placeholder); }
 .web-crawl-change { display:flex; align-items:flex-start; gap:10px; padding:12px 4px; border-bottom:1px solid var(--td-component-stroke); }
 .web-crawl-change input { margin-top:4px; }
-.change-type { flex:none; min-width:44px; font-size:12px; font-weight:600; }
+.change-type { flex:none; min-width:44px; font-size: var(--app-text-sm); font-weight:600; }
 .change-type--added { color:var(--td-success-color); }.change-type--updated { color:var(--td-brand-color); }.change-type--missing,.change-type--failed { color:var(--td-error-color); }
-.change-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }.change-main strong,.change-main small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.change-main small { color:var(--td-text-color-placeholder); }.change-main span { color:var(--td-text-color-secondary); font-size:12px; }
+.change-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }.change-main strong,.change-main small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.change-main small { color:var(--td-text-color-placeholder); }.change-main span { color:var(--td-text-color-secondary); font-size: var(--app-text-sm); }
 .change-main .change-error { color:var(--td-error-color); overflow-wrap:anywhere; }
 </style>

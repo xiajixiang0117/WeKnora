@@ -37,9 +37,6 @@
               @click="handleSuggestedClick(item.question)"
             >
               <span class="embed-suggested__text">{{ item.question }}</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" class="embed-suggested__arrow">
-                <path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
             </button>
           </div>
         </div>
@@ -94,14 +91,15 @@
       </div>
     </div>
 
+    <transition name="scroll-btn-fade">
+      <div v-show="userHasScrolledUp" class="scroll-to-bottom-btn" @click="onClickScrollToBottom" aria-label="scroll to bottom">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </div>
+    </transition>
+
     <div class="embed-chat__input">
-      <transition name="scroll-btn-fade">
-        <button type="button" v-show="userHasScrolledUp" class="scroll-to-bottom-btn" @click="onClickScrollToBottom" aria-label="scroll to bottom">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
-        </button>
-      </transition>
       <EmbedInputField
         :isReplying="isReplying"
         :show-web-search-toggle="showWebSearchToggle"
@@ -143,7 +141,6 @@ type EmbedImage = { url?: string; data?: string }
 type EmbedAttachment = { file_name: string; file_size?: number }
 
 const props = defineProps<{
-  ensureSession: () => Promise<void>
   sessionId: string
   sessionSig: string
   visitorId: string
@@ -278,7 +275,6 @@ const {
   setSuggestionAttribution,
 } = useEmbedChatSession({
   sessionId: sessionIdRef,
-  ensureSession: props.ensureSession,
   sessionSig: sessionSigRef,
   visitorId: visitorIdRef,
   channelId: props.channelId,
@@ -406,7 +402,6 @@ watch(
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  min-width: 0;
   width: 100%;
   position: relative;
 }
@@ -416,19 +411,16 @@ watch(
   min-height: 0;
   width: 100%;
   overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
 }
 
 .embed-chat__messages {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
   max-width: 800px;
   margin: 0 auto;
   width: 100%;
-  padding: 16px 20px 24px;
+  padding: 12px 16px 0;
   box-sizing: border-box;
 }
 
@@ -436,7 +428,6 @@ watch(
   display: flex;
   flex-direction: column;
   width: 100%;
-  min-width: 0;
 }
 
 .embed-suggested {
@@ -444,7 +435,7 @@ watch(
 
   &__title {
     margin: 0 0 8px;
-    font-size: 13px;
+    font-size: var(--app-text-md);
     font-weight: 500;
     color: var(--td-text-color-secondary);
   }
@@ -456,24 +447,21 @@ watch(
   }
 
   &__card {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    display: block;
     width: 100%;
-    min-height: 46px;
-    padding: 12px 16px;
+    padding: 10px 12px;
     border: 1px solid var(--td-component-stroke);
-    border-radius: 12px;
+    border-radius: var(--app-radius-lg);
     background: var(--td-bg-color-container);
     text-align: left;
     cursor: pointer;
-    font: inherit;
-    transition: border-color 0.15s ease, background 0.15s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: border-color var(--app-motion-fast) ease, box-shadow var(--app-motion-fast) ease, background var(--app-motion-fast) ease;
 
     &:hover {
       border-color: color-mix(in srgb, var(--td-text-color-primary) 10%, var(--td-component-stroke));
       background: color-mix(in srgb, var(--td-text-color-primary) 4%, var(--td-bg-color-container));
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     }
 
     &--skeleton {
@@ -486,15 +474,8 @@ watch(
     }
   }
 
-  &__arrow {
-    flex-shrink: 0;
-    color: var(--td-text-color-placeholder);
-  }
-
   &__text {
-    min-width: 0;
-    overflow-wrap: anywhere;
-    font-size: 14px;
+    font-size: var(--app-text-md);
     line-height: 1.45;
     color: var(--td-text-color-primary);
   }
@@ -504,20 +485,40 @@ watch(
   display: flex;
   justify-content: flex-start;
   width: 100%;
+  animation: welcome-in 0.28s ease both;
 
   &__text {
     margin: 0;
-    width: 100%;
-    box-sizing: border-box;
-    padding: 14px 16px;
-    font-size: 14px;
+    max-width: min(88%, 520px);
+    padding: 10px 14px;
+    font-size: var(--app-text-base);
     line-height: 1.55;
     color: var(--td-text-color-primary);
     white-space: pre-wrap;
     word-break: break-word;
-    background: var(--td-bg-color-container, #fff);
-    border: 1px solid var(--td-component-stroke, #e7e7e7);
-    border-radius: 12px;
+    background: color-mix(
+      in srgb,
+      var(--embed-primary, var(--td-brand-color)) 7%,
+      var(--td-bg-color-container)
+    );
+    border: 1px solid color-mix(
+      in srgb,
+      var(--embed-primary, var(--td-brand-color)) 14%,
+      var(--td-component-stroke)
+    );
+    border-radius: 4px 14px 14px 14px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+}
+
+@keyframes welcome-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -535,13 +536,7 @@ watch(
   border: 1.5px solid var(--td-component-stroke);
   border-top-color: var(--td-text-color-secondary);
   border-radius: 50%;
-  animation: embedChatTypingSpin 0.8s linear infinite;
-}
-
-@keyframes embedChatTypingSpin {
-  to {
-    transform: rotate(360deg);
-  }
+  animation: wk-spin 0.8s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -551,10 +546,8 @@ watch(
 }
 
 .embed-chat__input {
-  position: relative;
   flex-shrink: 0;
-  padding: 12px 20px 20px;
-  background: var(--td-bg-color-container, #fff);
+  padding: 8px 16px 16px;
   box-sizing: border-box;
 }
 
@@ -579,7 +572,7 @@ watch(
 
 .sk-line {
   height: 14px;
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   background: linear-gradient(90deg, #f0f0f0 25%, #e6e6e6 50%, #f0f0f0 75%);
   background-size: 200% 100%;
   animation: sk-shimmer 1.2s ease-in-out infinite;
@@ -595,8 +588,9 @@ watch(
 
 .scroll-to-bottom-btn {
   position: absolute;
-  right: 20px;
-  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 100px;
   z-index: 10;
   width: 36px;
   height: 36px;
@@ -613,28 +607,12 @@ watch(
 
 .scroll-btn-fade-enter-active,
 .scroll-btn-fade-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity var(--app-motion-base) ease, transform var(--app-motion-base) ease;
 }
 
 .scroll-btn-fade-enter-from,
 .scroll-btn-fade-leave-to {
   opacity: 0;
-  transform: translateY(8px);
-}
-.embed-suggested__card:focus-visible,
-.scroll-to-bottom-btn:focus-visible {
-  outline: 2px solid var(--embed-primary, var(--td-brand-color));
-  outline-offset: 3px;
-}
-
-@media (max-width: 360px) {
-  .embed-chat__messages, .embed-chat__input { padding-inline: 16px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .embed-suggested__card, .sk-line, .scroll-btn-fade-enter-active, .scroll-btn-fade-leave-active {
-    animation: none;
-    transition: none;
-  }
+  transform: translateX(-50%) translateY(8px);
 }
 </style>

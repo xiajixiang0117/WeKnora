@@ -2,10 +2,10 @@
   <div class="embed-input-box" :class="{ 'is-replying': isReplying }">
     <div v-if="uploadedAttachments.length" class="embed-input-box__files">
       <div v-for="(att, index) in uploadedAttachments" :key="`${att.file.name}-${index}`" class="embed-file-chip">
-        <FileIcon size="14px" />
+        <t-icon name="file" size="14px" />
         <span class="embed-file-chip__name">{{ att.file.name }}</span>
         <button type="button" class="embed-file-chip__remove" @click="removeAttachment(index)">
-          <CloseIcon size="12px" />
+          <t-icon name="close" size="12px" />
         </button>
       </div>
     </div>
@@ -13,7 +13,7 @@
       <div v-for="(img, index) in uploadedImages" :key="img.preview" class="embed-image-thumb">
         <img :src="img.preview" :alt="img.file.name" />
         <button type="button" class="embed-image-thumb__remove" @click="removeImage(index)">
-          <CloseIcon size="12px" />
+          <t-icon name="close" size="12px" />
         </button>
       </div>
     </div>
@@ -75,7 +75,7 @@
             :aria-label="t('input.imageUpload.label')"
             @click="triggerImageUpload"
           >
-            <ImageIcon size="18px" />
+            <t-icon name="image" size="18px" />
           </button>
         </t-tooltip>
         <t-tooltip v-if="showFileUploadToggle" placement="top" :content="t('input.fileUpload.tooltip')">
@@ -86,7 +86,7 @@
             :aria-label="t('input.fileUpload.label')"
             @click="triggerFileUpload"
           >
-            <AttachIcon size="18px" />
+            <t-icon name="attach" size="18px" />
           </button>
         </t-tooltip>
       </div>
@@ -103,13 +103,10 @@
           type="button"
           class="embed-send-btn"
           :class="{ disabled: !canSend }"
-          :disabled="!canSend"
           :aria-label="t('input.send')"
           @click="submit"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 19V5m-6 6 6-6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <img src="@/assets/img/sending-aircraft.svg" :alt="t('input.send')" />
         </button>
       </div>
     </div>
@@ -119,7 +116,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { AttachIcon, CloseIcon, FileIcon, ImageIcon } from 'tdesign-icons-vue-next'
 import { embedToast } from '@/utils/embedToast'
 import { isEmbedImageFile } from '@/utils/embedFile'
 
@@ -269,17 +265,16 @@ onUnmounted(() => {
 .embed-input-box {
   position: relative;
   width: 100%;
-  box-sizing: border-box;
   max-width: 800px;
   margin: 0 auto;
-  background: var(--td-bg-color-container, #fff);
-  border-radius: 16px;
-  border: 1px solid var(--td-component-stroke, #e7e7e7);
-  box-shadow: 0 4px 18px rgba(24, 39, 68, 0.05);
-  transition: border-color 0.15s ease;
+  background: var(--td-bg-color-container);
+  border-radius: var(--app-radius-xl);
+  border: 0.5px solid var(--td-component-border);
+  box-shadow: 0 6px 6px rgba(0, 0, 0, 0.04), 0 12px 12px -1px rgba(0, 0, 0, 0.08);
+  transition: border-color var(--app-motion-fast) ease;
 
   &:focus-within {
-    border-color: var(--embed-primary, var(--td-brand-color, #07c05f));
+    border-color: var(--embed-primary, var(--td-brand-color));
   }
 
   &__files {
@@ -303,23 +298,10 @@ onUnmounted(() => {
       border: none;
       box-shadow: none;
       background: transparent;
-      padding: 12px 14px 6px;
-      font-size: 14px;
+      padding: 14px 16px 52px;
+      font-size: var(--app-text-base);
       line-height: 1.5;
-      // Preserve two editable rows even when an initially hidden frame reports
-      // a zero-height autosize measurement. This overrides TDesign's inline min.
-      min-height: 54px !important;
       resize: none;
-      overflow-x: hidden;
-      overflow-y: auto;
-      // Keep long drafts scrollable without displaying a scrollbar.
-      scrollbar-width: none;
-
-      &::-webkit-scrollbar {
-        display: none;
-        width: 0;
-        height: 0;
-      }
     }
 
     &.has-images :deep(.t-textarea__inner) {
@@ -328,11 +310,19 @@ onUnmounted(() => {
   }
 
   &__bar {
-    margin: 0 10px 10px;
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    pointer-events: none;
+
+    > * {
+      pointer-events: auto;
+    }
   }
 
   &__controls {
@@ -358,9 +348,9 @@ onUnmounted(() => {
   gap: 6px;
   max-width: 220px;
   padding: 6px 10px;
-  border-radius: 8px;
-  background: var(--td-bg-color-secondarycontainer, #f3f3f3);
-  font-size: 12px;
+  border-radius: var(--app-radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+  font-size: var(--app-text-sm);
 
   &__name {
     overflow: hidden;
@@ -381,9 +371,9 @@ onUnmounted(() => {
   position: relative;
   width: 56px;
   height: 56px;
-  border-radius: 8px;
+  border-radius: var(--app-radius-md);
   overflow: hidden;
-  border: 1px solid var(--td-component-border, #e7e7e7);
+  border: 1px solid var(--td-component-border);
 
   img {
     width: 100%;
@@ -416,11 +406,11 @@ onUnmounted(() => {
   height: 28px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   cursor: pointer;
   color: var(--td-text-color-secondary);
   background: transparent;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color var(--app-motion-fast) ease, background var(--app-motion-fast) ease;
 
   &:hover {
     background: var(--td-bg-color-secondarycontainer);
@@ -428,7 +418,7 @@ onUnmounted(() => {
   }
 
   &.active {
-    color: var(--embed-primary, var(--td-brand-color, #07c05f));
+    color: var(--embed-primary, var(--td-brand-color));
     background: color-mix(in srgb, var(--embed-primary, #07c05f) 12%, transparent);
   }
 }
@@ -441,11 +431,10 @@ onUnmounted(() => {
   height: 28px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   cursor: pointer;
-  color: #fff;
-  background: var(--embed-primary, var(--td-brand-color, #07c05f));
-  transition: background 0.15s ease, opacity 0.15s ease;
+  background: var(--embed-primary, var(--td-brand-color));
+  transition: background var(--app-motion-fast) ease, opacity var(--app-motion-fast) ease;
 
   &:hover:not(.disabled) {
     filter: brightness(0.94);
@@ -453,10 +442,13 @@ onUnmounted(() => {
 
   &.disabled {
     cursor: not-allowed;
-    background: var(--td-bg-color-secondarycontainer, #f5f6f8);
-    color: var(--td-text-color-disabled, #b8bdc7);
+    opacity: 0.45;
   }
 
+  img {
+    width: 16px;
+    height: 16px;
+  }
 }
 
 .embed-stop-btn {
@@ -467,7 +459,7 @@ onUnmounted(() => {
   height: 28px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--app-radius-sm);
   cursor: pointer;
   color: var(--td-text-color-secondary);
   background: var(--td-bg-color-secondarycontainer);
@@ -475,9 +467,5 @@ onUnmounted(() => {
   &:hover {
     background: var(--td-bg-color-component-hover);
   }
-}
-.embed-input-box button:focus-visible {
-  outline: 2px solid var(--embed-primary, var(--td-brand-color));
-  outline-offset: 3px;
 }
 </style>
