@@ -12,7 +12,7 @@ History review at adoption found no existing notes directory or prior decision t
 
 The repository vendors the note tree, format, archive verifier, shared helper, and archive command from czm15053/write-notes-like-deepseek. Root npm scripts use a locked tsx dependency so local checks and GitHub Actions run the same tools. The ignore rules allow .agents so notes and other team documents can be versioned together, as requested for team collaboration.
 
-Verify Agent Notes runs on pull requests and pushes to main, with a manual trigger for diagnostics. It uses Node.js 22, fetches full Git history, and compares archive seals against the PR base SHA or pre-push SHA. Manual runs use HEAD. The check is read-only and independent of application build and deployment jobs. The PR template directs contributors to docs/AGENT_NOTES.md and asks for updated notes on non-trivial changes.
+触发策略由[禁止推送自动触发工作流](2026-09-18-manual-actions.md)部分取代：Verify Agent Notes 现在仅手动运行，使用 Node.js 22、完整 Git 历史和 HEAD 归档校验基线。原先在 PR 和 main 推送时自动校验，目的是为贡献者提供共享校验结果；当前按维护者要求改为主动执行。工具链设计保持有效，校验仍独立于应用构建与部署，PR 模板仍指向 docs/AGENT_NOTES.md。
 
 ## Alternatives considered
 

@@ -1,10 +1,7 @@
 name: Verify Agent Notes
 
+# Manual only: pushing commits (including PR updates) must not start Actions.
 on:
-  push:
-    branches:
-      - main
-  pull_request:
   workflow_dispatch:
 
 permissions:

@@ -3,56 +3,8 @@ name: App
 # Anydoc (Rust archive + `anydoc` build tag) lives in anydoc.yml so a
 # migrations-only or unrelated Go PR does not compile the parser engine.
 
+# Manual only: pushing commits (including PR updates) must not start Actions.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "**/*.go"
-      - "!cli/**"
-      - "!client/**"
-      - "!docreader/**"
-      - "!third_party/anydoc-go/**"
-      - "go.mod"
-      - "go.sum"
-      - "Makefile"
-      - "config/**"
-      - "migrations/**"
-      - "skills/preloaded/**"
-      - "testdata/**"
-      - "docker/Dockerfile.app"
-      - "LICENSE"
-      - "THIRD_PARTY_NOTICES.md"
-      - "licenses/**"
-      - "internal/textconv/data/**"
-      - "scripts/*license*.sh"
-      - "scripts/git-hooks/**"
-      - "scripts/test-git-hooks.sh"
-      - "cmd/desktop/build/windows/installer/project.nsi"
-      - ".github/workflows/app.yml"
-  pull_request:
-    paths:
-      - "**/*.go"
-      - "!cli/**"
-      - "!client/**"
-      - "!docreader/**"
-      - "!third_party/anydoc-go/**"
-      - "go.mod"
-      - "go.sum"
-      - "Makefile"
-      - "config/**"
-      - "migrations/**"
-      - "skills/preloaded/**"
-      - "testdata/**"
-      - "docker/Dockerfile.app"
-      - "LICENSE"
-      - "THIRD_PARTY_NOTICES.md"
-      - "licenses/**"
-      - "internal/textconv/data/**"
-      - "scripts/*license*.sh"
-      - "scripts/git-hooks/**"
-      - "scripts/test-git-hooks.sh"
-      - "cmd/desktop/build/windows/installer/project.nsi"
-      - ".github/workflows/app.yml"
   workflow_dispatch:
 
 concurrency:
