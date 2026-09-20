@@ -1,4 +1,7 @@
 export default {
+  sessionManagement: {
+    columns: { question: '質問' },
+  },
   localBrowser: {
     pipOpen: "プレビューを別ウィンドウで表示",
     pipReturn: "会話内のプレビューに戻す",

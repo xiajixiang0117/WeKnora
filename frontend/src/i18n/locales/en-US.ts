@@ -1,4 +1,7 @@
 export default {
+  sessionManagement: {
+    columns: { question: 'Question' },
+  },
   localBrowser: {
     pipOpen: "Pop out preview",
     pipReturn: "Return to conversation",

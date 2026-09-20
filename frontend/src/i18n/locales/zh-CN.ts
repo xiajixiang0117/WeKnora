@@ -1,4 +1,7 @@
 export default {
+  sessionManagement: {
+    columns: { question: '问题' },
+  },
   localBrowser: {
     pipOpen: "弹出悬浮窗",
     pipReturn: "返回对话小窗",

@@ -1,4 +1,7 @@
 export default {
+  sessionManagement: {
+    columns: { question: 'Вопрос' },
+  },
   localBrowser: {
     pipOpen: "Открыть плавающее окно",
     pipReturn: "Вернуть предпросмотр в чат",

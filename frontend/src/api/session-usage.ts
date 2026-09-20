@@ -29,6 +29,7 @@ export interface SessionUsageSummary {
 }
 
 export interface SessionUsageDetail {
+  question?: string
   content?: string
   is_completed?: boolean
   is_fallback?: boolean

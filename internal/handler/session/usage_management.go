@@ -41,6 +41,7 @@ type SessionUsageAgent struct {
 // SessionUsageDetail is one assistant response and its persisted aggregate
 // across the agent's internal rounds for that response.
 type SessionUsageDetail struct {
+	Question    string            `json:"question"`
 	Content     string            `json:"content"`
 	IsCompleted bool              `json:"is_completed"`
 	IsFallback  bool              `json:"is_fallback"`
@@ -216,6 +217,7 @@ func (h *Handler) buildSessionUsage(
 	}
 	agents := make(map[string]SessionUsageAgent)
 	details := make([]SessionUsageDetail, 0)
+	questions := make(map[string]string)
 
 	for page := 1; ; page++ {
 		messages, err := h.messageService.GetMessagesBySession(
@@ -225,6 +227,9 @@ func (h *Handler) buildSessionUsage(
 			return SessionUsageSummary{}, nil, err
 		}
 		for _, message := range messages {
+			if includeDetails && message != nil && message.Role == "user" && message.RequestID != "" {
+				questions[message.RequestID] = message.Content
+			}
 			if message == nil || message.Role != "assistant" {
 				continue
 			}
@@ -264,6 +269,9 @@ func (h *Handler) buildSessionUsage(
 		}
 	}
 
+	for i := range details {
+		details[i].Question = questions[details[i].RequestID]
+	}
 	for _, agent := range agents {
 		summary.Agents = append(summary.Agents, agent)
 	}

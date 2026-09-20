@@ -149,6 +149,7 @@
         <div class="data-table-shell session-management__details-table">
           <t-table row-key="message_id" :data="details" :columns="detailColumns" size="medium" hover>
             <template #created_at="{ row }"><time :datetime="row.created_at">{{ formatDate(row.created_at) }}</time></template>
+            <template #question="{ row }"><span class="session-management__question-preview">{{ displayQuery(row.question || '') || '--' }}</span></template>
             <template #agent="{ row }">
               <div class="session-management__agent-cell">
                 <span>{{ row.agent_name || t('sessionManagement.unknownAgent') }}</span>
@@ -164,6 +165,8 @@
         </div>
 
         <section v-if="selectedAnswer" class="session-management__trace-detail">
+          <div class="session-management__detail-heading"><h2>{{ t('sessionManagement.columns.question') }}</h2></div>
+          <pre class="session-management__question-content" tabindex="0">{{ displayQuery(selectedAnswer.question || '') || '--' }}</pre>
           <div class="session-management__detail-heading"><h2>{{ t('sessionManagement.finalAnswer') }}</h2><time>{{ formatDate(selectedAnswer.created_at) }}</time></div>
           <TraceAnswer :content="selectedAnswer.content" :completed="selectedAnswer.is_completed" :fallback="selectedAnswer.is_fallback" />
         </section>
@@ -320,6 +323,7 @@ const columns = computed(() => [
 
 const detailColumns = computed(() => [
   { colKey: 'created_at', title: t('sessionManagement.columns.time'), width: 158 },
+  { colKey: 'question', title: t('sessionManagement.columns.question'), width: 240, ellipsis: true },
   { colKey: 'agent', title: t('sessionManagement.columns.agent'), width: 220, ellipsis: true },
   { colKey: 'model', title: t('sessionManagement.columns.model'), width: 180, ellipsis: true },
   { colKey: 'input', title: t('sessionManagement.columns.input'), width: 104, align: 'right' },
@@ -508,6 +512,8 @@ onMounted(() => { void loadSessions() })
 .session-management__trace-heading { margin-top: 28px; }
 .session-management__empty-trace { padding: 20px; border: 1px dashed var(--td-component-stroke); border-radius: var(--app-radius-sm); color: var(--td-text-color-secondary); font-size: var(--app-text-md); }
 .session-management__query { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-management__question-preview { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-management__question-content { max-height: 280px; overflow: auto; overscroll-behavior: contain; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 24px; padding: 16px; border: 1px solid var(--td-component-stroke); border-radius: var(--app-radius-sm); background: var(--td-bg-color-container); color: var(--td-text-color-primary); font-family: var(--td-font-family); font-size: var(--app-text-base); line-height: 1.75; }
 .session-management__trace-detail { margin-top: 24px; min-width: 0; overflow-wrap: anywhere; }
 .session-management__trace-outcome { margin-bottom: 20px; }
 .session-management__trace-outcome h3 { font-size: var(--app-text-base); margin: 20px 0 10px; }
