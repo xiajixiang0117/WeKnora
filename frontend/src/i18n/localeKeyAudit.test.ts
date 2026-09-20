@@ -51,6 +51,25 @@ test('critical runtime i18n trees are present', () => {
   assert.deepEqual(missing, [], missing.join('\n'))
 })
 
+test('session management translations cover source references and survive pruning', () => {
+  const usage = collectI18nUsageFromSources()
+  const required = [...usage.staticKeys].filter(key => key.startsWith('sessionManagement.'))
+  assert.ok(required.includes('sessionManagement.title'))
+  assert.ok(required.includes('sessionManagement.columns.question'))
+  const channels = ['web', 'embed', 'api', 'wecom', 'wechat', 'feishu', 'lark', 'dingtalk', 'slack', 'telegram', 'mattermost', 'qqbot', 'yunzhijia', 'other']
+  required.push(...channels.map(channel => `sessionManagement.channels.${channel}`))
+  const rebuilt = rebuildPrunedLocales(structuredClone(LOCALE_BUNDLES), usage)
+  for (const bundles of [LOCALE_BUNDLES, rebuilt]) {
+    for (const [locale, bundle] of Object.entries(bundles)) {
+      for (const key of required) {
+        const value = getLocaleValueAtPath(bundle, key)
+        assert.equal(typeof value, 'string', `${locale}: missing ${key}`)
+        assert.ok(value !== key && value !== '', `${locale}: untranslated ${key}`)
+      }
+    }
+  }
+})
+
 test('installer command progress messages resolve in the settings namespace', () => {
   for (const [locale, bundle] of Object.entries(LOCALE_BUNDLES)) {
     for (const name of ['installCommandRunning', 'installCommandWaiting']) {

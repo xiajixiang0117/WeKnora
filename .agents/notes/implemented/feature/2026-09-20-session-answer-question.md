@@ -20,6 +20,8 @@ Status: implemented
 
 ## Testing
 
+会话管理的五种语言包必须覆盖页面静态引用及全部动态渠道标签。校验直接从源码收集本模块的必需键，并验证裁剪重建后的结果，不能只遍历英文包中已经存在的键，否则五种语言同时缺少文案时会漏报。语言包完整保留列表、回答、轨迹和片段详情文案。
+
 前端生产构建与 verify-notes 校验通过。新增跨分页、乱序消息和缺失请求 ID 的关联回归测试。后端测试被仓库既有 KnowledgeListTitleRefreshPayload、TypeWebCrawlScan、TypeWebCrawlApply 类型缺失阻塞。浏览器访问本地会话管理入口会跳转登录页，尚未完成真实数据下的视觉验收。
 
 ## Related notes
