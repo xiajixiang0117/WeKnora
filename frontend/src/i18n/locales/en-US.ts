@@ -920,6 +920,14 @@ export default {
     chunkLoadFailed: 'Failed to load chunks'
   },
   uploadConfirm: {
+    webRulesTitle: 'Web content extraction',
+    webRulesDescription: 'Applies only to this URL import; leave blank to use automatic content detection',
+    webContentSelectorLabel: 'Content CSS selector',
+    webContentSelectorPlaceholder: 'e.g. article[role="main"]',
+    webContentSelectorDescription: 'Keep only matching HTML content',
+    webExcludeSelectorsLabel: 'Exclude CSS selectors',
+    webExcludeSelectorsPlaceholder: 'e.g. aside, nav, header, footer',
+    webExcludeSelectorsDescription: 'Remove matching nodes from the selected content',
     documentSummary: "Document summary",
     documentSummaryDescription: "Choose whether to automatically summarize documents in this import.",
     generateSummary: "Generate document summaries",
@@ -6521,6 +6529,9 @@ export default {
     daysAgo: '{days} days ago'
   },
   datasource: {
+    webCrawler: {
+      scopeTitle: 'Website crawl scope', seedUrls: 'Seed URLs', seedPlaceholder: 'https://docs.example.com/guide/index.html', seedHint: 'One entry per line. Pages are discovered within the same host and path scope.', seedRequired: 'Enter at least one seed URL', allowedHosts: 'Allowed hosts', allowedHostsPlaceholder: 'Leave empty to use seed hosts (comma separated)', pathPrefixes: 'Path prefixes', pathPrefixesPlaceholder: '/projects/sdk/latest', excludePatterns: 'Exclude patterns', excludePlaceholder: 'Regular expressions, comma separated', contentSelector: 'Content CSS selector', contentSelectorPlaceholder: 'e.g. #content or article[role="main"]', contentSelectorHint: 'Import only matching HTML content. Leave empty to detect the main content automatically.', excludeSelectors: 'Exclude CSS selectors', excludeSelectorsPlaceholder: 'e.g. .sidebar, .breadcrumbs', excludeSelectorsHint: 'Remove matching nodes from selected content. Separate multiple selectors with commas.', maxPages: 'Max pages per scan', respectRobots: 'Respect robots.txt', batchHintTitle: 'Pages are processed in batches', batchHint: 'After saving, click “Check updates”. Additions and updates are imported in batches of 50 after review; confirmed 404/410 pages automatically delete their linked knowledge.', reviewTitle: 'Website update review', manualSync: 'Manual sync', checkUpdates: 'Check updates', scanStarted: 'Update check submitted', scanFailed: 'Update check failed', loadFailed: 'Failed to load scan results', applyStarted: 'Batch apply submitted', applyFailed: 'Failed to apply changes', retryFailed: 'Retry failed items', selectAll: 'Select all', clearSelection: 'Clear selection', applySelected: 'Apply selected ({count})', keep: 'Keep', deleted: 'Deleted', applyConfirm: 'Apply the {count} selected changes?', noChanges: 'No changes found in this scan', noScan: 'No scans yet', summary: '{total} pages · {added} added · {updated} updated · {missing} unavailable · {failed} failed', change: { added: 'Added', updated: 'Updated', missing: 'Unavailable', failed: 'Failed' }, status: { scanning: 'Scanning', review_ready: 'Review ready', applying: 'Applying', completed: 'Completed', partial_failed: 'Partially failed', canceled: 'Canceled' }
+    },
     title: 'Data Sources',
     description: 'Configure external data sources to sync content into this knowledge base',
     add: 'Add Data Source',
@@ -6630,6 +6641,7 @@ export default {
       docsFailedSummary: '{n} document(s) failed to sync'
     },
     connector: {
+      web_crawler: 'Website crawler',
       feishu: 'Feishu',
       lark: 'Lark',
       feishu_drive: 'Feishu Drive',
@@ -6643,6 +6655,7 @@ export default {
       gitlab: 'GitLab'
     },
     connectorDesc: {
+      web_crawler: 'Crawl a documentation website and review changes',
       feishu: 'Sync documents, spreadsheets and files from Feishu Wiki',
       lark: 'Sync documents, spreadsheets and files from Lark Wiki (Feishu international)',
       feishu_drive: 'Sync documents, spreadsheets and files from a Feishu Drive folder',

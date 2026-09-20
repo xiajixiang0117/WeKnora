@@ -2,6 +2,8 @@
 
 Status: proposed
 
+实际合并的保留情况见[2026-09-20 审计](../../implemented/process/2026-09-20-upstream-merge-audit.md)。审计确认存在遗漏；下列验收条目是提案要求，不代表已通过验证。
+
 ## Problem
 
 The fork contains website synchronization, embedded chat, citation restoration,

@@ -22,6 +22,13 @@ async function fixture({ configured = true, create = false } = {}) {
   const calls: Array<{ method: string; args: any[] }> = []
   let storedToken = configured ? 'expired-token' : ''
   const api = {
+    async createDataSource(data: any) {
+      calls.push({ method: 'createDataSource', args: [JSON.parse(JSON.stringify(data))] })
+      return { data: { id: 'created-source' } }
+    },
+    async createWebCrawlScan(id: string) {
+      calls.push({ method: 'createWebCrawlScan', args: [id] })
+    },
     async validateCredentials(type: string, credentials: Record<string, string>) {
       calls.push({ method: 'validateCredentials', args: [type, { ...credentials }] })
       if (credentials.access_token !== 'rotated-token') throw new Error('gitlab API /user: status 401')
@@ -81,6 +88,26 @@ async function fixture({ configured = true, create = false } = {}) {
   }
   return { vm, calls, replace, storedToken: () => storedToken, close: () => app.unmount() }
 }
+
+test('crawler creation skips credentials, validates seeds and scans normalized settings', async () => {
+  const f = await fixture({ create: true })
+  try {
+    f.vm.selectType({ type: 'web_crawler', available: true })
+    assert.equal(f.vm.step, 2)
+    await f.vm.nextStep()
+    assert.equal(f.vm.step, 2)
+    f.vm.form.config.settings.seed_urls = ' https://example.com/docs\nhttps://example.com/help '
+    f.vm.form.config.settings.web_exclude_selectors = 'nav\n.sidebar'
+    await f.vm.nextStep()
+    assert.equal(f.vm.step, 3)
+    await f.vm.handleSubmit()
+    assert.deepEqual(f.calls.map(call => call.method), ['createDataSource', 'createWebCrawlScan'])
+    assert.equal(f.calls[0].args[0].sync_schedule, '')
+    assert.deepEqual(f.calls[0].args[0].config.settings.seed_urls, ['https://example.com/docs', 'https://example.com/help'])
+    assert.deepEqual(f.calls[0].args[0].config.settings.web_exclude_selectors, ['nav', '.sidebar'])
+    assert.equal(f.calls[1].args[0], 'created-source')
+  } finally { f.close() }
+})
 
 test('rotated GitLab credentials are tested without updating the saved data source', async () => {
   const f = await fixture()

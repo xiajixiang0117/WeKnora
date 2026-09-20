@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -115,20 +114,7 @@ func NewRouter(params RouterParams) *gin.Engine {
 	// 实际只对未来改为回显具体 Origin 时才生效；当前认证全部走显式的
 	// Authorization / X-API-Key 头，不依赖 ambient 凭据。若引入 cookie
 	// 认证，必须先把 AllowOrigins 换成受控清单。
-	r.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"*"},
-		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders: []string{
-			"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key", "X-Request-ID", "X-Tenant-ID",
-			"X-Embed-Session", "X-External-User-ID", "X-External-User-Token", "X-WeKnora-Desktop-Token",
-			// Streamable HTTP MCP clients running in a browser send these on
-			// the /mcp/:endpoint_id surface.
-			"MCP-Protocol-Version", "Mcp-Session-Id", "Last-Event-ID",
-		},
-		ExposeHeaders:    []string{"Content-Length", "Access-Control-Allow-Origin", "Mcp-Session-Id"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
+	r.Use(cors.New(routerCORSConfig()))
 
 	// 基础中间件（不需要认证）
 	r.Use(middleware.RequestID())

@@ -10,6 +10,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/infrastructure/docparser"
 	"github.com/Tencent/WeKnora/internal/logger"
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 	secutils "github.com/Tencent/WeKnora/internal/utils"
@@ -19,6 +20,7 @@ import (
 
 // Handler handles all HTTP requests related to conversation sessions
 type Handler struct {
+	traceStore           *retrievaltrace.Store
 	browserSkill         *browserskill.Manager
 	messageService       interfaces.MessageService // Service for managing messages
 	suggestionService    interfaces.MessageSuggestionService
@@ -99,8 +101,10 @@ func NewHandler(
 	desktopLast service.SandboxDesktopLastStore,
 	rdb *redis.Client,
 	forkService *service.SessionForkService,
+	traceStore *retrievaltrace.Store,
 ) *Handler {
 	h := &Handler{
+		traceStore:            traceStore,
 		browserSkill:          browserSkill,
 		sessionService:        sessionService,
 		messageService:        messageService,
@@ -416,6 +420,7 @@ func (h *Handler) DeleteSession(c *gin.Context) {
 	}
 
 	h.browserSkill.Forget(browserSkillScope(ctx), []string{id})
+	h.deleteExecutionTraces(ctx, id)
 
 	// Return success message
 	c.JSON(http.StatusOK, gin.H{
@@ -461,6 +466,7 @@ func (h *Handler) ClearSessionMessages(c *gin.Context) {
 	}
 
 	logger.Infof(ctx, "Session messages cleared successfully, ID: %s", id)
+	h.deleteExecutionTraces(ctx, id)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Session messages cleared successfully",

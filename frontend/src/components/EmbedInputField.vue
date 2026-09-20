@@ -103,6 +103,7 @@
           type="button"
           class="embed-send-btn"
           :class="{ disabled: !canSend }"
+          :disabled="!canSend"
           :aria-label="t('input.send')"
           @click="submit"
         >
@@ -263,6 +264,7 @@ onUnmounted(() => {
 
 <style scoped lang="less">
 .embed-input-box {
+  box-sizing: border-box;
   position: relative;
   width: 100%;
   max-width: 800px;
@@ -298,10 +300,14 @@ onUnmounted(() => {
       border: none;
       box-shadow: none;
       background: transparent;
-      padding: 14px 16px 52px;
+      padding: 12px 14px 6px;
       font-size: var(--app-text-base);
       line-height: 1.5;
       resize: none;
+      // Hidden frames can report zero height to the autosize measurement.
+      min-height: 54px !important;
+      overflow-x: hidden;
+      overflow-y: auto;
     }
 
     &.has-images :deep(.t-textarea__inner) {
@@ -310,19 +316,11 @@ onUnmounted(() => {
   }
 
   &__bar {
-    position: absolute;
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
+    margin: 0 10px 10px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    pointer-events: none;
-
-    > * {
-      pointer-events: auto;
-    }
   }
 
   &__controls {

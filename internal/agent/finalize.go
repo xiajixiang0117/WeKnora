@@ -12,6 +12,15 @@ import (
 	"github.com/Tencent/WeKnora/internal/types"
 )
 
+const finalAnswerPresentationRequirement = `Use clear, natural language that fits the user's question. Headings and lists are optional: use them only when they make steps, comparisons, or conditions easier to understand. Do not force a fixed section template.`
+
+func finalAnswerCitationRequirement(enabled bool) string {
+	if !enabled {
+		return ""
+	}
+	return ` Cite every material claim based on retrieved knowledge inline with its supplied source handle: <ref id="cN"/> for a knowledge chunk or <ref id="wN"/> for a web page. Use only handles supplied by tool results; never invent handles or write <kb> or <web> tags. Keep each citation on the same line as the claim it supports.`
+}
+
 // streamFinalAnswerToEventBus streams the final answer generation through EventBus
 func (e *AgentEngine) streamFinalAnswerToEventBus(
 	ctx context.Context,
@@ -40,7 +49,7 @@ func (e *AgentEngine) streamFinalAnswerToEventBus(
 			"the latest user corrections and source restrictions in the conversation. Base claims on " +
 			"the evidence actually obtained; distinguish completed work from remaining work and explain " +
 			"any missing evidence. Use the user's requested language and format. Do not claim that an " +
-			"unperformed action succeeded.",
+			"unperformed action succeeded. " + finalAnswerPresentationRequirement + finalAnswerCitationRequirement(e.config.CitationsEnabled()),
 	})
 
 	// Generate a single ID for this entire final answer stream
@@ -145,6 +154,7 @@ func (e *AgentEngine) emitCompletionEvent(
 	ctx context.Context, state *types.AgentState, sessionID, messageID string, startTime time.Time,
 ) {
 	steps := state.RoundSteps
+	state.KnowledgeRefs = collectKnowledgeReferences(state)
 	if len(state.PendingSteerMessages) > 0 {
 		// A stop or model failure can arrive after delivery but before the next
 		// response exists. Preserve that boundary without inventing an answer.

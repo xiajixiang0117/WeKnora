@@ -31,6 +31,7 @@ const resourceHandleProtocolPrompt = `
 ## Resource handle protocol (system-owned)
 Some durable resources and high-entropy Wiki slugs are represented by request-local res://NNNN handles. Wiki issues may use iN handles.
 - Copy supplied handles exactly in links, images, and tool arguments; they refer only to the supplied resource versions.
+- Write answer Markdown directly: do not backslash-escape formatting, citation tags, image parentheses, or the colon/slashes in resource handles. Use short, single-line image alt text.
 - For downloadable deliverables generated in the session workspace, use sandbox:<file name>; ` +
 	`never reuse or invent a resource handle. This download convention does not apply to ` +
 	`editing installed skill files.`

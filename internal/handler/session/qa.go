@@ -19,6 +19,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/errors"
 	"github.com/Tencent/WeKnora/internal/event"
 	"github.com/Tencent/WeKnora/internal/logger"
+	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/storageurl"
 	"github.com/Tencent/WeKnora/internal/stream"
 	"github.com/Tencent/WeKnora/internal/tracing/langfuse"
@@ -1139,6 +1140,8 @@ func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle
 
 	// Setup SSE stream
 	streamCtx := h.setupSSEStream(reqCtx, generateTitle, mode)
+	recorder := retrievaltrace.NewRecorder(reqCtx.query)
+	streamCtx.asyncCtx = retrievaltrace.WithRecorder(streamCtx.asyncCtx, recorder)
 	if streamCtx.liveRunFailed {
 		if streamCtx.cancel != nil {
 			streamCtx.cancel()
@@ -1154,10 +1157,26 @@ func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle
 		return
 	}
 
+	var traceSaved sync.Once
+	saveTrace := func(status string) {
+		traceSaved.Do(func() {
+			if h.traceStore == nil {
+				return
+			}
+			saveCtx := context.WithValue(context.WithoutCancel(streamCtx.asyncCtx), types.TenantIDContextKey, reqCtx.session.TenantID)
+			message := streamCtx.assistantMessage
+			retrievaltrace.RecordAnswer(saveCtx, message.Content, message.KnowledgeReferences, status == "completed" && message.IsCompleted, message.IsFallback)
+			if err := h.traceStore.Save(saveCtx, reqCtx.session.TenantID, sessionID, reqCtx.requestID, reqCtx.userMessageID, message.ID, status, recorder); err != nil {
+				logger.Warnf(saveCtx, "Failed to save execution trace for session %s: %v", sessionID, err)
+			}
+		})
+	}
 	// Normal mode: register completion handler on EventAgentFinalAnswer
 	// (Agent mode handles completion in the defer block instead)
 	if mode == qaModeNormal {
 		var completionHandled bool
+		streamCtx.eventBus.On(event.EventStop, func(context.Context, event.Event) error { saveTrace("cancelled"); return nil })
+		streamCtx.eventBus.On(event.EventError, func(context.Context, event.Event) error { saveTrace("failed"); return nil })
 
 		// Persist the pipeline's retrieval/attachment stages so a reloaded
 		// conversation redraws the timeline it showed while streaming, including
@@ -1195,6 +1214,7 @@ func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle
 				logger.Infof(streamCtx.asyncCtx, "Knowledge QA service completed for session: %s", sessionID)
 				updateCtx := context.WithValue(streamCtx.asyncCtx, types.TenantIDContextKey, reqCtx.session.TenantID)
 				h.completeQuickAnswerTurn(updateCtx, streamCtx, reqCtx.query, reqCtx.userMessageID)
+				saveTrace("completed")
 			}
 			return nil
 		})
@@ -1204,8 +1224,20 @@ func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle
 	asyncDone := make(chan struct{})
 	go func() {
 		defer close(asyncDone)
+		traceStatus := "completed"
+		defer func() {
+			if traceStatus != "failed" && streamCtx.asyncCtx.Err() != nil {
+				traceStatus = "cancelled"
+			}
+			// KnowledgeQA returns before its background token stream finishes.
+			// Its successful trace is saved by the terminal answer event above.
+			if mode == qaModeAgent || traceStatus != "completed" {
+				saveTrace(traceStatus)
+			}
+		}()
 		defer func() {
 			if r := recover(); r != nil {
+				traceStatus = "failed"
 				buf := make([]byte, 10240)
 				runtime.Stack(buf, true)
 				stageName := "Knowledge QA"
@@ -1286,6 +1318,9 @@ func (h *Handler) executeQA(reqCtx *qaRequestContext, mode qaMode, generateTitle
 		}
 
 		if serviceErr != nil {
+			if streamCtx.asyncCtx.Err() == nil {
+				traceStatus = "failed"
+			}
 			// A user-requested stop cancels asyncCtx, which surfaces here as a
 			// context cancellation. That is an expected outcome, not a failure:
 			// the stop event already notifies the client, so don't emit a

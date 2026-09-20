@@ -296,7 +296,7 @@ func TestEmbedAuthSessionTokenPath(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/embed/"+channelID+"/config", nil)
 	req.Header.Set("Authorization", "Embed ems_valid")
 	req.Header.Set("Origin", "https://embed.example.com")
-	req.Header.Set("X-Embed-Parent-Origin", "https://app.example.com")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -341,7 +341,7 @@ func TestEmbedAuthPublishTokenValid(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/embed/"+channelID+"/config", nil)
 	req.Header.Set("Authorization", "Embed "+publishToken)
 	req.Header.Set("Origin", "https://embed.example.com")
-	req.Header.Set("X-Embed-Parent-Origin", "https://app.example.com")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -462,7 +462,7 @@ func TestEmbedAuthPreviewSessionMayUseManagementOrigin(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/embed/"+channelID+"/config", nil)
 	c.Request.Header.Set("Authorization", "Embed ems_preview_token")
 	c.Request.Header.Set("Origin", "https://weknora.example.com")
-	c.Request.Header.Set("X-Embed-Parent-Origin", "https://weknora.example.com")
+	c.Request.Header.Set("Sec-Fetch-Site", "same-origin")
 	c.Params = gin.Params{{Key: "channel_id", Value: channelID}}
 	handler(c)
 

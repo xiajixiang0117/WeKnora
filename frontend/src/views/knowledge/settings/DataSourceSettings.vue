@@ -14,6 +14,7 @@ import { humanizeCron, relativeTime } from '@/utils/cronHumanize'
 import DataSourceEditorDialog from './DataSourceEditorDialog.vue'
 import DataSourceSyncLogs from './DataSourceSyncLogs.vue'
 import DataSourceTypeIcon from './DataSourceTypeIcon.vue'
+import WebCrawlReviewDrawer from './WebCrawlReviewDrawer.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{ kbId: string }>()
@@ -34,6 +35,9 @@ const logsVisible = ref(false)
 const logsDsId = ref('')
 const logsDsName = ref('')
 const pollTimer = ref<number | null>(null)
+const webReviewVisible = ref(false)
+const webReviewDsId = ref('')
+const webReviewDsName = ref('')
 
 function stopPolling() {
   if (pollTimer.value !== null) {
@@ -83,6 +87,12 @@ function openLogs(ds: DataSource) {
   logsDsId.value = ds.id
   logsDsName.value = ds.name
   logsVisible.value = true
+}
+
+function openWebReview(ds: DataSource) {
+  webReviewDsId.value = ds.id
+  webReviewDsName.value = ds.name
+  webReviewVisible.value = true
 }
 
 async function removeDataSource(ds: DataSource) {
@@ -228,12 +238,15 @@ onBeforeUnmount(stopPolling)
                         <t-icon name="edit" /> {{ t('datasource.edit') }}
                       </t-dropdown-item>
                       <t-dropdown-item
-                        v-if="canManageDataSource"
+                        v-if="canManageDataSource && ds.type !== 'web_crawler'"
                         :disabled="isSyncRunning(ds)"
                         @click="handleSync(ds)"
                       >
                         <t-icon name="refresh" :class="{ 'ds-icon-spin': isSyncRunning(ds) }" />
                         {{ isSyncRunning(ds) ? t('datasource.logStatus.running') : t('datasource.syncNow') }}
+                      </t-dropdown-item>
+                      <t-dropdown-item v-if="canManageDataSource && ds.type === 'web_crawler'" @click="openWebReview(ds)">
+                        <t-icon name="search" /> {{ t('datasource.webCrawler.checkUpdates') }}
                       </t-dropdown-item>
                       <t-dropdown-item @click="openLogs(ds)">
                         <t-icon name="root-list" /> {{ t('datasource.logs') }}
@@ -274,7 +287,7 @@ onBeforeUnmount(stopPolling)
                 </t-dropdown>
               </div>
             </div>
-            <p class="ds-card__subtitle">
+            <p v-if="ds.type !== 'web_crawler'" class="ds-card__subtitle">
               {{ connectorLabel(ds.type) }} · {{ syncModeLabel(ds.sync_mode) }}
               <span class="ds-card__sep">·</span>
               <span class="ds-card__status" :class="`ds-card__status--${ds.status}`">
@@ -283,29 +296,34 @@ onBeforeUnmount(stopPolling)
               </span>
             </p>
             <p class="ds-card__detail">
-              {{ scheduleLabel(ds.sync_schedule) }}
-              <span class="ds-card__sep">·</span>
-              <t-tooltip :content="lastSyncFullTime(ds)" :disabled="!lastSyncFullTime(ds)">
-                <span>{{ lastSyncTime(ds) || '--' }}</span>
-              </t-tooltip>
-              <template v-if="ds.latest_sync_log">
+              <template v-if="ds.type === 'web_crawler'">
+                {{ t('datasource.webCrawler.manualSync') }}
+              </template>
+              <template v-else>
+                {{ scheduleLabel(ds.sync_schedule) }}
                 <span class="ds-card__sep">·</span>
-                <span
-                  class="ds-card__sync-result"
-                  :class="`ds-card__sync-result--${ds.latest_sync_log.status}`"
-                >
-                  {{ lastSyncStatusLabel(ds) }}
-                </span>
-                <span
-                  v-for="pill in syncResultPills(ds)"
-                  :key="pill.cls"
-                  class="ds-card__metric"
-                >{{ pill.text }}</span>
+                <t-tooltip :content="lastSyncFullTime(ds)" :disabled="!lastSyncFullTime(ds)">
+                  <span>{{ lastSyncTime(ds) || '--' }}</span>
+                </t-tooltip>
+                <template v-if="ds.latest_sync_log">
+                  <span class="ds-card__sep">·</span>
+                  <span
+                    class="ds-card__sync-result"
+                    :class="`ds-card__sync-result--${ds.latest_sync_log.status}`"
+                  >
+                    {{ lastSyncStatusLabel(ds) }}
+                  </span>
+                  <span
+                    v-for="pill in syncResultPills(ds)"
+                    :key="pill.cls"
+                    class="ds-card__metric"
+                  >{{ pill.text }}</span>
+                </template>
               </template>
             </p>
             <div v-if="ds.error_message" class="ds-card__error">
               <t-icon name="error-circle-filled" size="14px" />
-              <span>{{ ds.error_message }}</span>
+              <span class="ds-card__error-text">{{ ds.error_message }}</span>
             </div>
           </div>
         </component>
@@ -335,6 +353,12 @@ onBeforeUnmount(stopPolling)
       v-model:visible="logsVisible"
       :data-source-id="logsDsId"
       :data-source-name="logsDsName"
+    />
+
+    <WebCrawlReviewDrawer
+      v-model:visible="webReviewVisible"
+      :data-source-id="webReviewDsId"
+      :data-source-name="webReviewDsName"
     />
   </div>
 </template>
@@ -570,6 +594,8 @@ onBeforeUnmount(stopPolling)
   }
 
   &__error {
+    max-width: 100%;
+    box-sizing: border-box;
     display: flex;
     align-items: flex-start;
     gap: 6px;
@@ -581,6 +607,17 @@ onBeforeUnmount(stopPolling)
     font-size: var(--app-text-sm);
     line-height: 1.45;
     text-align: left;
+  }
+
+  &__error-text {
+    flex: 1;
+    min-width: 0;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   &__actions {

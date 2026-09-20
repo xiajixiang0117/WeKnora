@@ -2,10 +2,10 @@
   <div class="embed-page" :style="pageStyle">
     <div v-if="loadError" class="embed-error">{{ loadError }}</div>
     <template v-else-if="config">
-      <header v-if="sessionId" class="embed-header">
+      <header v-if="!bootstrapping" class="embed-header">
         <span class="embed-header__badge" :style="badgeStyle">
           <span v-if="config.agent_avatar" class="embed-header__avatar">{{ config.agent_avatar }}</span>
-          <t-icon v-else :name="headerIcon" size="18px" />
+          <component :is="headerIcon" v-else size="18px" />
         </span>
         <div class="embed-header__text">
           <h1 class="embed-header__title">{{ headerTitle }}</h1>
@@ -21,13 +21,14 @@
           :aria-label="$t('embedPublish.newChat')"
           @click="handleNewChat"
         >
-          <template #icon><t-icon name="add" /></template>
+          <template #icon><AddIcon /></template>
         </t-button>
       </header>
 
       <EmbedChatView
-        v-if="sessionId"
+        v-if="!bootstrapping"
         :session-id="sessionId"
+        :ensure-session="ensureSession"
         :session-sig="sessionSig"
         :visitor-id="visitorId"
         :channel-id="channelId"
@@ -56,6 +57,7 @@
 import { computed, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { AddIcon, ChatIcon, ControlPlatformIcon } from 'tdesign-icons-vue-next'
 import EmbedChatView from '@/views/embed/EmbedChatView.vue'
 import { useEmbedBridge } from '@/composables/useEmbedBridge'
 import { setDefaultProtectedFileAccess } from '@/utils/protectedFileAccess'
@@ -77,6 +79,7 @@ const {
   bootstrapping,
   hostContext,
   startNewSession,
+  ensureSession,
 } = useEmbedBridge(channelId)
 
 // An embed visitor has no Bearer/tenant credentials, so every protected file in
@@ -163,7 +166,7 @@ const headerSubtitle = computed(() => {
 
 const headerIcon = computed(() => {
   const agentId = config.value?.agent_id || ''
-  return agentId && agentId !== 'builtin-quick-answer' ? 'control-platform' : 'chat'
+  return agentId && agentId !== 'builtin-quick-answer' ? ControlPlatformIcon : ChatIcon
 })
 
 watch(headerTitle, (title) => {
@@ -201,9 +204,10 @@ watch(headerTitle, (title) => {
 .embed-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--td-component-stroke);
+  gap: 10px;
+  min-height: 64px;
+  box-sizing: border-box;
+  padding: 16px 20px;
   background: var(--td-bg-color-container);
   flex-shrink: 0;
 

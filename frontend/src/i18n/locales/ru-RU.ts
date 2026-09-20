@@ -885,6 +885,9 @@ export default {
     }
   },
   datasource: {
+    webCrawler: {
+      scopeTitle: 'Область сканирования сайта', seedUrls: 'Начальные URL', seedPlaceholder: 'https://docs.example.com/guide/index.html', seedHint: 'По одному URL в строке; страницы ищутся в пределах хоста и пути.', seedRequired: 'Укажите хотя бы один начальный URL', allowedHosts: 'Разрешённые хосты', allowedHostsPlaceholder: 'Пусто — хосты начальных URL', pathPrefixes: 'Префиксы путей', pathPrefixesPlaceholder: '/projects/sdk/latest', excludePatterns: 'Шаблоны исключений', excludePlaceholder: 'Регулярные выражения через запятую', contentSelector: 'CSS-селектор содержимого', contentSelectorPlaceholder: 'например, #content или article[role="main"]', contentSelectorHint: 'Импортировать только соответствующее HTML-содержимое. Пусто — автоматический выбор основного текста.', excludeSelectors: 'Исключаемые CSS-селекторы', excludeSelectorsPlaceholder: 'например, .sidebar, .breadcrumbs', excludeSelectorsHint: 'Удалить совпадающие узлы из выбранного содержимого. Несколько селекторов через запятую.', maxPages: 'Максимум страниц за сканирование', respectRobots: 'Соблюдать robots.txt', batchHintTitle: 'Страницы обрабатываются пакетами', batchHint: 'После сохранения нажмите «Проверить обновления». Добавления и обновления импортируются после проверки пакетами по 50 страниц; для страниц с подтверждённым ответом 404/410 связанные знания удаляются автоматически.', reviewTitle: 'Проверка обновлений сайта', manualSync: 'Ручная синхронизация', checkUpdates: 'Проверить обновления', scanStarted: 'Проверка обновлений запущена', scanFailed: 'Не удалось проверить обновления', loadFailed: 'Не удалось загрузить результаты', applyStarted: 'Пакетное применение запущено', applyFailed: 'Не удалось применить изменения', retryFailed: 'Повторить ошибки', selectAll: 'Выбрать все', clearSelection: 'Снять выделение', applySelected: 'Применить выбранные ({count})', keep: 'Сохранить', deleted: 'Удалено', applyConfirm: 'Применить выбранные изменения ({count})?', noChanges: 'Изменений не найдено', noScan: 'Сканирований пока нет', summary: 'Страницы {total} · добавлено {added} · изменено {updated} · недоступно {missing} · ошибок {failed}', change: { added: 'Добавлено', updated: 'Изменено', missing: 'Недоступно', failed: 'Ошибка' }, status: { scanning: 'Сканирование', review_ready: 'Готово к проверке', applying: 'Применение', completed: 'Завершено', partial_failed: 'Частично с ошибками', canceled: 'Отменено' }
+    },
     title: 'Источники данных',
     description: 'Настройте внешние источники данных для автоматической синхронизации контента',
     add: 'Добавить источник',
@@ -1058,6 +1061,7 @@ export default {
       authHeadersHint: 'Для приватных лент. По одному в строке в формате «Имя: Значение», например Authorization: Bearer xxxx'
     },
     connectorDesc: {
+      web_crawler: 'Сканирование сайта документации и проверка изменений',
       feishu: 'Синхронизация документов, таблиц и файлов из Feishu Wiki',
       lark: 'Синхронизация документов, таблиц и файлов из Lark Wiki',
       feishu_drive: 'Синхронизация документов, таблиц и файлов из папки Feishu Drive',
@@ -1071,6 +1075,7 @@ export default {
       gitlab: 'Синхронизация файлов из проектов GitLab'
     },
     connector: {
+      web_crawler: 'Сканирование сайта',
       feishu: 'Feishu (Фэйшу)',
       lark: 'Lark',
       feishu_drive: 'Feishu Drive',
@@ -6690,6 +6695,14 @@ export default {
     }
   },
   uploadConfirm: {
+    webRulesTitle: 'Извлечение содержимого веб-страницы',
+    webRulesDescription: 'Применяется только к этому импорту URL; оставьте пустым для автоматического определения',
+    webContentSelectorLabel: 'CSS-селектор содержимого',
+    webContentSelectorPlaceholder: 'например, article[role="main"]',
+    webContentSelectorDescription: 'Оставить только совпадающее содержимое HTML',
+    webExcludeSelectorsLabel: 'Исключаемые CSS-селекторы',
+    webExcludeSelectorsPlaceholder: 'например, aside, nav, header, footer',
+    webExcludeSelectorsDescription: 'Удалить совпадающие узлы из выбранного содержимого',
     documentSummary: "Сводка документа",
     documentSummaryDescription: "Выберите, создавать ли сводки документов при этом импорте.",
     generateSummary: "Создавать сводки документов",

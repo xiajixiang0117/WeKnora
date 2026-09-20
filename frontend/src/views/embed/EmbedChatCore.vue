@@ -37,6 +37,7 @@
               @click="handleSuggestedClick(item.question)"
             >
               <span class="embed-suggested__text">{{ item.question }}</span>
+              <ChevronRightIcon size="16" aria-hidden="true" class="embed-suggested__arrow" />
             </button>
           </div>
         </div>
@@ -91,15 +92,12 @@
       </div>
     </div>
 
-    <transition name="scroll-btn-fade">
-      <div v-show="userHasScrolledUp" class="scroll-to-bottom-btn" @click="onClickScrollToBottom" aria-label="scroll to bottom">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </div>
-    </transition>
-
     <div class="embed-chat__input">
+      <transition name="scroll-btn-fade">
+        <button type="button" v-show="userHasScrolledUp" class="scroll-to-bottom-btn" @click="onClickScrollToBottom" aria-label="scroll to bottom">
+          <ChevronDownIcon size="20" aria-hidden="true" />
+        </button>
+      </transition>
       <EmbedInputField
         :isReplying="isReplying"
         :show-web-search-toggle="showWebSearchToggle"
@@ -116,6 +114,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, toRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ChevronDownIcon, ChevronRightIcon } from 'tdesign-icons-vue-next'
 import {
   ensureEmbedMessageSuggestions,
   getEmbedMessageSuggestions,
@@ -141,6 +140,7 @@ type EmbedImage = { url?: string; data?: string }
 type EmbedAttachment = { file_name: string; file_size?: number }
 
 const props = defineProps<{
+  ensureSession: () => Promise<void>
   sessionId: string
   sessionSig: string
   visitorId: string
@@ -275,6 +275,7 @@ const {
   setSuggestionAttribution,
 } = useEmbedChatSession({
   sessionId: sessionIdRef,
+  ensureSession: props.ensureSession,
   sessionSig: sessionSigRef,
   visitorId: visitorIdRef,
   channelId: props.channelId,
@@ -402,6 +403,7 @@ watch(
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   width: 100%;
   position: relative;
 }
@@ -411,16 +413,19 @@ watch(
   min-height: 0;
   width: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .embed-chat__messages {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
   max-width: 800px;
   margin: 0 auto;
   width: 100%;
-  padding: 12px 16px 0;
+  padding: 16px 20px 24px;
   box-sizing: border-box;
 }
 
@@ -428,6 +433,7 @@ watch(
   display: flex;
   flex-direction: column;
   width: 100%;
+  min-width: 0;
 }
 
 .embed-suggested {
@@ -546,8 +552,10 @@ watch(
 }
 
 .embed-chat__input {
+  position: relative;
   flex-shrink: 0;
-  padding: 8px 16px 16px;
+  padding: 12px 20px 20px;
+  background: var(--td-bg-color-container, #fff);
   box-sizing: border-box;
 }
 
@@ -588,9 +596,8 @@ watch(
 
 .scroll-to-bottom-btn {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 100px;
+  right: 20px;
+  bottom: calc(100% + 8px);
   z-index: 10;
   width: 36px;
   height: 36px;
@@ -613,6 +620,22 @@ watch(
 .scroll-btn-fade-enter-from,
 .scroll-btn-fade-leave-to {
   opacity: 0;
-  transform: translateX(-50%) translateY(8px);
+  transform: translateY(8px);
+}
+.embed-suggested__card:focus-visible,
+.scroll-to-bottom-btn:focus-visible {
+  outline: 2px solid var(--embed-primary, var(--td-brand-color));
+  outline-offset: 3px;
+}
+
+@media (max-width: 360px) {
+  .embed-chat__messages, .embed-chat__input { padding-inline: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .embed-suggested__card, .sk-line, .scroll-btn-fade-enter-active, .scroll-btn-fade-leave-active {
+    animation: none;
+    transition: none;
+  }
 }
 </style>

@@ -885,6 +885,12 @@ export default {
     }
   },
   datasource: {
+    webCrawler: {
+      scopeTitle: '网站抓取范围', seedUrls: '入口网址', seedPlaceholder: 'https://docs.example.com/guide/index.html', seedHint: '每行一个入口；系统会在同域名和路径范围内分批发现页面。', seedRequired: '请填写至少一个入口网址',
+      allowedHosts: '允许的域名', allowedHostsPlaceholder: '留空则使用入口网址域名（多个用逗号分隔）', pathPrefixes: '路径前缀', pathPrefixesPlaceholder: '/projects/sdk/latest', excludePatterns: '排除规则', excludePlaceholder: '正则表达式，多个用逗号分隔', contentSelector: '正文 CSS 选择器', contentSelectorPlaceholder: '例如 #content 或 article[role="main"]', contentSelectorHint: '只导入与选择器匹配的 HTML 内容；留空时自动识别正文。', excludeSelectors: '排除 CSS 选择器', excludeSelectorsPlaceholder: '例如 .sidebar, .breadcrumbs', excludeSelectorsHint: '从选中的正文移除匹配节点，多个用逗号分隔。', maxPages: '单次最多页面', respectRobots: '遵守 robots.txt', batchHintTitle: '网站页面将按批次处理', batchHint: '保存后点击“检查更新”，新增和更新审核后以每批 50 页导入；确认返回 404/410 的页面会自动删除对应知识。', reviewTitle: '网站更新审核', manualSync: '手动同步', checkUpdates: '检查更新', scanStarted: '更新检查已提交', scanFailed: '更新检查失败', loadFailed: '加载扫描结果失败', applyStarted: '批量应用任务已提交', applyFailed: '应用差异失败', retryFailed: '重试失败项', selectAll: '全选', clearSelection: '取消全选', applySelected: '应用选中 ({count})', keep: '保留', deleted: '已删除', applyConfirm: '确认应用选中的 {count} 项变更吗？', noChanges: '本次扫描没有发现差异', noScan: '还没有扫描记录', summary: '页面 {total} · 新增 {added} · 更新 {updated} · 失效 {missing} · 失败 {failed}',
+      change: { added: '新增', updated: '更新', missing: '失效', failed: '失败' },
+      status: { scanning: '扫描中', review_ready: '待审核', applying: '应用中', completed: '已完成', partial_failed: '部分失败', canceled: '已取消' }
+    },
     title: '数据源管理',
     description: '配置外部数据源，自动同步内容到知识库',
     add: '添加数据源',
@@ -1060,6 +1066,7 @@ export default {
       authHeadersHint: '用于访问私有订阅源，每行一个，格式为「名称: 值」，例如 Authorization: Bearer xxxx'
     },
     connectorDesc: {
+      web_crawler: '批量抓取文档网站并审核内容差异',
       feishu: '同步飞书知识库中的文档、表格、文件',
       lark: '同步 Lark 知识库中的文档、表格、文件（飞书国际版）',
       feishu_drive: "同步飞书云盘文件夹中的文档、表格、文件",
@@ -1073,6 +1080,7 @@ export default {
       gitlab: '同步 GitLab 项目中的文件'
     },
     connector: {
+      web_crawler: '网站批量抓取',
       feishu: '飞书',
       lark: 'Lark（飞书国际版）',
       feishu_drive: "飞书云盘",
@@ -6692,6 +6700,14 @@ export default {
     }
   },
   uploadConfirm: {
+    webRulesTitle: '网页正文提取',
+    webRulesDescription: '仅对本次 URL 导入生效；留空时使用自动正文识别',
+    webContentSelectorLabel: '正文 CSS 选择器',
+    webContentSelectorPlaceholder: '例如 article[role="main"]',
+    webContentSelectorDescription: '只保留匹配的 HTML 内容',
+    webExcludeSelectorsLabel: '排除 CSS 选择器',
+    webExcludeSelectorsPlaceholder: '例如 aside, nav, header, footer',
+    webExcludeSelectorsDescription: '从正文中移除匹配的节点',
     documentSummary: "文档摘要",
     documentSummaryDescription: "为本次导入的文档选择是否自动生成摘要。",
     generateSummary: "生成文档摘要",

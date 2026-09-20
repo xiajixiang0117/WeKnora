@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"github.com/Tencent/WeKnora/internal/event"
 	"testing"
+	"time"
 
 	"github.com/Tencent/WeKnora/internal/retrievaltrace"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -46,6 +48,20 @@ func TestCollectKnowledgeReferencesMatchesWebSearchMetadataURL(t *testing.T) {
 	}
 
 	require.Equal(t, []string{"web-result"}, referenceIDs(collectKnowledgeReferences(state)))
+}
+
+func TestCompletionEventPublishesOnlyCitedReferences(t *testing.T) {
+	bus := event.NewEventBus()
+	var completed event.AgentCompleteData
+	bus.On(event.EventAgentComplete, func(_ context.Context, evt event.Event) error {
+		completed = evt.Data.(event.AgentCompleteData)
+		return nil
+	})
+	engine := &AgentEngine{eventBus: bus}
+	state := &types.AgentState{FinalAnswer: `answer <kb chunk_id="cited"/>`, KnowledgeRefs: []*types.SearchResult{{ID: "unused"}, {ID: "cited"}}}
+	engine.emitCompletionEvent(context.Background(), state, "session", "message", time.Now())
+	require.Len(t, completed.KnowledgeRefs, 1)
+	require.Equal(t, "cited", completed.KnowledgeRefs[0].(*types.SearchResult).ID)
 }
 
 func referenceIDs(references []*types.SearchResult) []string {

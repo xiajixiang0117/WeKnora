@@ -920,6 +920,14 @@ export default {
     chunkLoadFailed: 'チャンクの読み込みに失敗しました'
   },
   uploadConfirm: {
+    webRulesTitle: 'ウェブコンテンツの抽出',
+    webRulesDescription: 'このURLのインポートにのみ適用されます。空欄の場合は自動コンテンツ検出を使用します',
+    webContentSelectorLabel: '本文のCSSセレクター',
+    webContentSelectorPlaceholder: '例: article[role="main"]',
+    webContentSelectorDescription: '一致するHTMLコンテンツのみを保持します',
+    webExcludeSelectorsLabel: '除外するCSSセレクター',
+    webExcludeSelectorsPlaceholder: '例: aside, nav, header, footer',
+    webExcludeSelectorsDescription: '選択したコンテンツから一致するノードを削除します',
     documentSummary: "ドキュメントの要約",
     documentSummaryDescription: "今回インポートするドキュメントの要約を自動生成するか選択します。",
     generateSummary: "ドキュメントの要約を生成",
@@ -6521,6 +6529,61 @@ export default {
     daysAgo: '{days}日前'
   },
   datasource: {
+    webCrawler: {
+      scopeTitle: 'ウェブサイトのクロール範囲',
+      seedUrls: '開始URL',
+      seedPlaceholder: 'https://docs.example.com/guide/index.html',
+      seedHint: '1行に1件ずつ入力してください。同じホストとパス範囲内でページを検出します。',
+      seedRequired: '開始URLを少なくとも1つ入力してください',
+      allowedHosts: '許可するホスト',
+      allowedHostsPlaceholder: '空欄の場合は開始URLのホストを使用します（カンマ区切り）',
+      pathPrefixes: 'パスのプレフィックス',
+      pathPrefixesPlaceholder: '/projects/sdk/latest',
+      excludePatterns: '除外パターン',
+      excludePlaceholder: '正規表現（カンマ区切り）',
+      contentSelector: '本文のCSSセレクター',
+      contentSelectorPlaceholder: '例: #content または article[role="main"]',
+      contentSelectorHint: '一致するHTMLコンテンツのみをインポートします。空欄の場合は本文を自動検出します。',
+      excludeSelectors: '除外するCSSセレクター',
+      excludeSelectorsPlaceholder: '例: .sidebar, .breadcrumbs',
+      excludeSelectorsHint: '選択した本文から一致するノードを削除します。複数のセレクターはカンマで区切ります。',
+      maxPages: 'スキャンあたりの最大ページ数',
+      respectRobots: 'robots.txt を尊重する',
+      batchHintTitle: 'ページはバッチで処理されます',
+      batchHint: '保存後に「更新を確認」をクリックします。追加・更新は確認後に50ページ単位でインポートし、404/410が確認されたページに対応するナレッジは自動で削除します。',
+      reviewTitle: 'ウェブサイト更新の確認',
+      manualSync: '手動同期',
+      checkUpdates: '更新を確認',
+      scanStarted: '更新確認を開始しました',
+      scanFailed: '更新確認に失敗しました',
+      loadFailed: 'スキャン結果の読み込みに失敗しました',
+      applyStarted: 'バッチ適用を開始しました',
+      applyFailed: '変更の適用に失敗しました',
+      retryFailed: '失敗した項目を再試行',
+      selectAll: 'すべて選択',
+      clearSelection: '選択を解除',
+      applySelected: '選択した項目を適用 ({count})',
+      keep: '保持',
+      deleted: '削除済み',
+      applyConfirm: '選択した{count}件の変更を適用しますか？',
+      noChanges: 'このスキャンでは変更は見つかりませんでした',
+      noScan: 'まだスキャンはありません',
+      summary: '{total}ページ・追加 {added}・更新 {updated}・無効 {missing}・失敗 {failed}',
+      change: {
+        added: '追加',
+        updated: '更新',
+        missing: '無効',
+        failed: '失敗'
+      },
+      status: {
+        scanning: 'スキャン中',
+        review_ready: '確認待ち',
+        applying: '適用中',
+        completed: '完了',
+        partial_failed: '一部失敗',
+        canceled: 'キャンセル済み'
+      }
+    },
     title: 'データソース',
     description: 'このナレッジベースにコンテンツを同期する外部データソースを設定します',
     add: 'データソースを追加',
@@ -6630,6 +6693,7 @@ export default {
       docsFailedSummary: '{n}件のドキュメントの同期に失敗しました'
     },
     connector: {
+      web_crawler: 'ウェブサイトの一括クロール',
       feishu: 'Feishu',
       lark: 'Lark',
       feishu_drive: 'Feishu Drive',
@@ -6643,6 +6707,7 @@ export default {
       gitlab: 'GitLab'
     },
     connectorDesc: {
+      web_crawler: 'ドキュメントサイトをクロールし、変更を確認します',
       feishu: 'Feishu Wikiからドキュメント、スプレッドシート、ファイルを同期します',
       lark: 'Lark Wiki（Feishu国際版）からドキュメント、スプレッドシート、ファイルを同期します',
       feishu_drive: 'Feishu Driveのフォルダからドキュメント、スプレッドシート、ファイルを同期します',

@@ -1,5 +1,7 @@
 # Embed iframe 宿主 Origin 校验设计
 
+> 历史设计说明（2026-09-20）：合并官方版本后，宿主限制改由页面 CSP `frame-ancestors` 实施，Embed API 使用官方同源鉴权策略。下文 `X-Embed-Parent-Origin` 服务端校验方案已被替代，不代表当前授权协议。恢复本地功能时保留这一官方方案，详见[修复笔记](../../../.agents/notes/implemented/bug-fix/2026-09-20-restore-fork-contracts.md)。
+
 ## 背景
 
 网页 A 通过 iframe 加载 WeKnora 的 Embed 页面 B。现有 `allowed_origins` 同时被当作 API 请求 Origin 白名单和 iframe 宿主白名单使用；由于 iframe 内的 API 请求天然从 B 发出，默认前端 Nginx 部署实际上没有校验宿主 A。

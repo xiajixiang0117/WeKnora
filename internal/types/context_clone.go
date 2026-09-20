@@ -115,6 +115,8 @@ var contextCloneAcrossDetach = map[ContextKey]bool{
 	// request context inside the embed handler that authenticated it; nothing
 	// downstream of a detach reads it.
 	EmbedChannelContextKey: false,
+	// Synchronous management-read authorization must not survive detached work.
+	SessionManagementReadContextKey: false,
 	// The authenticated MCP endpoint. Read only by the MCP tool handlers on
 	// the request context that authenticated it.
 	MCPEndpointContextKey: false,

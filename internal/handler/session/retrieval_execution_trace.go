@@ -13,6 +13,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func (h *Handler) deleteExecutionTraces(ctx context.Context, sessionID string) {
+	if h.traceStore == nil {
+		return
+	}
+	tenantID, ok := ctx.Value(types.TenantIDContextKey).(uint64)
+	if !ok {
+		return
+	}
+	if err := h.traceStore.DeleteSession(ctx, tenantID, sessionID); err != nil {
+		logger.Warnf(ctx, "Failed to delete execution traces for session %s: %v", sessionID, err)
+	}
+}
+
 // ListRetrievalExecutionTraces returns the request-level RAG audit timeline
 // for a session. Routes guard this Admin+, while the context marker permits
 // the intentionally narrow tenant-wide session read in the service layer.
