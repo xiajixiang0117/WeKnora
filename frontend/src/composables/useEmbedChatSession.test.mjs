@@ -16,6 +16,7 @@ function setup() {
   let historyReads = 0
   let finish
   let fail = false
+  let token = 'initial-token'
   const exports = {}
   const noop = () => {}
   new Function('require', 'exports', compiled)(name => {
@@ -35,10 +36,11 @@ function setup() {
   }, exports)
   const scope = vue.effectScope()
   const chat = scope.run(() => exports.useEmbedChatSession({
-    sessionId, sessionSig, visitorId: vue.ref('visitor'), channelId: 'channel', token: 'token', agentId: 'agent', kbIds: [],
+    sessionId, sessionSig, visitorId: vue.ref('visitor'), channelId: 'channel', get token() { return token }, agentId: 'agent', kbIds: [],
     ensureSession: async () => {
       if (fail) throw new Error('offline')
       await new Promise(resolve => { finish = resolve })
+      token = 'renewed-token'
       sessionSig.value = 'signature'
       sessionId.value = 'created'
     },
@@ -63,6 +65,7 @@ test('first send waits for a signed session without fetching history or dropping
     assert.equal(h.streams.length, 1)
     assert.equal(h.streams[0].session_id, 'created')
     assert.equal(h.streams[0].embed_session_sig, 'signature')
+    assert.equal(h.streams[0].embed_token, 'renewed-token')
   } finally { h.scope.stop() }
 })
 

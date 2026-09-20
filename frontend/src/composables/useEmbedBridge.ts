@@ -96,6 +96,45 @@ export function useEmbedBridge(channelId: Ref<string>) {
   let removeLocaleListener: (() => void) | null = null
   let removeTokenListener: (() => void) | null = null
   let bootstrapped = false
+  let disposed = false
+  let publishToken = ''
+  let renewAt = 0
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined
+  let pendingRefresh: Promise<string> | null = null
+
+  const scheduleRefresh = (delay: number) => {
+    clearTimeout(refreshTimer)
+    if (disposed) return
+    refreshTimer = setTimeout(() => {
+      refreshToken().catch(() => { /* Retry is scheduled by refreshToken. */ })
+    }, delay)
+  }
+
+  const refreshToken = (): Promise<string> => {
+    if (pendingRefresh) return pendingRefresh
+    pendingRefresh = (async () => {
+      try {
+        const response = await exchangeEmbedSession(channelId.value, publishToken)
+        const next = response?.data?.session_token
+        if (!next) throw new Error('embed session exchange returned no token')
+        const ttl = Number(response.data.expires_in) || 1800
+        const delay = Math.max(1000, ttl * 800)
+        if (!disposed) {
+          token.value = next
+          renewAt = Date.now() + delay
+          scheduleRefresh(delay)
+        }
+        return next
+      } catch (error) {
+        scheduleRefresh(30_000)
+        throw error
+      } finally {
+        pendingRefresh = null
+      }
+    })()
+    return pendingRefresh
+  }
+
   let hostLocalePinned = false
   if (typeof window !== 'undefined') {
     hostLocalePinned = Boolean(readEmbedLocaleFromUrl())
@@ -106,7 +145,12 @@ export function useEmbedBridge(channelId: Ref<string>) {
 
   const bootstrap = async (embedToken: string) => {
     const id = channelId.value
-    if (!id || !embedToken || bootstrapped) return
+    if (!id || !embedToken || disposed) return
+    if (bootstrapped) {
+      // The host owns renewal in secure mode. Keep the active chat and draft.
+      if (!publishToken && isEmbedSessionToken(embedToken)) token.value = embedToken
+      return
+    }
     bootstrapped = true
     awaitingToken.value = false
     bootstrapping.value = true
@@ -119,15 +163,9 @@ export function useEmbedBridge(channelId: Ref<string>) {
       // (minted server-side from the publish token). Use it directly — the
       // exchange endpoint only accepts publish tokens and would reject this.
       if (!isEmbedSessionToken(embedToken)) {
+        publishToken = embedToken
         try {
-          const exchangeRes = await exchangeEmbedSession(id, embedToken)
-          if (exchangeRes?.data?.session_token) {
-            apiToken = exchangeRes.data.session_token
-          } else if (!import.meta.env.DEV) {
-            // Fail closed in production: a missing session token must not silently
-            // fall back to the long-lived publish token.
-            throw new Error('embed session exchange returned no token')
-          }
+          apiToken = await refreshToken()
         } catch (exchangeErr) {
           // In production we refuse to downgrade to the publish token; only the
           // dev build keeps the convenience fallback for local testing.
@@ -160,7 +198,8 @@ export function useEmbedBridge(channelId: Ref<string>) {
       sessionSig.value = resolved?.sig || ''
       sessionId.value = resolved?.id || ''
       writeStoredSession(id, resolved)
-      token.value = apiToken
+      // A host refresh may have arrived while config/history was loading.
+      if (publishToken) token.value = apiToken
       postEmbedReady(id)
     } catch (e: unknown) {
       bootstrapped = false
@@ -179,6 +218,7 @@ export function useEmbedBridge(channelId: Ref<string>) {
 
   let pendingSession: Promise<void> | null = null
   const ensureSession = async () => {
+    if (publishToken && Date.now() >= renewAt) await refreshToken()
     if (sessionId.value) return
     if (!pendingSession) {
       pendingSession = (async () => {
@@ -251,6 +291,8 @@ export function useEmbedBridge(channelId: Ref<string>) {
   })
 
   onUnmounted(() => {
+    disposed = true
+    clearTimeout(refreshTimer)
     removeHostListener?.()
     removeLocaleListener?.()
     removeTokenListener?.()
