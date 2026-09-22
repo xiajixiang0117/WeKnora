@@ -641,13 +641,14 @@ type DataSourceSyncPayload struct {
 	MaxItems int `json:"max_items,omitempty"`
 }
 
-// WebCrawlScanPayload carries a manual, review-only website scan.
+// WebCrawlScanPayload carries a manual or automatically applied website scan.
 type WebCrawlScanPayload struct {
 	TracingContext
 	TenantID     uint64 `json:"tenant_id"`
 	DataSourceID string `json:"data_source_id"`
 	ScanID       string `json:"scan_id"`
 	InitiatorID  string `json:"initiator_id,omitempty"`
+	AutoApply    bool   `json:"auto_apply,omitempty"`
 }
 
 // WebCrawlApplyPayload carries one bounded batch of approved changes.

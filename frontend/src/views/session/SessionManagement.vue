@@ -67,10 +67,10 @@
             <template #agents="{ row }">
               <div v-if="row.agents.length" class="session-management__agents">
                 <span v-for="agent in row.agents" :key="agent.id" class="session-management__agent">
-                  {{ agent.name || t('sessionManagement.unknownAgent') }}
+                  {{ agent.name || t(agent.id ? 'sessionManagement.unknownAgent' : 'sessionManagement.unrecordedAgent') }}
                 </span>
               </div>
-              <span v-else class="session-management__muted">{{ t('sessionManagement.unknownAgent') }}</span>
+              <span v-else class="session-management__muted">{{ row.answer_count ? t('sessionManagement.unrecordedAgent') : '--' }}</span>
             </template>
             <template #answers="{ row }">
               <span>{{ row.answer_count }}</span>
@@ -152,7 +152,7 @@
             <template #question="{ row }"><span class="session-management__question-preview">{{ displayQuery(row.question || '') || '--' }}</span></template>
             <template #agent="{ row }">
               <div class="session-management__agent-cell">
-                <span>{{ row.agent_name || t('sessionManagement.unknownAgent') }}</span>
+                <span>{{ row.agent_name || t(row.agent_id ? 'sessionManagement.unknownAgent' : 'sessionManagement.unrecordedAgent') }}</span>
               </div>
             </template>
             <template #model="{ row }"><span v-if="row.model_name">{{ row.model_name }}</span><span v-else>--</span></template>

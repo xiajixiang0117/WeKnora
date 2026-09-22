@@ -122,6 +122,27 @@ test('rotated GitLab credentials are tested without updating the saved data sour
   } finally { f.close() }
 })
 
+test('custom schedules are preserved for both website and API data sources', async () => {
+  for (const type of ['web_crawler', 'gitlab']) {
+    const f = await fixture()
+    try {
+      f.vm.form.type = type
+      f.vm.form.sync_schedule = 'CRON_TZ=Asia/Shanghai 30 9 * * 1,3'
+      await f.vm.handleSubmit()
+      assert.equal(f.calls.find(call => call.method === 'updateDataSource')?.args[1].sync_schedule, 'CRON_TZ=Asia/Shanghai 30 9 * * 1,3')
+    } finally { f.close() }
+  }
+})
+
+test('invalid schedule cannot submit data source settings', async () => {
+  const f = await fixture()
+  try {
+    f.vm.scheduleValid = false
+    await f.vm.handleSubmit()
+    assert.equal(f.calls.length, 0)
+  } finally { f.close() }
+})
+
 test('Next tests the replacement and final save commits credentials before settings', async () => {
   const f = await fixture()
   try {

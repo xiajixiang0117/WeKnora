@@ -11,6 +11,7 @@ import (
 	"github.com/Tencent/WeKnora/internal/tracing/langfuse"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/robfig/cron/v3"
 )
@@ -25,10 +26,11 @@ import (
 //  2. asynq.TaskID  — deterministic ID per (dataSourceID, minute). Redis ensures
 //     only one task with a given ID is enqueued. Losers get ErrTaskIDConflict.
 type Scheduler struct {
-	cron         *cron.Cron
-	dsRepo       interfaces.DataSourceRepository
-	syncLogRepo  interfaces.SyncLogRepository
-	taskEnqueuer interfaces.TaskEnqueuer
+	cron           *cron.Cron
+	dsRepo         interfaces.DataSourceRepository
+	syncLogRepo    interfaces.SyncLogRepository
+	taskEnqueuer   interfaces.TaskEnqueuer
+	webCrawlerRepo interfaces.WebCrawlerRepository
 
 	mu      sync.Mutex
 	entries map[string]cron.EntryID // dataSourceID → cron entry ID
@@ -41,7 +43,7 @@ func NewScheduler(
 	taskEnqueuer interfaces.TaskEnqueuer,
 ) *Scheduler {
 	return &Scheduler{
-		cron: cron.New(cron.WithSeconds(), cron.WithChain(
+		cron: cron.New(cron.WithParser(scheduleParser), cron.WithChain(
 			cron.Recover(cron.DefaultLogger),
 		)),
 		dsRepo:       dsRepo,
@@ -49,6 +51,30 @@ func NewScheduler(
 		taskEnqueuer: taskEnqueuer,
 		entries:      make(map[string]cron.EntryID),
 	}
+}
+
+var scheduleParser = cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+
+// ValidateSchedule uses exactly the parser used by the running scheduler.
+func ValidateSchedule(spec string) error {
+	if spec == "" {
+		return nil
+	}
+	schedule, err := scheduleParser.Parse(spec)
+	if err != nil {
+		return fmt.Errorf("invalid cron expression %q: %w", spec, err)
+	}
+	if schedule.Next(time.Now()).IsZero() {
+		return fmt.Errorf("cron expression %q has no future execution time", spec)
+	}
+	return nil
+}
+
+func NewSchedulerWithWebCrawler(dsRepo interfaces.DataSourceRepository, syncLogRepo interfaces.SyncLogRepository,
+	taskEnqueuer interfaces.TaskEnqueuer, webCrawlerRepo interfaces.WebCrawlerRepository) *Scheduler {
+	s := NewScheduler(dsRepo, syncLogRepo, taskEnqueuer)
+	s.webCrawlerRepo = webCrawlerRepo
+	return s
 }
 
 // Start loads all active data sources from the database and registers their
@@ -82,6 +108,9 @@ func (s *Scheduler) Stop() {
 
 // AddOrUpdate registers (or re-registers) a cron entry for the given data source.
 func (s *Scheduler) AddOrUpdate(ds *types.DataSource) error {
+	if err := ValidateSchedule(ds.SyncSchedule); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -115,12 +144,6 @@ func (s *Scheduler) addEntry(ds *types.DataSource) error {
 }
 
 func (s *Scheduler) addEntryLocked(ds *types.DataSource) error {
-	// Website crawls use the explicit scan → review → apply workflow. Legacy
-	// rows can still carry a cron value, but they must not enter generic sync.
-	if ds.Type == types.ConnectorTypeWebCrawler {
-		return nil
-	}
-
 	dsID := ds.ID
 	tenantID := ds.TenantID
 
@@ -147,8 +170,12 @@ func (s *Scheduler) triggerSync(dataSourceID string, tenantID uint64) {
 	ctx := context.Background()
 
 	ds, err := s.dsRepo.FindByID(ctx, dataSourceID)
-	if err != nil || ds == nil || ds.Status != types.DataSourceStatusActive || ds.Type == types.ConnectorTypeWebCrawler {
+	if err != nil || ds == nil || ds.Status != types.DataSourceStatusActive || ds.SyncSchedule == "" {
 		logger.Infof(ctx, "[Scheduler] skipping sync for ds=%s (not active or not found)", dataSourceID)
+		return
+	}
+	if ds.Type == types.ConnectorTypeWebCrawler {
+		s.triggerWebCrawl(ctx, ds)
 		return
 	}
 
@@ -209,6 +236,34 @@ func (s *Scheduler) triggerSync(dataSourceID string, tenantID uint64) {
 	}
 
 	logger.Infof(ctx, "[Scheduler] sync task enqueued for ds=%s syncLog=%s", dataSourceID, syncLog.ID)
+}
+
+func (s *Scheduler) triggerWebCrawl(ctx context.Context, ds *types.DataSource) {
+	if s.webCrawlerRepo == nil {
+		logger.Errorf(ctx, "[Scheduler] web crawler repository is not configured")
+		return
+	}
+	if running, err := s.webCrawlerRepo.HasRunningScan(ctx, ds.ID); err != nil || running {
+		return
+	}
+	now := time.Now().UTC()
+	// The persisted primary key arbitrates concurrent scheduler instances.
+	id := uuid.NewSHA1(uuid.NameSpaceURL, []byte("scheduled-web-crawl:"+ds.ID+":"+now.Truncate(time.Minute).Format(time.RFC3339))).String()
+	scan := &types.WebCrawlScan{ID: id, DataSourceID: ds.ID, TenantID: ds.TenantID,
+		Status: types.WebCrawlScanStatusScanning, StartedAt: now}
+	if err := s.webCrawlerRepo.CreateScan(ctx, scan); err != nil {
+		logger.Warnf(ctx, "[Scheduler] could not create web crawl scan for ds=%s: %v", ds.ID, err)
+		return
+	}
+	payload, _ := json.Marshal(&types.WebCrawlScanPayload{TenantID: ds.TenantID, DataSourceID: ds.ID, ScanID: id, AutoApply: true})
+	task := asynq.NewTask(types.TypeWebCrawlScan, payload)
+	if _, err := s.taskEnqueuer.Enqueue(task, asynq.Queue(types.QueueSync), asynq.MaxRetry(3),
+		asynq.Timeout(2*time.Hour), asynq.TaskID("webcrawl:"+id)); err != nil {
+		scan.Status = types.WebCrawlScanStatusCanceled
+		scan.ErrorMessage = fmt.Sprintf("enqueue failed: %v", err)
+		scan.FinishedAt = &now
+		_ = s.webCrawlerRepo.UpdateScan(ctx, scan)
+	}
 }
 
 // EntryCount returns the number of active cron entries (for testing/monitoring).

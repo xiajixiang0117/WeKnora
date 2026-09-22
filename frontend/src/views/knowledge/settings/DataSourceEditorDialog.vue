@@ -19,6 +19,7 @@ import {
 } from '@/api/datasource'
 import SettingDrawer from '@/components/settings/SettingDrawer.vue'
 import DataSourceTypeIcon from './DataSourceTypeIcon.vue'
+import SyncScheduleEditor from './SyncScheduleEditor.vue'
 import { getDatasourceIconUrl } from './datasourceIcons'
 
 const props = defineProps<{
@@ -33,6 +34,7 @@ const { t } = useI18n()
 const isEdit = computed(() => !!props.dataSource)
 const step = ref(0)
 const submitting = ref(false)
+const scheduleValid = ref(true)
 
 // In edit mode the credential "configured?" flag travels on the main
 // DataSource response (DataSource.credentials.credentials.configured —
@@ -511,15 +513,6 @@ const prereqExpanded = ref(false)
 // Temp data source for resource listing
 const tempDsId = ref('')
 
-// Schedule presets
-const schedulePresets = computed(() => [
-  { label: t('datasource.schedule30min'), value: '0 */30 * * * *' },
-  { label: t('datasource.schedule1h'), value: '0 0 * * * *' },
-  { label: t('datasource.schedule6h'), value: '0 0 */6 * * *' },
-  { label: t('datasource.schedule12h'), value: '0 0 */12 * * *' },
-  { label: t('datasource.schedule24h'), value: '0 0 2 * * *' },
-])
-
 // --- Connector definitions ---
 interface ConnectorDef {
   type: string
@@ -730,6 +723,7 @@ const displayedCredentialFields = computed(() => {
 
 // --- Drawer lifecycle ---
 watch(visible, async (v) => {
+  scheduleValid.value = true
   if (!v) {
     if (!isEdit.value && tempDsId.value) {
       try {
@@ -1199,6 +1193,10 @@ async function commitCredentialsIfNeeded(dsId: string): Promise<boolean> {
 
 // --- Final submit ---
 async function handleSubmit() {
+  if (!scheduleValid.value) {
+    MessagePlugin.error(t('datasource.scheduleEditor.invalid'))
+    return
+  }
   form.value.config.resource_ids = selectedResourceIds.value
   submitting.value = true
   try {
@@ -1216,7 +1214,7 @@ async function handleSubmit() {
       await updateDataSource(tempDsId.value, {
         ...form.value,
         config: buildConfigPayload(),
-        sync_schedule: isWebCrawlerConnector(form.value.type) ? '' : form.value.sync_schedule,
+        sync_schedule: form.value.sync_schedule.trim(),
         knowledge_base_id: props.kbId,
         status: 'active',
       } as any)
@@ -1224,7 +1222,7 @@ async function handleSubmit() {
       const res = await createDataSource({
         ...form.value,
         config: buildConfigPayload(),
-        sync_schedule: isWebCrawlerConnector(form.value.type) ? '' : form.value.sync_schedule,
+        sync_schedule: form.value.sync_schedule.trim(),
         knowledge_base_id: props.kbId,
         status: 'active',
       } as any)
@@ -1928,14 +1926,12 @@ const drawerConfirmText = computed(() => {
 
     <!-- Step 3: Sync strategy -->
     <template v-if="step === 3">
-      <section v-if="!isWebCrawlerConnector(form.type)" class="setting-drawer__section">
+      <section class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ t('datasource.syncScheduleLabel') }}</h4>
-        <t-select v-model="form.sync_schedule">
-          <t-option v-for="p in schedulePresets" :key="p.value" :value="p.value" :label="p.label" />
-        </t-select>
+        <SyncScheduleEditor v-model="form.sync_schedule" :server-timezone="props.dataSource?.schedule_timezone" @valid="scheduleValid = $event" />
       </section>
 
-      <section class="setting-drawer__section">
+      <section v-if="form.type !== 'web_crawler'" class="setting-drawer__section">
         <h4 class="setting-drawer__section-title">{{ t('datasource.syncModeLabel') }}</h4>
         <div class="form-item form-item--flat">
           <div class="option-group" role="radiogroup" :aria-label="t('datasource.syncModeLabel')">

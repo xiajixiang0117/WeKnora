@@ -10,7 +10,8 @@ export default {
     "retry": "Retry",
     "empty": "No sessions yet",
     "untitled": "Untitled session",
-    "unknownAgent": "Unknown agent",
+    "unknownAgent": "Agent unavailable",
+    "unrecordedAgent": "Agent not recorded",
     "viewDetails": "View details",
     "detailsTitle": "Session details",
     "loadingDetails": "Loading details",
@@ -6595,6 +6596,13 @@ export default {
     guideStep3_notion: 'Search and select your Integration app, then come back and click Retry',
     permissionDocLink: 'View Feishu wiki permission docs',
     syncScheduleLabel: 'Sync schedule',
+    cronExpression: 'Cron expression',
+    scheduleEditor: {
+      manual: 'Manual sync', minutes: 'By minute', hourly: 'By hour', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', advanced: 'Advanced Cron expression',
+      interval: 'Every', minuteUnit: 'minutes', hourUnit: 'hours', atTime: 'Run at', atMinute: 'At minute', monthDay: 'Day of month',
+      weekday0: 'Sun', weekday1: 'Mon', weekday2: 'Tue', weekday3: 'Wed', weekday4: 'Thu', weekday5: 'Fri', weekday6: 'Sat',
+      timezone: 'Time zone', serverTime: 'Server time zone', nextRuns: 'Next three runs', invalid: 'Invalid schedule. Check the time, date, or Cron expression.',
+    },
     conflictLabel: 'Conflict strategy',
     conflict: {
       overwrite: 'Overwrite',

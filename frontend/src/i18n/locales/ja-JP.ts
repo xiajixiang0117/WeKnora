@@ -10,7 +10,8 @@ export default {
     "retry": "再試行",
     "empty": "セッションはありません",
     "untitled": "無題のセッション",
-    "unknownAgent": "不明なエージェント",
+    "unknownAgent": "エージェントを利用できません",
+    "unrecordedAgent": "エージェント未記録",
     "viewDetails": "詳細を表示",
     "detailsTitle": "セッション詳細",
     "loadingDetails": "詳細を読み込み中",
@@ -6647,6 +6648,13 @@ export default {
     guideStep3_notion: '作成したIntegrationアプリを検索して選択し、戻って「再試行」をクリックします',
     permissionDocLink: 'FeishuのWiki権限ドキュメントを見る',
     syncScheduleLabel: '同期スケジュール',
+    cronExpression: 'Cron 式',
+    scheduleEditor: {
+      manual: '手動同期', minutes: '分単位', hourly: '時間単位', daily: '毎日', weekly: '毎週', monthly: '毎月', advanced: '高度な Cron 式',
+      interval: '間隔', minuteUnit: '分', hourUnit: '時間', atTime: '実行時刻', atMinute: '実行する分', monthDay: '実行日',
+      weekday0: '日', weekday1: '月', weekday2: '火', weekday3: '水', weekday4: '木', weekday5: '金', weekday6: '土',
+      timezone: 'タイムゾーン', serverTime: 'サーバーのタイムゾーン', nextRuns: '次の3回の実行時刻', invalid: '時刻、日付または Cron 式を確認してください。',
+    },
     conflictLabel: '競合時の処理',
     conflict: {
       overwrite: '上書き',

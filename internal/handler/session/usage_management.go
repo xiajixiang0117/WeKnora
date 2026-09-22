@@ -170,6 +170,14 @@ func (h *Handler) sessionUsageAgentNames(ctx context.Context) (map[string]string
 			names[agent.ID] = agent.Name
 		}
 	}
+	// Internal built-ins are intentionally absent from the agent picker.
+	for id := range types.BuiltinAgentRegistry {
+		if _, exists := names[id]; !exists {
+			if agent := types.GetBuiltinAgentWithContext(ctx, id, 0); agent != nil {
+				names[id] = agent.Name
+			}
+		}
+	}
 	return names, nil
 }
 
@@ -234,11 +242,9 @@ func (h *Handler) buildSessionUsage(
 				continue
 			}
 			summary.AnswerCount++
-			if message.AgentID != "" {
-				agents[message.AgentID] = SessionUsageAgent{
-					ID:   message.AgentID,
-					Name: agentNames[message.AgentID],
-				}
+			agents[message.AgentID] = SessionUsageAgent{
+				ID:   message.AgentID,
+				Name: agentNames[message.AgentID],
 			}
 
 			detail := SessionUsageDetail{

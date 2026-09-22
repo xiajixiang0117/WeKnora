@@ -14,6 +14,39 @@ type usageQuestionMessages struct {
 	pages [][]*types.Message
 }
 
+type usageAgents struct {
+	interfaces.CustomAgentService
+}
+
+func (*usageAgents) ListAgents(context.Context) ([]*types.CustomAgent, error) {
+	return []*types.CustomAgent{{ID: types.BuiltinQuickAnswerID, Name: "Tenant override"}}, nil
+}
+
+func TestSessionUsageIncludesInternalBuiltinAgentNames(t *testing.T) {
+	require.NoError(t, types.LoadBuiltinAgentsConfig("../../../config"))
+	h := &Handler{customAgentService: &usageAgents{}}
+	names, err := h.sessionUsageAgentNames(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "Tenant override", names[types.BuiltinQuickAnswerID])
+	require.NotEmpty(t, names[types.BuiltinWikiFixerID])
+	require.NotEmpty(t, names[types.BuiltinSkillInstallerID])
+}
+
+func TestSessionUsagePreservesUnrecordedAgentInMixedSession(t *testing.T) {
+	h := &Handler{messageService: &usageQuestionMessages{pages: [][]*types.Message{{
+		{Role: "assistant", AgentID: "known"},
+		{Role: "assistant"},
+		{Role: "assistant", AgentID: "deleted"},
+	}}}}
+	summary, details, err := h.buildSessionUsage(context.Background(), &types.SessionListItem{}, map[string]string{"known": "Known"}, nil, true)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []SessionUsageAgent{{ID: "known", Name: "Known"}, {ID: ""}, {ID: "deleted"}}, summary.Agents)
+	require.Empty(t, details[1].AgentID)
+	require.Empty(t, details[1].AgentName)
+	require.Equal(t, "deleted", details[2].AgentID)
+	require.Empty(t, details[2].AgentName)
+}
+
 func (s *usageQuestionMessages) GetMessagesBySession(_ context.Context, _ string, page, _ int) ([]*types.Message, error) {
 	return s.pages[page-1], nil
 }

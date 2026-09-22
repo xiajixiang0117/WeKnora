@@ -693,8 +693,8 @@ func truncateUTF8ByBytes(content string, maxBytes int) string {
 	return content[:end]
 }
 
-func createIMAssistantMessagePayload(sessionID, requestID string) *types.Message {
-	return &types.Message{
+func createIMAssistantMessagePayload(sessionID, requestID string, agent *types.CustomAgent) *types.Message {
+	message := &types.Message{
 		SessionID:   sessionID,
 		Role:        "assistant",
 		RequestID:   requestID,
@@ -702,6 +702,12 @@ func createIMAssistantMessagePayload(sessionID, requestID string) *types.Message
 		IsCompleted: false,
 		Channel:     "im",
 	}
+	if agent != nil {
+		message.AgentID = agent.ID
+		message.AgentTenantID = agent.TenantID
+		message.ModelID = agent.Config.ModelID
+	}
+	return message
 }
 
 func collectIMKnowledgeReferences(dst *[]*types.SearchResult, refs interface{}) {
@@ -2765,7 +2771,7 @@ func (s *Service) handleMessageStream(ctx context.Context, msg *IncomingMessage,
 	}
 
 	// Create placeholder assistant message
-	assistantMsg, err = s.messageService.CreateMessage(qaCtx, createIMAssistantMessagePayload(session.ID, requestID))
+	assistantMsg, err = s.messageService.CreateMessage(qaCtx, createIMAssistantMessagePayload(session.ID, requestID, customAgent))
 	if err != nil {
 		return fmt.Errorf("create assistant message: %w", err)
 	}
@@ -3023,7 +3029,7 @@ func (s *Service) runQA(ctx context.Context, session *types.Session, query strin
 	}
 
 	// Create a placeholder assistant message
-	assistantMsg, err := s.messageService.CreateMessage(ctx, createIMAssistantMessagePayload(session.ID, requestID))
+	assistantMsg, err := s.messageService.CreateMessage(ctx, createIMAssistantMessagePayload(session.ID, requestID, customAgent))
 	if err != nil {
 		return "", fmt.Errorf("create assistant message: %w", err)
 	}

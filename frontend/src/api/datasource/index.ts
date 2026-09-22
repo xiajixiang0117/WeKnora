@@ -10,6 +10,7 @@ export interface DataSource {
   type: string
   config: any
   sync_schedule: string
+  schedule_timezone?: string
   sync_mode: 'incremental' | 'full'
   status: 'active' | 'paused' | 'error'
   conflict_strategy: 'overwrite' | 'skip'

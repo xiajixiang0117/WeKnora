@@ -106,6 +106,9 @@ func (s *DataSourceService) CreateDataSource(ctx context.Context, ds *types.Data
 	if ds == nil {
 		return nil, datasource.ErrDataSourceInvalid
 	}
+	if err := datasource.ValidateSchedule(ds.SyncSchedule); err != nil {
+		return nil, err
+	}
 
 	// Validate knowledge base exists
 	kb, err := s.kbService.GetKnowledgeBaseByID(ctx, ds.KnowledgeBaseID)
@@ -132,11 +135,6 @@ func (s *DataSourceService) CreateDataSource(ctx context.Context, ds *types.Data
 	if err := s.validateDataSourceConfig(ctx, ds); err != nil {
 		return nil, err
 	}
-	// Website crawls are manual/review-only, so never persist a generic cron
-	// schedule that could later be mistaken for an automatic sync policy.
-	if ds.Type == types.ConnectorTypeWebCrawler {
-		ds.SyncSchedule = ""
-	}
 
 	// Create in database
 	if err := s.dsRepo.Create(ctx, ds); err != nil {
@@ -145,7 +143,7 @@ func (s *DataSourceService) CreateDataSource(ctx context.Context, ds *types.Data
 	}
 
 	// Register cron schedule if configured
-	if ds.Type != types.ConnectorTypeWebCrawler && ds.SyncSchedule != "" && ds.Status == types.DataSourceStatusActive {
+	if ds.SyncSchedule != "" && ds.Status == types.DataSourceStatusActive {
 		if err := s.scheduler.AddOrUpdate(ds); err != nil {
 			logger.Warnf(ctx, "failed to register cron for ds=%s: %v", ds.ID, err)
 		}
@@ -190,6 +188,9 @@ func (s *DataSourceService) ListDataSources(ctx context.Context, kbID string) ([
 func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.DataSource) (*types.DataSource, error) {
 	if ds == nil || ds.ID == "" {
 		return nil, datasource.ErrDataSourceInvalid
+	}
+	if err := datasource.ValidateSchedule(ds.SyncSchedule); err != nil {
+		return nil, err
 	}
 
 	// Verify data source exists
@@ -256,21 +257,13 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 			return nil, err
 		}
 	}
-	if ds.Type == types.ConnectorTypeWebCrawler {
-		ds.SyncSchedule = ""
-	}
 
 	if err := s.dsRepo.Update(ctx, ds); err != nil {
 		logger.Errorf(ctx, "failed to update data source: %v", err)
 		return nil, err
 	}
 
-	// Website crawls are deliberately manual/review-only; never schedule the
-	// generic sync path for them. Remove a stale schedule when a connector is
-	// changed from a scheduled source to a web crawler.
-	if ds.Type == types.ConnectorTypeWebCrawler {
-		s.scheduler.Remove(ds.ID)
-	} else if err := s.scheduler.AddOrUpdate(ds); err != nil {
+	if err := s.scheduler.AddOrUpdate(ds); err != nil {
 		logger.Warnf(ctx, "failed to update cron for ds=%s: %v", ds.ID, err)
 	}
 
@@ -608,10 +601,7 @@ func (s *DataSourceService) ResumeDataSource(ctx context.Context, id string) err
 		return err
 	}
 
-	// Website crawls are manual/review-only and must not be re-scheduled.
-	if ds.Type == types.ConnectorTypeWebCrawler {
-		s.scheduler.Remove(ds.ID)
-	} else if err := s.scheduler.AddOrUpdate(ds); err != nil {
+	if err := s.scheduler.AddOrUpdate(ds); err != nil {
 		logger.Warnf(ctx, "failed to re-register cron for ds=%s: %v", ds.ID, err)
 	}
 

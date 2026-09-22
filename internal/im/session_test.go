@@ -203,7 +203,7 @@ func TestBuildIMLastRequestStateKeepsExplicitKBs(t *testing.T) {
 
 func TestCreateIMMessagePayloadsShareRequestShape(t *testing.T) {
 	userMsg := createIMUserMessagePayload("session-1", "hello", "request-1")
-	assistantMsg := createIMAssistantMessagePayload("session-1", "request-1")
+	assistantMsg := createIMAssistantMessagePayload("session-1", "request-1", nil)
 
 	if userMsg.SessionID != "session-1" || assistantMsg.SessionID != "session-1" {
 		t.Fatalf("SessionID mismatch: user=%q assistant=%q", userMsg.SessionID, assistantMsg.SessionID)
@@ -228,6 +228,15 @@ func TestCreateIMMessagePayloadsShareRequestShape(t *testing.T) {
 	}
 	if assistantMsg.Content != "" {
 		t.Fatalf("assistant placeholder content = %q, want empty", assistantMsg.Content)
+	}
+}
+
+func TestIMAssistantMessageRecordsResolvedAgent(t *testing.T) {
+	agent := &types.CustomAgent{ID: "agent-1", TenantID: 42}
+	agent.Config.ModelID = "model-1"
+	message := createIMAssistantMessagePayload("session-1", "request-1", agent)
+	if message.AgentID != agent.ID || message.AgentTenantID != 42 || message.ModelID != "model-1" {
+		t.Fatalf("incorrect execution identity: agent=%q tenant=%d model=%q", message.AgentID, message.AgentTenantID, message.ModelID)
 	}
 }
 

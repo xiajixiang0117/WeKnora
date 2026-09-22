@@ -26,6 +26,7 @@ type DataSourceResponse struct {
 	Type                 string               `json:"type"`
 	Config               *DataSourceConfigDTO `json:"config,omitempty"`
 	SyncSchedule         string               `json:"sync_schedule"`
+	ScheduleTimezone     string               `json:"schedule_timezone"`
 	SyncMode             string               `json:"sync_mode"`
 	Status               string               `json:"status"`
 	ConflictStrategy     string               `json:"conflict_strategy"`
@@ -77,6 +78,7 @@ func NewDataSourceResponse(ds *types.DataSource) *DataSourceResponse {
 		Type:                 ds.Type,
 		Config:               cfgDTO,
 		SyncSchedule:         ds.SyncSchedule,
+		ScheduleTimezone:     scheduleTimezone(),
 		SyncMode:             ds.SyncMode,
 		Status:               ds.Status,
 		ConflictStrategy:     ds.ConflictStrategy,
@@ -94,6 +96,13 @@ func NewDataSourceResponse(ds *types.DataSource) *DataSourceResponse {
 			"credentials": {Configured: configured},
 		},
 	}
+}
+
+func scheduleTimezone() string {
+	if name := time.Local.String(); name != "Local" {
+		return name
+	}
+	return "UTC" + time.Now().Format("-07:00")
 }
 
 // enrichRSSFeedURLsInSettings copies feed_urls from credentials into settings

@@ -197,9 +197,9 @@ func TestScheduler_StartWithActiveDataSources(t *testing.T) {
 	defer scheduler.Stop()
 
 	// Only ds-1 should be registered: paused sources and review-only website
-	// crawlers must never enter the generic sync scheduler.
-	if scheduler.EntryCount() != 1 {
-		t.Errorf("EntryCount() = %d, want 1", scheduler.EntryCount())
+	// Crawlers register a schedule but dispatch through their scan workflow.
+	if scheduler.EntryCount() != 2 {
+		t.Errorf("EntryCount() = %d, want 2", scheduler.EntryCount())
 	}
 }
 

@@ -209,6 +209,10 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 	}
 	if scan.Status != types.WebCrawlScanStatusScanning &&
 		!(scan.Status == types.WebCrawlScanStatusPartialFailed && scan.ErrorMessage != "") {
+		if payload.AutoApply && (scan.Status == types.WebCrawlScanStatusReviewReady ||
+			scan.Status == types.WebCrawlScanStatusApplying || scan.Status == types.WebCrawlScanStatusPartialFailed) {
+			return s.autoApplyWebCrawlChanges(ctx, &payload)
+		}
 		return nil
 	}
 	defer func() {
@@ -216,6 +220,11 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 			return
 		}
 		scan.Status = types.WebCrawlScanStatusPartialFailed
+		attempt, _ := asynq.GetRetryCount(ctx)
+		maximum, _ := asynq.GetMaxRetry(ctx)
+		if payload.AutoApply && attempt < maximum {
+			scan.Status = types.WebCrawlScanStatusScanning
+		}
 		scan.ErrorMessage = processErr.Error()
 		scan.FinishedAt = timePtr(time.Now().UTC())
 		scan.UpdatedAt = time.Now().UTC()
@@ -227,6 +236,11 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 	if err != nil {
 		return err
 	}
+	if payload.AutoApply && (ds.Status != types.DataSourceStatusActive || ds.SyncSchedule == "") {
+		scan.Status = types.WebCrawlScanStatusCanceled
+		scan.FinishedAt = timePtr(time.Now().UTC())
+		return s.webCrawlerRepo.UpdateScan(ctx, scan)
+	}
 	config, err := ds.ParseConfig()
 	if err != nil {
 		return err
@@ -236,6 +250,9 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 		return err
 	}
 	if resumed, err := s.resumeInterruptedWebCrawlDeletions(ctx, ds, scan); err != nil || resumed {
+		if err == nil && payload.AutoApply {
+			return s.autoApplyWebCrawlChanges(ctx, &payload)
+		}
 		return err
 	}
 	pages, failures, crawlErr := webcrawler.NewConnector().Crawl(ctx, config)
@@ -402,7 +419,101 @@ func (s *DataSourceService) ProcessWebCrawlScan(ctx context.Context, task *asynq
 	scan.ErrorMessage = ""
 	scan.FinishedAt = timePtr(time.Now().UTC())
 	scan.UpdatedAt = time.Now().UTC()
-	return s.webCrawlerRepo.UpdateScan(ctx, scan)
+	if err := s.webCrawlerRepo.UpdateScan(ctx, scan); err != nil {
+		return err
+	}
+	if payload.AutoApply {
+		return s.autoApplyWebCrawlChanges(ctx, &payload)
+	}
+	return nil
+}
+
+// Apply batches in this task so a failed enqueue cannot strand queued changes.
+// Retried scans resume from persisted changes and never reapply successful ones.
+func (s *DataSourceService) autoApplyWebCrawlChanges(ctx context.Context, payload *types.WebCrawlScanPayload) (applyErr error) {
+	ds, err := s.GetDataSource(ctx, payload.DataSourceID)
+	if err != nil {
+		return err
+	}
+	scan, err := s.GetWebCrawlScan(ctx, payload.ScanID)
+	if err != nil {
+		return err
+	}
+	if _, err := s.webCrawlTaskContext(ctx, ds, scan, payload.TenantID); err != nil {
+		return err
+	}
+	if ds.Status != types.DataSourceStatusActive || ds.SyncSchedule == "" {
+		scan.Status = types.WebCrawlScanStatusCanceled
+		scan.FinishedAt = timePtr(time.Now().UTC())
+		return s.webCrawlerRepo.UpdateScan(ctx, scan)
+	}
+	defer func() {
+		if applyErr != nil {
+			if latest, err := s.GetWebCrawlScan(ctx, payload.ScanID); err == nil && latest != nil {
+				scan = latest
+			}
+			scan.Status = types.WebCrawlScanStatusPartialFailed
+			attempt, _ := asynq.GetRetryCount(ctx)
+			maximum, _ := asynq.GetMaxRetry(ctx)
+			if attempt < maximum {
+				scan.Status = types.WebCrawlScanStatusApplying
+			}
+			// An empty scan error distinguishes apply retries from a failed crawl.
+			scan.ErrorMessage = ""
+			scan.FinishedAt = timePtr(time.Now().UTC())
+			_ = s.webCrawlerRepo.UpdateScan(ctx, scan)
+		}
+	}()
+	scan.Status = types.WebCrawlScanStatusApplying
+	if err := s.webCrawlerRepo.UpdateScan(ctx, scan); err != nil {
+		return err
+	}
+	var ids []string
+	for offset := 0; ; offset += 1000 {
+		changes, err := s.webCrawlerRepo.ListChanges(ctx, scan.ID, "", "", "", 1000, offset)
+		if err != nil {
+			return err
+		}
+		for _, change := range changes {
+			if change.ApplyStatus == types.WebCrawlApplyApplied || change.Decision == types.WebCrawlDecisionIgnore {
+				continue
+			}
+			confirmedDeletion := change.ChangeType == types.WebCrawlChangeMissing && change.Action == "delete" &&
+				(change.SourceStatus == http.StatusNotFound || change.SourceStatus == http.StatusGone)
+			if change.ChangeType != types.WebCrawlChangeAdded && change.ChangeType != types.WebCrawlChangeUpdated && !confirmedDeletion {
+				continue
+			}
+			change.Decision = types.WebCrawlDecisionApply
+			change.ApplyStatus = types.WebCrawlApplyQueued
+			if err := s.webCrawlerRepo.UpdateChange(ctx, change); err != nil {
+				return err
+			}
+			ids = append(ids, change.ID)
+		}
+		if len(changes) < 1000 {
+			break
+		}
+	}
+	// An empty batch also reconciles the scan's terminal status.
+	for start := 0; start == 0 || start < len(ids); start += webCrawlApplyBatchSize {
+		end := start + webCrawlApplyBatchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		data, _ := json.Marshal(&types.WebCrawlApplyPayload{TenantID: ds.TenantID, DataSourceID: ds.ID,
+			ScanID: scan.ID, ChangeIDs: ids[start:end]})
+		if err := s.ProcessWebCrawlApply(ctx, asynq.NewTask(types.TypeWebCrawlApply, data)); err != nil {
+			return err
+		}
+	}
+	failed, err := s.webCrawlerRepo.ListChanges(ctx, scan.ID, "", "", types.WebCrawlApplyFailed, 1, 0)
+	if err != nil {
+		return err
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("web crawl has failed changes")
+	}
+	return nil
 }
 
 func (s *DataSourceService) finishAutomaticWebCrawlDeletion(ctx context.Context, ds *types.DataSource, change *types.WebCrawlChange) error {

@@ -445,7 +445,7 @@ func BuildContainer(container *dig.Container) *dig.Container {
 	// Data source sync framework
 	logger.Debugf(ctx, "[Container] Registering data source sync framework...")
 	must(container.Provide(initConnectorRegistry))
-	must(container.Provide(datasource.NewScheduler))
+	must(container.Provide(datasource.NewSchedulerWithWebCrawler))
 	must(container.Provide(service.NewDataSourceServiceWithWebCrawler))
 	must(container.Invoke(startDataSourceScheduler))
 	logger.Debugf(ctx, "[Container] Data source sync framework registered")

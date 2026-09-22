@@ -19,7 +19,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{ kbId: string }>()
 const emit = defineEmits<{ (e: 'count', value: number): void }>()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const authStore = useAuthStore()
 
 // 后端 /datasource 的 list/logs 是 Viewer+，但所有写操作（POST/PUT/DELETE
@@ -148,7 +148,7 @@ function connectorLabel(type: string) {
 }
 
 function scheduleLabel(cron: string) {
-  return humanizeCron(cron, t)
+  return humanizeCron(cron, t, locale.value)
 }
 
 function lastSyncTime(ds: DataSource) {
@@ -297,7 +297,7 @@ onBeforeUnmount(stopPolling)
             </p>
             <p class="ds-card__detail">
               <template v-if="ds.type === 'web_crawler'">
-                {{ t('datasource.webCrawler.manualSync') }}
+                {{ ds.sync_schedule ? scheduleLabel(ds.sync_schedule) : t('datasource.webCrawler.manualSync') }}
               </template>
               <template v-else>
                 {{ scheduleLabel(ds.sync_schedule) }}

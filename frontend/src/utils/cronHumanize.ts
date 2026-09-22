@@ -1,5 +1,6 @@
 // cronHumanize maps known cron schedule presets to human-readable i18n keys.
 // Falls back to the raw cron expression for unknown patterns.
+import { describeSchedule, readSchedule } from './syncSchedule'
 
 const CRON_PRESET_MAP: Record<string, string> = {
   '0 */30 * * * *': 'datasource.scheduleHuman.30min',
@@ -13,10 +14,14 @@ const CRON_PRESET_MAP: Record<string, string> = {
  * Convert a cron expression to a human-readable string.
  * Uses i18n translate function for known presets, raw expression otherwise.
  */
-export function humanizeCron(cron: string, t: (key: string) => string): string {
+export function humanizeCron(cron: string, t: (key: string) => string, locale = 'en-US'): string {
   const key = CRON_PRESET_MAP[cron]
   if (key) return t(key)
-  return cron || '--'
+  if (!cron) return t('datasource.webCrawler.manualSync')
+  try {
+    const zone = readSchedule(cron).timezone
+    return describeSchedule(cron, locale) + (zone ? ` (${zone})` : '')
+  } catch { return cron }
 }
 
 /**
