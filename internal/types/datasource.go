@@ -36,6 +36,7 @@ const (
 	ConnectorTypeSlack       = "slack"
 	ConnectorTypeIMAP        = "imap"
 	ConnectorTypeRSS         = "rss"
+	ConnectorTypeRemoteFile  = "remote_file"
 	ConnectorTypeGitLab      = "gitlab"
 	ConnectorTypeIMA         = "ima"
 

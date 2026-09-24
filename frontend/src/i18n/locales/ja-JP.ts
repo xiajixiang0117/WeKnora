@@ -6711,6 +6711,7 @@ export default {
       yuque: 'Yuque',
       dingtalk: 'DingTalkドキュメント',
       rss: 'RSS / Atomフィード',
+      remote_file: 'リモートファイル',
       ima: 'Tencent IMA',
       gitlab: 'GitLab'
     },
@@ -6725,6 +6726,7 @@ export default {
       yuque: 'Yuqueのナレッジベースからドキュメントを同期します',
       dingtalk: 'DingTalkナレッジベースのオンラインドキュメントを同期',
       rss: 'RSS / Atomフィードから記事を同期します',
+      remote_file: '固定URLからPDFなどのファイルを同期します',
       ima: 'Tencent IMAのナレッジベースからドキュメント、ノート、ファイルを同期します（AIセッションと動画の解析は非対応）',
       gitlab: 'GitLabプロジェクトからファイルを同期します'
     },
@@ -6763,6 +6765,8 @@ export default {
       baseUrlHint: '空欄の場合はデフォルトのパブリッククラウドのアドレスを使用します。プライベート/エンタープライズ導入の場合や、リバースプロキシ経由でアクセスする場合は、カスタムアドレスを入力してください（例: https://api-proxy.example.com）。',
       feedUrls: 'フィードURL',
       feedUrlsHint: '1行に1つのRSS / AtomフィードURLを入力します。複数のフィードを指定できます。',
+      fileUrls: 'リモートファイルURL',
+      fileUrlsHint: '1行に1つのPDFなどのファイルURLを入力します。変更されたファイルは定期的に再解析します。',
       authHeaders: 'カスタムヘッダー（任意）',
       authHeadersHint: '非公開フィード用です。1行に1つ「名前: 値」の形式で入力します（例: Authorization: Bearer xxxx）'
     },

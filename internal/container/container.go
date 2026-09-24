@@ -65,6 +65,7 @@ import (
 	imaConnector "github.com/Tencent/WeKnora/internal/datasource/connector/ima"
 	notionConnector "github.com/Tencent/WeKnora/internal/datasource/connector/notion"
 	rssConnector "github.com/Tencent/WeKnora/internal/datasource/connector/rss"
+	remoteFileConnector "github.com/Tencent/WeKnora/internal/datasource/connector/remotefile"
 	webcrawlerConnector "github.com/Tencent/WeKnora/internal/datasource/connector/webcrawler"
 	yuqueConnector "github.com/Tencent/WeKnora/internal/datasource/connector/yuque"
 	"github.com/Tencent/WeKnora/internal/event"
@@ -1804,6 +1805,9 @@ func initConnectorRegistry() (*datasource.ConnectorRegistry, error) {
 	}
 	if err := registry.Register(rssConnector.NewConnector()); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("register rss connector: %w", err))
+	}
+	if err := registry.Register(remoteFileConnector.NewConnector()); err != nil {
+		errs = errors.Join(errs, fmt.Errorf("register remote file connector: %w", err))
 	}
 	if err := registry.Register(gitlabConnector.NewConnector()); err != nil {
 		errs = errors.Join(errs, fmt.Errorf("register gitlab connector: %w", err))

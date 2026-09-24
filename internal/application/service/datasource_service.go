@@ -252,7 +252,7 @@ func (s *DataSourceService) UpdateDataSource(ctx context.Context, ds *types.Data
 		configActuallyChanged = !reflect.DeepEqual(*mergedCfg, *existingParsedCfg)
 	}
 	hasCreds := mergedCfg != nil && mergedCfg.HasConfiguredCredentials(ds.Type)
-	if (ds.Type == types.ConnectorTypeWebCrawler || hasCreds) && (ds.Type != existing.Type || configActuallyChanged) {
+	if (ds.Type == types.ConnectorTypeWebCrawler || ds.Type == types.ConnectorTypeRemoteFile || hasCreds) && (ds.Type != existing.Type || configActuallyChanged) {
 		if err := s.validateDataSourceConfig(ctx, ds); err != nil {
 			return nil, err
 		}
@@ -813,7 +813,7 @@ func (s *DataSourceService) ProcessSync(ctx context.Context, task *asynq.Task) e
 	}
 
 	// Update cursor for next incremental sync
-	if nextCursor != nil {
+	if nextCursor != nil && !(ds.Type == types.ConnectorTypeRemoteFile && result.Failed > 0) {
 		cursorJSON, _ := nextCursor.ToJSON()
 		ds.LastSyncCursor = cursorJSON
 	}

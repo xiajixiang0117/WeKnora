@@ -19,3 +19,17 @@ func TestConnectorRegistryIncludesDingTalk(t *testing.T) {
 		t.Fatalf("connector.Type() = %q", connector.Type())
 	}
 }
+
+func TestConnectorRegistryIncludesRemoteFile(t *testing.T) {
+	registry, err := initConnectorRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	connector, err := registry.Get(types.ConnectorTypeRemoteFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if connector.Type() != types.ConnectorTypeRemoteFile {
+		t.Fatalf("unexpected type: %s", connector.Type())
+	}
+}

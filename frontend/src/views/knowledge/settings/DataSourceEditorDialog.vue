@@ -695,6 +695,9 @@ const connectorDefs = computed<ConnectorDef[]>(() => [
     ],
   },
   {
+    type: 'remote_file', available: true, docUrl: '', permissionDocUrl: '', permissionPageUrl: '', requiredPermissions: [], fields: [],
+  },
+  {
     type: 'gitlab', available: true, docUrl: '', permissionDocUrl: '', permissionPageUrl: '', requiredPermissions: [],
     fields: [
       { key: 'base_url', labelKey: 'datasource.gitlab.baseUrl', placeholder: 'https://gitlab.example.com' },
@@ -869,7 +872,7 @@ function selectType(def: ConnectorDef) {
 
 // --- Test connection ---
 async function testConnection() {
-  if (isWebCrawlerConnector(form.value.type)) return
+  if (isWebCrawlerConnector(form.value.type) || form.value.type === 'remote_file') return
   syncRssAuthHeadersToCredentials()
   syncConfluencePublicFieldsToSettings()
   if (!validateRssFeedUrls()) return
@@ -928,7 +931,7 @@ async function loadResources() {
       } as any)
       const created = res?.data || res
       tempDsId.value = created.id
-    } else if (!isEdit.value) {
+    } else if (!isEdit.value || form.value.type === 'remote_file') {
       await updateDataSource(tempDsId.value, {
         ...form.value,
         knowledge_base_id: props.kbId,
@@ -1059,6 +1062,11 @@ function toggleResource(id: string) {
 }
 
 function validateRssFeedUrls(): boolean {
+  if (form.value.type === 'remote_file') {
+    if (String(form.value.config.settings.file_urls || '').trim()) return true
+    MessagePlugin.warning(`${t('datasource.field.fileUrls')} ${t('datasource.isRequired')}`)
+    return false
+  }
   if (form.value.type !== 'rss') return true
   if (!String(form.value.config.settings.feed_urls || '').trim()) {
     MessagePlugin.warning(`${t('datasource.field.feedUrls')} ${t('datasource.isRequired')}`)
@@ -1088,7 +1096,7 @@ function validateStep1Fields(): boolean {
 async function nextStep() {
   if (step.value === 1) {
     if (!validateStep1Fields()) return
-    if (needsConnectionTest() && testResult.value !== 'success') {
+    if (form.value.type !== 'remote_file' && needsConnectionTest() && testResult.value !== 'success') {
       await testConnection()
       if ((testResult.value as string) !== 'success') return
     }
@@ -1378,7 +1386,7 @@ const drawerConfirmText = computed(() => {
       <t-button v-if="!isEdit" variant="outline" @click="step = 0">
         {{ t('datasource.back') }}
       </t-button>
-      <t-button variant="outline" :loading="testing" @click="testConnection">
+      <t-button v-if="form.type !== 'remote_file'" variant="outline" :loading="testing" @click="testConnection">
         <template #icon>
           <t-icon
             v-if="!testing && testResult === 'success'"
@@ -1548,6 +1556,16 @@ const drawerConfirmText = computed(() => {
             spellcheck="false"
           />
           <p class="form-desc">{{ t('datasource.field.feedUrlsHint') }}</p>
+        </div>
+      </section>
+
+      <section v-if="form.type === 'remote_file'" class="setting-drawer__section">
+        <h4 class="setting-drawer__section-title">{{ t('datasource.field.fileUrls') }}</h4>
+        <div class="form-item">
+          <label class="form-label required">{{ t('datasource.field.fileUrls') }}</label>
+          <t-textarea v-model="form.config.settings.file_urls" placeholder="https://example.com/document.pdf"
+            :autosize="{ minRows: 3, maxRows: 8 }" autocomplete="off" spellcheck="false" />
+          <p class="form-desc">{{ t('datasource.field.fileUrlsHint') }}</p>
         </div>
       </section>
 

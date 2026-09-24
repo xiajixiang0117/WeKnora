@@ -18,6 +18,7 @@ export const datasourceIconMap: Record<string, string> = {
   yuque: yuqueIcon,
   dingtalk: dingtalkIcon,
   rss: rssIcon,
+  remote_file: rssIcon,
   confluence: confluenceIcon,
   gitlab: gitlabIcon,
   ima: imaIcon,

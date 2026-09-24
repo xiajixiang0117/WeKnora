@@ -29,6 +29,13 @@ async function fixture({ configured = true, create = false } = {}) {
     async createWebCrawlScan(id: string) {
       calls.push({ method: 'createWebCrawlScan', args: [id] })
     },
+    async listResources(id: string) {
+      calls.push({ method: 'listResources', args: [id] })
+      return { data: [{ external_id: 'https://example.com/report.pdf', name: 'report.pdf', type: 'file' }] }
+    },
+    async triggerSync(id: string) {
+      calls.push({ method: 'triggerSync', args: [id] })
+    },
     async validateCredentials(type: string, credentials: Record<string, string>) {
       calls.push({ method: 'validateCredentials', args: [type, { ...credentials }] })
       if (credentials.access_token !== 'rotated-token') throw new Error('gitlab API /user: status 401')
@@ -106,6 +113,22 @@ test('crawler creation skips credentials, validates seeds and scans normalized s
     assert.deepEqual(f.calls[0].args[0].config.settings.seed_urls, ['https://example.com/docs', 'https://example.com/help'])
     assert.deepEqual(f.calls[0].args[0].config.settings.web_exclude_selectors, ['nav', '.sidebar'])
     assert.equal(f.calls[1].args[0], 'created-source')
+  } finally { f.close() }
+})
+
+test('remote file creation lists URLs and starts sync without credential validation', async () => {
+  const f = await fixture({ create: true })
+  try {
+    f.vm.selectType({ type: 'remote_file', available: true })
+    f.vm.form.config.settings.file_urls = 'https://example.com/report.pdf'
+    await f.vm.nextStep()
+    assert.equal(f.vm.step, 2)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.deepEqual(f.calls.map(call => call.method), ['createDataSource', 'listResources'])
+    await f.vm.nextStep()
+    await f.vm.handleSubmit()
+    assert.deepEqual(f.calls.map(call => call.method), ['createDataSource', 'listResources', 'updateDataSource', 'triggerSync'])
+    assert.equal(f.calls[0].args[0].config.settings.file_urls, 'https://example.com/report.pdf')
   } finally { f.close() }
 })
 

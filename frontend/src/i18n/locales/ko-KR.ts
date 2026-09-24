@@ -1065,6 +1065,8 @@ export default {
       baseUrlHint: "비워두면 기본 퍼블릭 클라우드 주소가 사용됩니다. 프라이빗/엔터프라이즈 배포거나 리버스 프록시를 통해 액세스해야 하는 경우 사용자 정의 주소를 입력하세요 (예: https://api-proxy.example.com)",
       feedUrls: '피드 주소',
       feedUrlsHint: '한 줄에 하나씩 RSS / Atom 피드 주소를 입력하세요. 여러 개를 함께 입력할 수 있습니다.',
+      fileUrls: '원격 파일 URL',
+      fileUrlsHint: '한 줄에 하나씩 PDF 등 파일 URL을 입력하세요. 변경된 파일은 일정에 따라 다시 분석합니다.',
       authHeaders: '사용자 지정 헤더 (선택)',
       authHeadersHint: '비공개 피드 접근용. 한 줄에 하나씩 「이름: 값」 형식으로 입력하세요. 예: Authorization: Bearer xxxx'
     },
@@ -1080,6 +1082,7 @@ export default {
       dingtalk: 'DingTalk 지식베이스의 온라인 문서 동기화',
       ima: 'Tencent IMA 지식베이스에서 문서, 노트 및 파일 동기화 (AI 세션과 동영상 분석은 지원되지 않음)',
       rss: 'RSS / Atom 피드에서 글 동기화',
+      remote_file: '고정 URL에서 PDF 등 파일 동기화',
       gitlab: 'GitLab 프로젝트의 파일 동기화'
     },
     connector: {
@@ -1094,6 +1097,7 @@ export default {
       dingtalk: 'DingTalk 문서',
       ima: 'Tencent IMA',
       rss: 'RSS / Atom 피드',
+      remote_file: '원격 파일',
       gitlab: 'GitLab'
     },
     logDetail: {

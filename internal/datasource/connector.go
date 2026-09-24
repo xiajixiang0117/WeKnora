@@ -302,6 +302,10 @@ var ConnectorMetadataRegistry = map[string]ConnectorMetadata{
 		AuthType:     "custom",
 		Capabilities: []string{"incremental"},
 	},
+	types.ConnectorTypeRemoteFile: {
+		Type: types.ConnectorTypeRemoteFile, Name: "Remote files", Description: "Sync files from fixed URLs",
+		Priority: 13, AuthType: "none", Capabilities: []string{"incremental"},
+	},
 	types.ConnectorTypeGitLab: {
 		Type:         types.ConnectorTypeGitLab,
 		Name:         "GitLab",
