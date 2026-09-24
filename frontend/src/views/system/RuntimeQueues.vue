@@ -340,6 +340,33 @@
             {{ t('system.globalSettings.runtime.tasks.listTitle', { state: taskStateLabel(taskState) }) }}
           </h4>
           <div class="rq-failed-section-actions">
+            <template v-if="taskState === 'archived' && tasks.length > 0">
+              <t-checkbox
+                :checked="allRetryableTasksSelected"
+                :indeterminate="someRetryableTasksSelected && !allRetryableTasksSelected"
+                :disabled="batchRetrying || Boolean(taskActionID)"
+                @change="toggleAllRetryableTasks"
+              >
+                {{ t('system.globalSettings.runtime.tasks.selectAll') }}
+              </t-checkbox>
+              <t-popconfirm
+                v-if="selectedRetryableTaskCount > 0"
+                theme="warning"
+                :content="t('system.globalSettings.runtime.tasks.batchRetryConfirm', { count: selectedRetryableTaskCount })"
+                @confirm="retrySelectedTasks"
+              >
+                <t-button
+                  variant="text"
+                  size="small"
+                  theme="warning"
+                  :loading="batchRetrying"
+                  :disabled="Boolean(taskActionID) || purging"
+                >
+                  <template #icon><t-icon name="refresh" /></template>
+                  {{ t('system.globalSettings.runtime.tasks.batchRetry') }}
+                </t-button>
+              </t-popconfirm>
+            </template>
             <t-popconfirm
               v-if="taskState === 'archived' && tasks.length > 0"
               theme="danger"
@@ -389,6 +416,14 @@
             :key="task.id"
             class="rq-failed-row"
           >
+            <t-checkbox
+              v-if="taskState === 'archived' && task.allowed_actions.includes('run_now')"
+              class="rq-failed-row-checkbox"
+              :checked="selectedTaskIDs.has(task.id)"
+              :disabled="batchRetrying || Boolean(taskActionID)"
+              :aria-label="t('system.globalSettings.runtime.tasks.selectTask', { id: task.id })"
+              @change="toggleTaskSelection(task.id)"
+            />
             <div class="rq-failed-row-content">
               <div class="rq-failed-row-summary">
                 <span class="rq-failed-row-type">{{ runtimeTaskTypeLabel(task.type) }}</span>
@@ -552,6 +587,8 @@ const tasksSentinelRef = ref<HTMLElement | null>(null)
 const taskActionID = ref('')
 const taskAction = ref<RuntimeTaskAction | ''>('')
 const purging = ref(false)
+const selectedTaskIDs = ref<Set<string>>(new Set())
+const batchRetrying = ref(false)
 
 const TASK_PAGE_SIZE = 20
 const taskStates: RuntimeTaskState[] = ['active', 'pending', 'scheduled', 'retry', 'archived', 'completed']
@@ -616,6 +653,10 @@ const totalRetry = computed(() => queues.value.reduce((s, q) => s + q.retry, 0))
 const totalArchived = computed(() => queues.value.reduce((s, q) => s + q.archived, 0))
 const taskQueueLabel = computed(() => taskQueue.value ? queueLabel(taskQueue.value.name) : '')
 const taskStateGuide = computed(() => t(`system.globalSettings.runtime.tasks.guides.${taskState.value}`))
+const retryableTasks = computed(() => tasks.value.filter((task) => task.allowed_actions.includes('run_now')))
+const selectedRetryableTaskCount = computed(() => retryableTasks.value.filter((task) => selectedTaskIDs.value.has(task.id)).length)
+const allRetryableTasksSelected = computed(() => retryableTasks.value.length > 0 && selectedRetryableTaskCount.value === retryableTasks.value.length)
+const someRetryableTasksSelected = computed(() => selectedRetryableTaskCount.value > 0)
 
 // Friendly per-queue label lives in i18n; falls back to the raw queue
 // name so a queue added on the backend still renders before translations
@@ -784,6 +825,7 @@ async function fetchRuntimeTasks(reset: boolean) {
     tasksCursor.value = ''
     tasksHasMore.value = false
     tasks.value = []
+    selectedTaskIDs.value = new Set()
     tasksLoading.value = true
   } else {
     tasksLoadingMore.value = true
@@ -844,6 +886,7 @@ function attachTasksScrollObserver() {
 function openRuntimeTasks(row: QueueStat, state: RuntimeTaskState) {
   taskQueue.value = row
   taskState.value = state
+  selectedTaskIDs.value = new Set()
   taskDrawerVisible.value = true
   void fetchRuntimeTasks(true)
 }
@@ -851,6 +894,7 @@ function openRuntimeTasks(row: QueueStat, state: RuntimeTaskState) {
 function selectTaskState(state: RuntimeTaskState) {
   if (taskState.value === state) return
   taskState.value = state
+  selectedTaskIDs.value = new Set()
   void fetchRuntimeTasks(true)
 }
 
@@ -861,6 +905,44 @@ function reloadRuntimeTasks() {
 function loadMoreRuntimeTasks() {
   if (tasksLoading.value || tasksLoadingMore.value || !tasksHasMore.value) return
   return fetchRuntimeTasks(false)
+}
+
+function toggleTaskSelection(taskID: string) {
+  const next = new Set(selectedTaskIDs.value)
+  if (next.has(taskID)) next.delete(taskID)
+  else next.add(taskID)
+  selectedTaskIDs.value = next
+}
+
+function toggleAllRetryableTasks(checked: boolean) {
+  const next = new Set(selectedTaskIDs.value)
+  if (checked) retryableTasks.value.forEach((task) => next.add(task.id))
+  else retryableTasks.value.forEach((task) => next.delete(task.id))
+  selectedTaskIDs.value = next
+}
+
+async function retrySelectedTasks() {
+  const queue = taskQueue.value?.name
+  const selected = retryableTasks.value.filter((task) => selectedTaskIDs.value.has(task.id))
+  if (!queue || selected.length === 0 || batchRetrying.value) return
+  batchRetrying.value = true
+  const results = await Promise.allSettled(selected.map((task) => mutateRuntimeTask(queue, task.id, 'run_now')))
+  const succeeded = selected.filter((_, index) => results[index].status === 'fulfilled')
+  const failed = selected.length - succeeded.length
+  const next = new Set(selectedTaskIDs.value)
+  succeeded.forEach((task) => next.delete(task.id))
+  selectedTaskIDs.value = next
+  if (failed === 0) {
+    MessagePlugin.success(t('system.globalSettings.runtime.tasks.batchRetrySuccess', { count: succeeded.length }))
+  } else {
+    MessagePlugin.warning(t('system.globalSettings.runtime.tasks.batchRetryPartial', { success: succeeded.length, failed }))
+  }
+  try {
+    await Promise.all([reloadRuntimeTasks(), load(false)])
+    taskQueue.value = queues.value.find((item) => item.name === queue) ?? taskQueue.value
+  } finally {
+    batchRetrying.value = false
+  }
 }
 
 async function runTaskAction(task: RuntimeTask, action: RuntimeTaskAction) {
@@ -1740,6 +1822,11 @@ onUnmounted(() => {
   &:last-of-type {
     border-bottom: 0;
   }
+}
+
+.rq-failed-row-checkbox {
+  flex: 0 0 auto;
+  margin: 2px 4px 0 0;
 }
 
 .rq-failed-row-content {
