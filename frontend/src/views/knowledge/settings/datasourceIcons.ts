@@ -7,6 +7,8 @@ import rssIcon from '@/assets/img/datasource-rss.svg'
 import confluenceIcon from '@/assets/img/datasource-confluence.svg'
 import dingtalkIcon from '@/assets/img/im/dingtalk.svg'
 import imaIcon from '@/assets/img/datasource-ima.png'
+import webCrawlerIcon from '@/assets/img/datasource-web-crawler.svg'
+import remoteFileIcon from '@/assets/img/datasource-remote-file.svg'
 
 export const datasourceIconMap: Record<string, string> = {
   feishu: feishuIcon,
@@ -18,7 +20,8 @@ export const datasourceIconMap: Record<string, string> = {
   yuque: yuqueIcon,
   dingtalk: dingtalkIcon,
   rss: rssIcon,
-  remote_file: rssIcon,
+  web_crawler: webCrawlerIcon,
+  remote_file: remoteFileIcon,
   confluence: confluenceIcon,
   gitlab: gitlabIcon,
   ima: imaIcon,
