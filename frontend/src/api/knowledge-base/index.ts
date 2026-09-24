@@ -432,7 +432,7 @@ export function batchDownloadKnowledge(kbId: string, ids: string[], signal?: Abo
 }
 
 export function previewKnowledgeFile(id: string) {
-  return getDown(`/api/v1/knowledge/${id}/preview`);
+  return getDown(`/api/v1/knowledge/${id}/preview`, 300000);
 }
 
 /** @param idsQueryString - query string with ids (e.g. ids=xxx&ids=yyy) */
