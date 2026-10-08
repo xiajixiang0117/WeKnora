@@ -6,6 +6,7 @@ name: App
 # Manual only: pushing commits (including PR updates) must not start Actions.
 on:
   workflow_dispatch:
+  workflow_call:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -69,6 +70,9 @@ jobs:
             exit 1
           fi
 
+      - name: Verify generated model catalog
+        run: python3 scripts/model-catalog/generate.py --check
+
       - name: Verify Git hook test coverage
         run: bash ./scripts/test-git-hooks.sh
 
@@ -78,6 +82,7 @@ jobs:
           mapfile -t pkgs < <(go list ./... | grep -v '/docreader/')
           go vet "${pkgs[@]}"
           go test "${pkgs[@]}"
+          go test -tags desktop ./internal/container
 
       - name: Build server
         run: go build ./cmd/server

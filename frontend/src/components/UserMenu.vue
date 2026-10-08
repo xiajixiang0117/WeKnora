@@ -92,10 +92,6 @@
           <t-icon name="control-platform" class="menu-icon" />
           <span>{{ $t('settings.modelManagement') }}</span>
         </div>
-        <div v-if="canManageSkills" class="menu-item" @click="handleQuickNav('skills')">
-          <t-icon :name="SKILL_ICON" class="menu-icon" />
-          <span>{{ $t('settings.skills.title') }}</span>
-        </div>
         <div v-if="canManageSessions" class="menu-item" @click="handleSessionManagement">
           <t-icon name="chart-bar" class="menu-icon" />
           <span>{{ $t('sessionManagement.title') }}</span>
@@ -223,8 +219,6 @@ import { useRoleLabel, useHomeTenant } from '@/composables/useRoleLabel'
 import { getRootZoom, rectToCssPx, cssViewportSize } from '@/utils/zoom'
 import { openNewUserGuide } from '@/config/contextualGuides'
 import { SETTINGS_MANAGEMENT_SHORTCUT_MIN_ROLE } from '@/config/settingsAccess'
-import { SKILL_ICON } from '@/types/mention'
-
 const { t } = useI18n()
 
 const router = useRouter()
@@ -265,17 +259,11 @@ const canManageModels = computed(() =>
   authStore.isSystemAdmin ||
   authStore.hasRole(SETTINGS_MANAGEMENT_SHORTCUT_MIN_ROLE.models),
 )
-const canManageSkills = computed(() =>
-  authStore.canAccessAllTenants ||
-  authStore.isSystemAdmin ||
-  authStore.hasRole(SETTINGS_MANAGEMENT_SHORTCUT_MIN_ROLE.skills),
-)
 const canManageSessions = computed(() =>
   authStore.canAccessAllTenants ||
   authStore.isSystemAdmin ||
   authStore.hasRole('admin'),
 )
-
 const menuRef = ref<HTMLElement>()
 const tenantMenuItemRef = ref<HTMLElement>()
 const menuVisible = ref(false)
@@ -520,7 +508,7 @@ const reopenGuide = () => {
 
 const openDocs = () => {
   menuVisible.value = false
-  window.open('https://github.com/Tencent/WeKnora/tree/main/docs', '_blank')
+  window.open('https://github.com/Tencent/WeKnora/tree/main/website-docs', '_blank')
 }
 
 // 打开 GitHub

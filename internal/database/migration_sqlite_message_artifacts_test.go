@@ -12,7 +12,7 @@ import (
 )
 
 // TestSQLiteMessageArtifactsBackfillAndRollback upgrades a v25 database that
-// still keeps artifacts on messages.artifacts, checks 000026 copies them into
+// still keeps artifacts on messages.artifacts, checks 000027 copies them into
 // message_artifacts, then replays the down migration and checks the JSON
 // column is rebuilt from the table in a shape Go can decode.
 func TestSQLiteMessageArtifactsBackfillAndRollback(t *testing.T) {
@@ -110,7 +110,7 @@ func TestSQLiteMessageArtifactsBackfillAndRollback(t *testing.T) {
 	require.Equal(t, "[]", legacy2.String)
 
 	// Rollback rebuilds the legacy column from the table.
-	down, err := os.ReadFile(filepath.Join(repoRoot, "migrations", "sqlite", "000026_message_artifacts_table.down.sql"))
+	down, err := os.ReadFile(filepath.Join(repoRoot, "migrations", "sqlite", "000027_message_artifacts_table.down.sql"))
 	require.NoError(t, err)
 	_, err = db.Exec(string(down))
 	require.NoError(t, err)
